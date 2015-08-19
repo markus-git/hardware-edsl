@@ -117,21 +117,24 @@ addLocalDeclaration new blocks = insert new blocks
       | otherwise = b           : insert new bs
 
     (~=~)  :: BlockDeclarativeItem -> BlockDeclarativeItem -> Bool
-    (~=~) (BDIConstantDecl l) (BDIConstantDecl r) = l {const_identifier_list = []} == r {const_identifier_list = []}
-    (~=~) (BDISignalDecl l) (BDISignalDecl r) = l {signal_identifier_list = []} == r {signal_identifier_list = []}
-    (~=~) (BDISharedDecl l) (BDISharedDecl r) = l {var_identifier_list = []} == r {var_identifier_list = []}
-    (~=~) (BDIFileDecl l) (BDIFileDecl r) = l {fd_identifier_list = []} == r {fd_identifier_list = []}
-    (~=~) _ _ = False
+    (~=~) l r = mappy (const []) l == mappy (const []) r
 
     add    :: BlockDeclarativeItem -> BlockDeclarativeItem -> BlockDeclarativeItem
-    add (BDIConstantDecl l) (BDIConstantDecl r) = let [n] = const_identifier_list r in
-      BDIConstantDecl $ l {const_identifier_list = n : const_identifier_list l}
-    add (BDISignalDecl l) (BDISignalDecl r) = let [n] = signal_identifier_list r in
-      BDISignalDecl $ l {signal_identifier_list = n : signal_identifier_list l}
-    add (BDISharedDecl l) (BDISharedDecl r) = let [n] = var_identifier_list r in
-      BDISharedDecl $ l {var_identifier_list = n : var_identifier_list l}
-    add (BDIFileDecl l) (BDIFileDecl r) = let [n] = fd_identifier_list r in
-      BDIFileDecl $ l {fd_identifier_list = n : fd_identifier_list l}
+    add l r = mappy (getty r :) l
+
+mappy :: (IdentifierList -> IdentifierList) -> BlockDeclarativeItem -> BlockDeclarativeItem
+mappy f b = case b of
+  (BDIConstantDecl l) -> BDIConstantDecl $ l {const_identifier_list  = f (const_identifier_list l)}
+  (BDISignalDecl l)   -> BDISignalDecl   $ l {signal_identifier_list = f (signal_identifier_list l)}
+  (BDISharedDecl l)   -> BDISharedDecl   $ l {var_identifier_list    = f (var_identifier_list l)}
+  (BDIFileDecl l)     -> BDIFileDecl     $ l {fd_identifier_list     = f (fd_identifier_list l)}
+
+getty :: BlockDeclarativeItem -> Identifier
+getty b = case b of
+  (BDIConstantDecl l) -> head $ const_identifier_list l
+  (BDISignalDecl l)   -> head $ signal_identifier_list l
+  (BDISharedDecl l)   -> head $ var_identifier_list l
+  (BDIFileDecl l)     -> head $ fd_identifier_list l
 
 --------------------------------------------------------------------------------
 
@@ -188,11 +191,39 @@ fileL str typ = addLocal   (Ident str) File         typ Nothing
 --------------------------------------------------------------------------------
 -- ** Gen. Body
 
+addStatement  :: ConcurrentStatement -> VHDL ()
+addStatement s = modify $ \state -> state {architecture_statements = s : architecture_statements state}
+
+addAssignment :: Identifier -> Expression -> VHDL ()
+addAssignment i e = addStatement $
+  ConSignalAss
+    (CSASCond
+      (Nothing)
+      (False)
+      (ConditionalSignalAssignment
+        (TargetName (NSimple i))
+        (Options False Nothing)
+        (ConditionalWaveforms
+          ([])
+          ( (WaveElem [WaveEExp e Nothing])
+          , (Nothing)))))
+
+--------------------------------------------------------------------------------
+-- ** Gen. Expression
+
 
 
 --------------------------------------------------------------------------------
 -- Hmm..
 --------------------------------------------------------------------------------
+
+instance Eq BlockDeclarativeItem
+  where
+    (==) (BDIConstantDecl l) (BDIConstantDecl r) = l == r
+    (==) (BDISignalDecl l)   (BDISignalDecl r)   = l == r
+    (==) (BDISharedDecl l)   (BDISharedDecl r)   = l == r
+    (==) (BDIFileDecl l)     (BDIFileDecl r)     = l == r
+    (==) _                   _                   = False
 
 deriving instance Eq InterfaceDeclaration
 
