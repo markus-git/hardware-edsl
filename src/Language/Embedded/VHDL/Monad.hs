@@ -218,17 +218,6 @@ addAssignment i e = addStatement $
 
 --------------------------------------------------------------------------------
 -- ** Gen. Expression - I'm not sure if this is the dumbest thing ever or not
-{-
-type family Sub a :: *
-type instance Sub Expression       = Relation
-type instance Sub Relation         = ShiftExpression
-type instance Sub ShiftExpression  = SimpleExpression
-type instance Sub SimpleExpression = Term
-type instance Sub Term             = Factor
-type instance Sub Factor           = Primary
-type instance Sub Primary          = Expression
--}
---------------------------------------------------------------------------------
 
 -- | Lift one level
 class Hoist a
@@ -282,6 +271,10 @@ instance Lift a a where
 
 instance (Hoist a, Lift (Next a) b) => Lift a b where
   lift = lift . hoist
+
+--------------------------------------------------------------------------------
+
+-- ...
 
 --------------------------------------------------------------------------------
 -- Hmm..

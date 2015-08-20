@@ -23,7 +23,12 @@ library
   -- other-modules:
   other-extensions:    TypeFamilies,
                        ConstraintKinds,
-                       GeneralizedNewtypeDeriving
+                       GeneralizedNewtypeDeriving,
+                       StandaloneDeriving,
+                       MultiParamTypeClasses,
+                       FlexibleInstances,
+                       FlexibleContexts,
+                       UndecidableInstances
                        
   build-depends:       base            >=4   && <5,
                        mtl             >=2.2 && <3,
