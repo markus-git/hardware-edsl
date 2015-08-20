@@ -1,13 +1,48 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TypeFamilies               #-}
 
+-- used for the Eq inst. of XDeclaration etc.
+{-# LANGUAGE StandaloneDeriving    #-}
+
+-- these are needed for Hoist/Lift
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE UndecidableInstances  #-}
 
-module Language.Embedded.VHDL.Monad where
+module Language.Embedded.VHDL.Monad (
+    Type
+  , VHDL
+    
+    -- ^ run
+  , runVHDL
+  , behavioural
+  , structural
+
+    -- ^ assignment
+    -- port  / generic  / local
+  , constant, constantG, constantL
+  , signal,   signalG,   signalL
+  , variable, variableG, variableL
+  , file,     fileG,     fileL
+
+    -- ^ expressions
+  , Hoist, Lift
+  , and, or, xor, xnor
+  , eq, neq, lt, lte, gt, gte
+  , nand, nor
+  , sll, srl, sla, sra, rol, ror
+  , add, sub, cat
+  , neg
+  , mul, div, mod, rem
+  , exp
+  , abs, not
+  , name
+  , null
+
+    -- ^ types
+  , std_logic
+  ) where
 
 import Language.VHDL
 
@@ -18,9 +53,7 @@ import Control.Monad.State hiding (lift)
 import Data.Char (toLower)
 import Data.List (find)
 
-import Unsafe.Coerce -- !!!
-
-import Prelude hiding (not, and, or)
+import Prelude hiding (not, and, or, div, mod, rem, exp, abs, null)
 import qualified Prelude as P
 
 --------------------------------------------------------------------------------
