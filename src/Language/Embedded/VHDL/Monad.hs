@@ -280,6 +280,12 @@ relation r a b = Relation (lift a) (Just (r, lift b))
 shiftexp :: (Lift a SimpleExpression, Lift b SimpleExpression) => ShiftOperator -> a -> b -> ShiftExpression
 shiftexp s a b = ShiftExpression (lift a) (Just (s, lift b))
 
+simplexp :: (Lift a Term) => Maybe Sign -> AddingOperator -> [a] -> SimpleExpression
+simplexp s o (a:as) = SimpleExpression s (lift a) (fmap (\b -> (o, lift b)) as)
+
+term     :: (Lift a Factor) => MultiplyingOperator -> [a] -> Term
+term     o (a:as) = Term (lift a) (fmap (\b -> (o, lift b)) as)
+
 --------------------------------------------------------------------------------
 
 and, or, xor, xnor :: Lift a Relation => [a] -> Expression
@@ -308,7 +314,44 @@ sra = shiftexp Sra
 rol = shiftexp Rol
 ror = shiftexp Ror
 
+-- ! These should be ... :: a -> a -> .. and then merge, instead of cheating with [a]
+-- ! [a] cannot be empty
+add, sub, cat :: (Lift a Term) => [a] -> SimpleExpression
+add = simplexp Nothing Plus
+sub = simplexp Nothing Minus
+cat = simplexp Nothing Concat
 
+neg :: (Lift a Term) => a -> SimpleExpression
+neg = simplexp (Just Negation) Plus . (: [])
+
+-- ! Same problems as add, sub, ...
+mul, div, mod, rem :: (Lift a Factor) => [a] -> Term
+mul = term Times
+div = term Div
+mod = term Mod
+rem = term Rem
+
+exp :: (Lift a Primary, Lift b Primary) => a -> b -> Factor
+exp a b = FacPrim (lift a) (Just $ lift b)
+
+abs, not :: (Lift a Primary) => a -> Factor
+abs = FacAbs . lift
+not = FacNot . lift
+
+-- ! Simplified, names can be more than just strings
+name :: String -> Primary
+name = PrimName . NSimple . Ident
+
+null  :: Primary
+null  = PrimLit LitNull
+
+--------------------------------------------------------------------------------
+-- ** Gen. Types
+
+std_logic :: Type
+std_logic = SubtypeIndication Nothing (TMType (NSimple (Ident "STD_LOGIC"))) Nothing
+
+-- .. add more ..
 
 --------------------------------------------------------------------------------
 -- Hmm..
