@@ -274,7 +274,41 @@ instance (Hoist a, Lift (Next a) b) => Lift a b where
 
 --------------------------------------------------------------------------------
 
--- ...
+relation :: (Lift a ShiftExpression, Lift b ShiftExpression) => RelationalOperator -> a -> b -> Relation
+relation r a b = Relation (lift a) (Just (r, lift b))
+
+shiftexp :: (Lift a SimpleExpression, Lift b SimpleExpression) => ShiftOperator -> a -> b -> ShiftExpression
+shiftexp s a b = ShiftExpression (lift a) (Just (s, lift b))
+
+--------------------------------------------------------------------------------
+
+and, or, xor, xnor :: Lift a Relation => [a] -> Expression
+and  = EAnd  . fmap lift
+or   = EOr   . fmap lift
+xor  = EXor  . fmap lift
+xnor = EXnor . fmap lift
+
+nand, nor :: Lift a Relation => a -> a -> Expression
+nand a b = ENand (lift a) (Just $ lift b)
+nor  a b = ENor  (lift a) (Just $ lift b)
+
+eq, neq, lt, lte, gt, gte :: (Lift a ShiftExpression, Lift b ShiftExpression) => a -> b -> Relation
+eq  = relation Eq
+neq = relation Neq
+lt  = relation Lt
+lte = relation Lte
+gt  = relation Gt
+gte = relation Gte
+
+sll, srl, sla, sra, rol, ror :: (Lift a SimpleExpression, Lift b SimpleExpression) => a -> b -> ShiftExpression
+sll = shiftexp Sll
+srl = shiftexp Srl
+sla = shiftexp Sla
+sra = shiftexp Sra
+rol = shiftexp Rol
+ror = shiftexp Ror
+
+
 
 --------------------------------------------------------------------------------
 -- Hmm..
