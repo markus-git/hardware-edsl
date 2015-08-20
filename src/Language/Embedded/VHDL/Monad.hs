@@ -1,5 +1,11 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TypeFamilies               #-}
+
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 module Language.Embedded.VHDL.Monad where
 
@@ -7,10 +13,12 @@ import Language.VHDL
 
 import Control.Applicative
 import Control.Monad
-import Control.Monad.State
+import Control.Monad.State hiding (lift)
 
 import Data.Char (toLower)
 import Data.List (find)
+
+import Unsafe.Coerce -- !!!
 
 import Prelude hiding (not, and, or)
 import qualified Prelude as P
@@ -122,19 +130,19 @@ addLocalDeclaration new blocks = insert new blocks
     add    :: BlockDeclarativeItem -> BlockDeclarativeItem -> BlockDeclarativeItem
     add l r = mappy (getty r :) l
 
-mappy :: (IdentifierList -> IdentifierList) -> BlockDeclarativeItem -> BlockDeclarativeItem
-mappy f b = case b of
-  (BDIConstantDecl l) -> BDIConstantDecl $ l {const_identifier_list  = f (const_identifier_list l)}
-  (BDISignalDecl l)   -> BDISignalDecl   $ l {signal_identifier_list = f (signal_identifier_list l)}
-  (BDISharedDecl l)   -> BDISharedDecl   $ l {var_identifier_list    = f (var_identifier_list l)}
-  (BDIFileDecl l)     -> BDIFileDecl     $ l {fd_identifier_list     = f (fd_identifier_list l)}
+    mappy :: (IdentifierList -> IdentifierList) -> BlockDeclarativeItem -> BlockDeclarativeItem
+    mappy f b = case b of
+      (BDIConstantDecl l) -> BDIConstantDecl $ l {const_identifier_list  = f (const_identifier_list l)}
+      (BDISignalDecl l)   -> BDISignalDecl   $ l {signal_identifier_list = f (signal_identifier_list l)}
+      (BDISharedDecl l)   -> BDISharedDecl   $ l {var_identifier_list    = f (var_identifier_list l)}
+      (BDIFileDecl l)     -> BDIFileDecl     $ l {fd_identifier_list     = f (fd_identifier_list l)}
 
-getty :: BlockDeclarativeItem -> Identifier
-getty b = case b of
-  (BDIConstantDecl l) -> head $ const_identifier_list l
-  (BDISignalDecl l)   -> head $ signal_identifier_list l
-  (BDISharedDecl l)   -> head $ var_identifier_list l
-  (BDIFileDecl l)     -> head $ fd_identifier_list l
+    getty :: BlockDeclarativeItem -> Identifier
+    getty b = case b of
+      (BDIConstantDecl l) -> head $ const_identifier_list l
+      (BDISignalDecl l)   -> head $ signal_identifier_list l
+      (BDISharedDecl l)   -> head $ var_identifier_list l
+      (BDIFileDecl l)     -> head $ fd_identifier_list l
 
 --------------------------------------------------------------------------------
 
@@ -209,9 +217,71 @@ addAssignment i e = addStatement $
           , (Nothing)))))
 
 --------------------------------------------------------------------------------
--- ** Gen. Expression
+-- ** Gen. Expression - I'm not sure if this is the dumbest thing ever or not
+{-
+type family Sub a :: *
+type instance Sub Expression       = Relation
+type instance Sub Relation         = ShiftExpression
+type instance Sub ShiftExpression  = SimpleExpression
+type instance Sub SimpleExpression = Term
+type instance Sub Term             = Factor
+type instance Sub Factor           = Primary
+type instance Sub Primary          = Expression
+-}
+--------------------------------------------------------------------------------
 
+-- | Lift one level
+class Hoist a
+  where
+    type Next a :: *
+    hoist :: a -> Next a
 
+instance Hoist Primary
+  where
+    type Next Primary = Factor
+    hoist p = FacPrim p Nothing
+
+instance Hoist Factor
+  where
+    type Next Factor = Term
+    hoist f = Term f []
+
+instance Hoist Term
+  where
+    type Next Term = SimpleExpression
+    hoist t = SimpleExpression Nothing t []
+
+instance Hoist SimpleExpression
+  where
+    type Next SimpleExpression = ShiftExpression
+    hoist s = ShiftExpression s Nothing
+
+instance Hoist ShiftExpression
+  where
+    type Next ShiftExpression = Relation
+    hoist s = Relation s Nothing
+
+instance Hoist Relation
+  where
+    type Next Relation = Expression
+    hoist r = ENand r Nothing
+
+instance Hoist Expression
+  where
+    type Next Expression = Primary
+    hoist e = PrimExp e
+
+--------------------------------------------------------------------------------
+
+-- | Lift any level
+class Lift a b where
+  lift :: a -> b
+
+instance Lift a a where
+  lift = id
+
+instance (Hoist a, Lift (Next a) b) => Lift a b where
+  lift = lift . hoist
 
 --------------------------------------------------------------------------------
 -- Hmm..

@@ -21,8 +21,8 @@ library
                        Language.Embedded.VHDL.Interface,
                        Language.Embedded.VHDL.Expression
   -- other-modules:
-  other-extensions:    ConstraintKinds,
-                       TypeFamilies,
+  other-extensions:    TypeFamilies,
+                       ConstraintKinds,
                        GeneralizedNewtypeDeriving
                        
   build-depends:       base            >=4   && <5,
