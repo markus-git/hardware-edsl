@@ -19,9 +19,11 @@ library
   exposed-modules:     Language.Embedded.VHDL,
                        Language.Embedded.VHDL.Monad,
                        Language.Embedded.VHDL.Interface,
-                       Language.Embedded.VHDL.Expression
+                       Language.Embedded.VHDL.Expression,
+                       Language.Embedded.VHDL.Command
   -- other-modules:
   other-extensions:    TypeFamilies,
+                       KindSignatures,
                        ConstraintKinds,
                        GeneralizedNewtypeDeriving,
                        StandaloneDeriving,
