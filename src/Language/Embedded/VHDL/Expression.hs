@@ -10,6 +10,17 @@
 
 module Language.Embedded.VHDL.Expression
   ( Expr
+  , and, or, xor, xnor
+  , eq, neq, lt, lte, gt, gte
+  , nand, nor
+  , sll, srl, sla, sra, rol, ror
+  , add, sub, cat
+  , neg
+  , mul, div, mod, rem
+  , exp
+  , abs, not
+  , name
+  , lit
   ) where
 
 import Language.VHDL (Expression(..)
@@ -18,19 +29,20 @@ import Language.VHDL (Expression(..)
                     , SimpleExpression(..)
                     , Term(..)
                     , Factor(..)
-                    , Primary(..))
+                    , Primary(..)
+                    , Identifier(..))
 import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Monad
+import Language.Embedded.VHDL.Monad (VHDL)
 import qualified Language.Embedded.VHDL.Monad as M
 
-import Data.Bits
+import Data.Bits hiding (xor)
 import Data.Dynamic
 import Data.Typeable
-import Data.TypePredicates
+import Data.TypePredicates hiding (sub)
 
-import Prelude
+import Prelude hiding (not, and, or, div, mod, rem, exp, abs, null)
 import qualified Prelude as P
 
 --------------------------------------------------------------------------------
@@ -39,8 +51,8 @@ import qualified Prelude as P
 
 data Expr a
   where
-    Val :: Show a     => a       -> Expr a
-    Var :: Typeable a => Integer -> Expr a
+    Val :: Show a     => a          -> Expr a
+    Var :: Typeable a => Identifier -> Expr a
 
     -- expression operators (plus Not)
     Not  :: Expr Bool -> Expr Bool
@@ -87,6 +99,8 @@ data Expr a
 
 type instance PredicateExp Expr = Typeable :/\: Show
 
+instance Show Identifier where show (Ident s) = s
+
 --------------------------------------------------------------------------------
 -- ** Evaluation
 
@@ -95,10 +109,10 @@ instance EvaluateExp Expr
     litE  = Val
     evalE = evaluate (error "eval: free variable")
 
-evaluate :: (Integer -> Dynamic) -> Expr a -> a
+evaluate :: (Identifier -> Dynamic) -> Expr a -> a
 evaluate env exp = case exp of
-    Var v | Just a <- fromDynamic (env v) -> a
-    Val v    -> v
+    Var  v | Just a <- fromDynamic (env v) -> a
+    Val  v                                 -> v
     
     Not  x   -> un P.not x
     And  x y -> bin (&&) x y
@@ -213,8 +227,8 @@ compile = return . go
   where
     go :: Expr t -> Expression
     go exp = case exp of
-      Var v    -> lift $ name ('v' : show v)
-      Val v    -> lift $ lit  (show v)
+      Var v    -> lift $ M.name ('v' : show v)
+      Val v    -> lift $ M.lit  (show v)
     
       Not  x   -> lift $ M.not  (lift $ go x)
       And  x y -> lift $ M.and  $ (lift $ go x) : (lift $ go y) : []
@@ -252,8 +266,63 @@ compile = return . go
       Abs  x   -> lift $ M.abs (lift $ go x)
 
 --------------------------------------------------------------------------------
--- **
+-- ** User Interface
 
+not  :: Expr Bool -> Expr Bool
+not  = Not
 
+and, or, xor, xnor, nand, nor :: Expr Bool -> Expr Bool -> Expr Bool
+and  = And
+or   = Or
+xor  = Xor
+xnor = Xnor
+nand = Nand
+nor  = Nor
+
+eq, neq :: Eq a => Expr a -> Expr a -> Expr Bool
+eq  = Eq
+neq = Neq
+
+lt, lte, gt, gte :: Ord a => Expr a -> Expr a -> Expr Bool
+lt  = Lt
+lte = Lte
+gt  = Gt
+gte = Gte
+
+sll, srl, sra, sla, rol, ror :: Bits a => Expr a -> Expr a -> Expr a
+sll = Sll
+srl = Srl
+sra = Sra
+sla = Sla
+rol = Rol
+ror = Ror
+
+add, sub, cat :: Num a => Expr a -> Expr a -> Expr a
+add = Add
+sub = Sub
+cat = Cat
+
+neg :: Num a => Expr a -> Expr a
+neg = Neg
+
+mul :: Num a => Expr a -> Expr a -> Expr a
+mul = Mul
+
+div, mod, rem :: Integral a => Expr a -> Expr a -> Expr a
+div = Div
+mod = Mod
+rem = Rem
+
+exp :: Floating a => Expr a -> Expr a -> Expr a
+exp = Exp
+
+abs :: Num a => Expr a -> Expr a
+abs = Abs
+
+name :: Typeable a => Identifier -> Expr a
+name = Var
+
+lit :: Show a => a -> Expr a
+lit = Val
 
 --------------------------------------------------------------------------------

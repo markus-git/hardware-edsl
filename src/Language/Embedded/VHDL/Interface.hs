@@ -3,7 +3,7 @@
 
 module Language.Embedded.VHDL.Interface where
 
-import Language.VHDL                (Expression)
+import Language.VHDL                (Expression, Identifier)
 import Language.Embedded.VHDL.Monad (VHDL)
 
 import Data.Constraint
@@ -28,7 +28,7 @@ class EvaluateExp exp
 class CompileExp exp
   where
     -- | Variable expressions
-    varE  :: PredicateExp exp a => Integer -> exp a
+    varE  :: PredicateExp exp a => Identifier -> exp a
 
     -- | Compilation of expressions
     compE :: exp a -> VHDL Expression
