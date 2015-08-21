@@ -2,7 +2,7 @@
 --  documentation, see http://haskell.org/cabal/users-guide/
 
 name:                imperative-edsl-vhdl
-version:             0.1.1.0
+version:             0.1.1.1
 synopsis:            VHDL flavour of imperative-edsl
 -- description:         
 license:             BSD3

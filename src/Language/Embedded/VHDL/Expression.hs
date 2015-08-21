@@ -222,10 +222,31 @@ instance CompileExp Expr
     varE  = Var
     compE = compile
 
-compile :: Expr a -> VHDL Expression
-compile = return . go
+data T a
   where
-    go :: Expr t -> Expression
+    E  :: Expression       -> T Expression
+    R  :: Relation         -> T Relation
+    Sh :: ShiftExpression  -> T ShiftExpression
+    Si :: SimpleExpression -> T SimpleExpression
+    T  :: Term             -> T Term
+    F  :: Factor           -> T Factor
+    P  :: Primary          -> T Primary
+
+liftT :: (Lift a b) => T a -> b
+liftT t = case t of
+  E e  -> lift e
+  R r  -> lift r
+  Sh s -> lift s
+  Si s -> lift s
+  T t  -> lift t
+  F f  -> lift f
+  P p  -> lift p
+
+compile :: Expr a -> VHDL Expression
+compile = undefined
+  where
+    -- | I need to stop lifting things... and use T somehow
+    go :: Expr e -> Expression
     go exp = case exp of
       Var v    -> lift $ M.name ('v' : show v)
       Val v    -> lift $ M.lit  (show v)
