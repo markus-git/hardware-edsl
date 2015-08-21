@@ -239,14 +239,14 @@ compile = return . go
       Ror  x y -> lift $ M.ror (lift $ go x) (lift $ go y)
 
       Neg  x   -> lift $ M.neg (lift $ go x)
-      Add  x y -> lift $ M.add (lift $ go x) (lift $ go y)
-      Sub  x y -> lift $ M.sub (lift $ go x) (lift $ go y)
-      Cat  x y -> lift $ M.sub (lift $ go x) (lift $ go y)
+      Add  x y -> lift $ M.add $ (lift $ go x) : (lift $ go y) : []
+      Sub  x y -> lift $ M.sub $ (lift $ go x) : (lift $ go y) : []
+      Cat  x y -> lift $ M.sub $ (lift $ go x) : (lift $ go y) : []
 
-      Mul  x y -> lift $ M.mul (lift $ go x) (lift $ go y)
-      Div  x y -> lift $ M.div (lift $ go x) (lift $ go y)
-      Mod  x y -> lift $ M.mod (lift $ go x) (lift $ go y)
-      Rem  x y -> lift $ M.rem (lift $ go x) (lift $ go y)
+      Mul  x y -> lift $ M.mul $ (lift $ go x) : (lift $ go y) : []
+      Div  x y -> lift $ M.div $ (lift $ go x) : (lift $ go y) : []
+      Mod  x y -> lift $ M.mod $ (lift $ go x) : (lift $ go y) : []
+      Rem  x y -> lift $ M.rem $ (lift $ go x) : (lift $ go y) : []
 
       Exp  x y -> lift $ M.exp (lift $ go x) (lift $ go y)
       Abs  x   -> lift $ M.abs (lift $ go x)
