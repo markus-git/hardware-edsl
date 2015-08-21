@@ -3,15 +3,9 @@
 -- used for the Eq inst. of XDeclaration etc.
 {-# LANGUAGE StandaloneDeriving    #-}
 
--- these are needed for Hoist/Lift
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE UndecidableInstances  #-}
-
 module Language.Embedded.VHDL.Monad (
-    Type
+    Kind(..)
+  , Type(..)
   , VHDL
     
     -- ^ run
@@ -26,8 +20,10 @@ module Language.Embedded.VHDL.Monad (
   , variable, variableG, variableL
   , file,     fileG,     fileL
 
+    -- ^ ..
+  , addAssignment
+
     -- ^ expressions
-  , Hoist, Lift
   , and, or, xor, xnor
   , eq, neq, lt, lte, gt, gte
   , nand, nor
@@ -38,6 +34,7 @@ module Language.Embedded.VHDL.Monad (
   , exp
   , abs, not
   , name
+  , lit
   , null
 
     -- ^ types
@@ -209,25 +206,25 @@ addLocal ident kind typ exp =
 
 --------------------------------------------------------------------------------
 
-constant, constantG, constantL :: String -> Type -> Maybe Expression -> VHDL Identifier
-constant  str typ exp = addPort    (Ident str) Constant Nothing typ exp
-constantG str typ exp = addGeneric (Ident str) Constant Nothing typ exp
-constantL str typ exp = addLocal   (Ident str) Constant         typ exp
+constant, constantG, constantL :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
+constant  i typ exp = addPort    i Constant Nothing typ exp
+constantG i typ exp = addGeneric i Constant Nothing typ exp
+constantL i typ exp = addLocal   i Constant         typ exp
 
-signal, signalG, signalL :: String -> Mode -> Type -> Maybe Expression -> VHDL Identifier
-signal  str mod typ exp = addPort    (Ident str) Signal (Just mod) typ exp
-signalG str mod typ exp = addGeneric (Ident str) Signal (Just mod) typ exp
-signalL str mod typ exp = addLocal   (Ident str) Signal            typ exp
+signal, signalG, signalL :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
+signal  i mod typ exp = addPort    i Signal (Just mod) typ exp
+signalG i mod typ exp = addGeneric i Signal (Just mod) typ exp
+signalL i mod typ exp = addLocal   i Signal            typ exp
 
-variable, variableG, variableL :: String -> Mode -> Type -> Maybe Expression -> VHDL Identifier
-variable  str mod typ exp = addPort    (Ident str) Variable (Just mod) typ exp
-variableG str mod typ exp = addGeneric (Ident str) Variable (Just mod) typ exp
-variableL str mod typ exp = addLocal   (Ident str) Variable            typ exp
+variable, variableG, variableL :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
+variable  i mod typ exp = addPort    i Variable (Just mod) typ exp
+variableG i mod typ exp = addGeneric i Variable (Just mod) typ exp
+variableL i mod typ exp = addLocal   i Variable            typ exp
 
-file, fileG, fileL :: String -> Type -> VHDL Identifier
-file  str typ = addPort    (Ident str) File Nothing typ Nothing
-fileG str typ = addGeneric (Ident str) File Nothing typ Nothing
-fileL str typ = addLocal   (Ident str) File         typ Nothing
+file, fileG, fileL :: Identifier -> Type -> VHDL Identifier
+file  i typ = addPort    i File Nothing typ Nothing
+fileG i typ = addGeneric i File Nothing typ Nothing
+fileL i typ = addLocal   i File         typ Nothing
 
 --------------------------------------------------------------------------------
 -- ** Gen. Body
@@ -250,88 +247,32 @@ addAssignment i e = addStatement $
           , (Nothing)))))
 
 --------------------------------------------------------------------------------
--- ** Gen. Expression - I'm not sure if this is the dumbest thing ever or not
 
--- | Lift one level
-class Hoist a
-  where
-    type Next a :: *
-    hoist :: a -> Next a
+relation :: RelationalOperator -> ShiftExpression -> ShiftExpression -> Relation
+relation r a b = Relation a (Just (r, b))
 
-instance Hoist Primary
-  where
-    type Next Primary = Factor
-    hoist p = FacPrim p Nothing
+shiftexp :: ShiftOperator -> SimpleExpression -> SimpleExpression -> ShiftExpression
+shiftexp s a b = ShiftExpression a (Just (s, b))
 
-instance Hoist Factor
-  where
-    type Next Factor = Term
-    hoist f = Term f []
+simplexp :: Maybe Sign -> AddingOperator -> [Term] -> SimpleExpression
+simplexp s o (a:as) = SimpleExpression s a (fmap ((,) o) as)
 
-instance Hoist Term
-  where
-    type Next Term = SimpleExpression
-    hoist t = SimpleExpression Nothing t []
-
-instance Hoist SimpleExpression
-  where
-    type Next SimpleExpression = ShiftExpression
-    hoist s = ShiftExpression s Nothing
-
-instance Hoist ShiftExpression
-  where
-    type Next ShiftExpression = Relation
-    hoist s = Relation s Nothing
-
-instance Hoist Relation
-  where
-    type Next Relation = Expression
-    hoist r = ENand r Nothing
-
-instance Hoist Expression
-  where
-    type Next Expression = Primary
-    hoist e = PrimExp e
+term     ::MultiplyingOperator -> [Factor] -> Term
+term     o (a:as) = Term a (fmap ((,) o) as)
 
 --------------------------------------------------------------------------------
 
--- | Lift any level
-class Lift a b where
-  lift :: a -> b
+and, or, xor, xnor :: [Relation] -> Expression
+and  = EAnd  
+or   = EOr   
+xor  = EXor  
+xnor = EXnor 
 
-instance Lift a a where
-  lift = id
+nand, nor :: Relation -> Relation -> Expression
+nand a b = ENand a (Just b)
+nor  a b = ENor  a (Just b)
 
-instance (Hoist a, Lift (Next a) b) => Lift a b where
-  lift = lift . hoist
-
---------------------------------------------------------------------------------
-
-relation :: (Lift a ShiftExpression, Lift b ShiftExpression) => RelationalOperator -> a -> b -> Relation
-relation r a b = Relation (lift a) (Just (r, lift b))
-
-shiftexp :: (Lift a SimpleExpression, Lift b SimpleExpression) => ShiftOperator -> a -> b -> ShiftExpression
-shiftexp s a b = ShiftExpression (lift a) (Just (s, lift b))
-
-simplexp :: (Lift a Term) => Maybe Sign -> AddingOperator -> [a] -> SimpleExpression
-simplexp s o (a:as) = SimpleExpression s (lift a) (fmap (\b -> (o, lift b)) as)
-
-term     :: (Lift a Factor) => MultiplyingOperator -> [a] -> Term
-term     o (a:as) = Term (lift a) (fmap (\b -> (o, lift b)) as)
-
---------------------------------------------------------------------------------
-
-and, or, xor, xnor :: Lift a Relation => [a] -> Expression
-and  = EAnd  . fmap lift
-or   = EOr   . fmap lift
-xor  = EXor  . fmap lift
-xnor = EXnor . fmap lift
-
-nand, nor :: Lift a Relation => a -> a -> Expression
-nand a b = ENand (lift a) (Just $ lift b)
-nor  a b = ENor  (lift a) (Just $ lift b)
-
-eq, neq, lt, lte, gt, gte :: (Lift a ShiftExpression, Lift b ShiftExpression) => a -> b -> Relation
+eq, neq, lt, lte, gt, gte :: ShiftExpression -> ShiftExpression -> Relation
 eq  = relation Eq
 neq = relation Neq
 lt  = relation Lt
@@ -339,7 +280,7 @@ lte = relation Lte
 gt  = relation Gt
 gte = relation Gte
 
-sll, srl, sla, sra, rol, ror :: (Lift a SimpleExpression, Lift b SimpleExpression) => a -> b -> ShiftExpression
+sll, srl, sla, sra, rol, ror :: SimpleExpression -> SimpleExpression -> ShiftExpression
 sll = shiftexp Sll
 srl = shiftexp Srl
 sla = shiftexp Sla
@@ -349,31 +290,35 @@ ror = shiftexp Ror
 
 -- ! These should be ... :: a -> a -> .. and then merge, instead of cheating with [a]
 -- ! [a] cannot be empty
-add, sub, cat :: (Lift a Term) => [a] -> SimpleExpression
+add, sub, cat :: [Term] -> SimpleExpression
 add = simplexp Nothing Plus
 sub = simplexp Nothing Minus
 cat = simplexp Nothing Concat
 
-neg :: (Lift a Term) => a -> SimpleExpression
+neg :: Term -> SimpleExpression
 neg = simplexp (Just Negation) Plus . (: [])
 
 -- ! Same problems as add, sub, ...
-mul, div, mod, rem :: (Lift a Factor) => [a] -> Term
+mul, div, mod, rem :: [Factor] -> Term
 mul = term Times
 div = term Div
 mod = term Mod
 rem = term Rem
 
-exp :: (Lift a Primary, Lift b Primary) => a -> b -> Factor
-exp a b = FacPrim (lift a) (Just $ lift b)
+exp :: Primary -> Primary -> Factor
+exp a b = FacPrim a (Just b)
 
-abs, not :: (Lift a Primary) => a -> Factor
-abs = FacAbs . lift
-not = FacNot . lift
+abs, not :: Primary -> Factor
+abs = FacAbs
+not = FacNot
 
 -- ! Simplified, names can be more than just strings
 name :: String -> Primary
 name = PrimName . NSimple . Ident
+
+-- ! Same as name ...
+lit  :: String -> Primary
+lit  = PrimLit . LitString . SLit
 
 null  :: Primary
 null  = PrimLit LitNull
