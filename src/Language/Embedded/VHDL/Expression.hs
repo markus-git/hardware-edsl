@@ -102,6 +102,30 @@ type instance PredicateExp Expr = Typeable :/\: Show
 instance Show Identifier where show (Ident s) = s
 
 --------------------------------------------------------------------------------
+-- ** Useful Instances
+
+instance (Show a, Num a, Eq a) => Num (Expr a)
+  where
+    fromInteger   = Val . fromInteger
+    Val a + Val b = Val (a+b)
+    Val 0 + b     = b
+    a     + Val 0 = a
+    a     + b     = Add a b
+    Val a - Val b = Val (a-b)
+    Val 0 - b     = b
+    a     - Val 0 = a
+    a     - b     = Sub a b
+    Val a * Val b = Val (a*b)
+    Val 0 * b     = Val 0
+    a     * Val 0 = Val 0
+    Val 1 * b     = b
+    a     * Val 1 = a
+    a     * b     = Mul a b
+
+    abs    = error "abs not implemented for Expr"
+    signum = error "signum not implemented for Expr"
+
+--------------------------------------------------------------------------------
 -- ** Evaluation
 
 instance EvaluateExp Expr
