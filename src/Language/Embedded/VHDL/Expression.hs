@@ -153,25 +153,25 @@ evaluate env exp = case exp of
     Gt   x y -> bin (>)  x y
     Gte  x y -> bin (>=) x y
 
-    Sll  x y -> undefined
-    Srl  x y -> undefined  
-    Sla  x y -> undefined  
-    Sra  x y -> undefined  
-    Rol  x y -> undefined  
-    Ror  x y -> undefined  
+    Sll  x y -> error "evaluation of _ not yet implemented for Expr"
+    Srl  x y -> error "evaluation of _ not yet implemented for Expr"  
+    Sla  x y -> error "evaluation of _ not yet implemented for Expr"  
+    Sra  x y -> error "evaluation of _ not yet implemented for Expr"  
+    Rol  x y -> error "evaluation of _ not yet implemented for Expr"  
+    Ror  x y -> error "evaluation of _ not yet implemented for Expr"  
 
-    Neg  x   -> undefined   
-    Add  x y -> undefined  
-    Sub  x y -> undefined  
-    Cat  x y -> undefined 
+    Neg  x   -> error "evaluation of _ not yet implemented for Expr"   
+    Add  x y -> error "evaluation of _ not yet implemented for Expr"  
+    Sub  x y -> error "evaluation of _ not yet implemented for Expr"  
+    Cat  x y -> error "evaluation of _ not yet implemented for Expr" 
 
-    Mul  x y -> undefined 
-    Div  x y -> undefined 
-    Mod  x y -> undefined 
-    Rem  x y -> undefined 
+    Mul  x y -> error "evaluation of _ not yet implemented for Expr" 
+    Div  x y -> error "evaluation of _ not yet implemented for Expr" 
+    Mod  x y -> error "evaluation of _ not yet implemented for Expr" 
+    Rem  x y -> error "evaluation of _ not yet implemented for Expr" 
 
-    Exp  x y -> undefined
-    Abs  x   -> undefined
+    Exp  x y -> error "evaluation of _ not yet implemented for Expr"
+    Abs  x   -> error "evaluation of _ not yet implemented for Expr"
   where
     xor a b = (a || b) && P.not (a && b)
     
@@ -247,7 +247,7 @@ instance CompileExp Expr
     compE = compile
 
 compile :: Expr a -> VHDL Expression
-compile = undefined
+compile = return . go
   where
     -- | I need to stop lifting things... and use T somehow
     go :: Expr e -> Expression
