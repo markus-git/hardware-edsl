@@ -252,8 +252,8 @@ compile = return . go
     -- | I need to stop lifting things... and use T somehow
     go :: Expr e -> Expression
     go exp = case exp of
-      Var v    -> lift $ M.name ('v' : show v)
-      Val v    -> lift $ M.lit  (show v)
+      Var v    -> lift $ M.name $ show v
+      Val v    -> lift $ M.lit  $ show v
     
       Not  x   -> lift $ M.not  (lift $ go x)
       And  x y -> lift $ M.and  $ (lift $ go x) : (lift $ go y) : []
