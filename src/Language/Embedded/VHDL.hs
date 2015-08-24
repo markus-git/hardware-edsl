@@ -1,5 +1,6 @@
 module Language.Embedded.VHDL
-  ( module Language.Embedded.VHDL.Interface
+  ( std_logic
+  , module Language.Embedded.VHDL.Interface
   , module Language.Embedded.VHDL.Expression
   , module Language.Embedded.VHDL.Command
   ) where
@@ -8,4 +9,4 @@ module Language.Embedded.VHDL
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Expression
 import Language.Embedded.VHDL.Command
-
+import Language.Embedded.VHDL.Monad (std_logic)
