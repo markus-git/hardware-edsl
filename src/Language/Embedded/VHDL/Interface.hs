@@ -34,6 +34,6 @@ class CompileExp exp
     compE :: exp a -> VHDL Expression
 
 newVar :: Integer -> Identifier
-newVar = Ident . show
+newVar = Ident . ('v' :) . show
 
 --------------------------------------------------------------------------------
