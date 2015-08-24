@@ -33,7 +33,7 @@ class CompileExp exp
     -- | Compilation of expressions
     compE :: exp a -> VHDL Expression
 
-newVar :: (CompileExp exp, PredicateExp exp a) => Integer -> exp a
-newVar = varE . Ident . show
+newVar :: Integer -> Identifier
+newVar = Ident . show
 
 --------------------------------------------------------------------------------
