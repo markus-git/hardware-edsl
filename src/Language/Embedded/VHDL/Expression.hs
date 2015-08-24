@@ -222,26 +222,6 @@ instance CompileExp Expr
     varE  = Var
     compE = compile
 
-data T a
-  where
-    E  :: Expression       -> T Expression
-    R  :: Relation         -> T Relation
-    Sh :: ShiftExpression  -> T ShiftExpression
-    Si :: SimpleExpression -> T SimpleExpression
-    T  :: Term             -> T Term
-    F  :: Factor           -> T Factor
-    P  :: Primary          -> T Primary
-
-liftT :: (Lift a b) => T a -> b
-liftT t = case t of
-  E e  -> lift e
-  R r  -> lift r
-  Sh s -> lift s
-  Si s -> lift s
-  T t  -> lift t
-  F f  -> lift f
-  P p  -> lift p
-
 compile :: Expr a -> VHDL Expression
 compile = undefined
   where
