@@ -86,10 +86,10 @@ data Expr a
     Cat  :: Num a => Expr a -> Expr a -> Expr a
 
     -- multiplyind operators
-    Mul  :: Num a      => Expr a -> Expr a -> Expr a
-    Div  :: Integral a => Expr a -> Expr a -> Expr a
-    Mod  :: Integral a => Expr a -> Expr a -> Expr a
-    Rem  :: Integral a => Expr a -> Expr a -> Expr a
+    Mul  :: Num a        => Expr a -> Expr a -> Expr a
+    Div  :: Fractional a => Expr a -> Expr a -> Expr a
+    Mod  :: Integral a   => Expr a -> Expr a -> Expr a
+    Rem  :: Integral a   => Expr a -> Expr a -> Expr a
 
     -- misc. operators (minus Not)
     Exp  :: Floating a => Expr a -> Expr a -> Expr a
@@ -333,8 +333,10 @@ neg = Neg
 mul :: Num a => Expr a -> Expr a -> Expr a
 mul = Mul
 
-div, mod, rem :: Integral a => Expr a -> Expr a -> Expr a
+div :: Fractional a => Expr a -> Expr a -> Expr a
 div = Div
+
+mod, rem :: Integral a => Expr a -> Expr a -> Expr a
 mod = Mod
 rem = Rem
 
