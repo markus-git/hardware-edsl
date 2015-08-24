@@ -185,45 +185,37 @@ evaluate env exp = case exp of
 -- ** Compilation
 
 -- | Lift one level
-class Hoist a
-  where
-    type Next a :: *
-    hoist :: a -> Next a
+class Hoist a where
+  type Next a :: *
+  hoist :: a -> Next a
 
-instance Hoist Primary
-  where
-    type Next Primary = Factor
-    hoist p = FacPrim p Nothing
+instance Hoist Primary where
+  type Next Primary = Factor
+  hoist p = FacPrim p Nothing
 
-instance Hoist Factor
-  where
-    type Next Factor = Term
-    hoist f = Term f []
+instance Hoist Factor where
+  type Next Factor = Term
+  hoist f = Term f []
 
-instance Hoist Term
-  where
-    type Next Term = SimpleExpression
-    hoist t = SimpleExpression Nothing t []
+instance Hoist Term where
+  type Next Term = SimpleExpression
+  hoist t = SimpleExpression Nothing t []
 
-instance Hoist SimpleExpression
-  where
-    type Next SimpleExpression = ShiftExpression
-    hoist s = ShiftExpression s Nothing
+instance Hoist SimpleExpression where
+  type Next SimpleExpression = ShiftExpression
+  hoist s = ShiftExpression s Nothing
 
-instance Hoist ShiftExpression
-  where
-    type Next ShiftExpression = Relation
-    hoist s = Relation s Nothing
+instance Hoist ShiftExpression where
+  type Next ShiftExpression = Relation
+  hoist s = Relation s Nothing
 
-instance Hoist Relation
-  where
-    type Next Relation = Expression
-    hoist r = ENand r Nothing
+instance Hoist Relation where
+  type Next Relation = Expression
+  hoist r = ENand r Nothing
 
-instance Hoist Expression
-  where
-    type Next Expression = Primary
-    hoist e = PrimExp e
+instance Hoist Expression where
+  type Next Expression = Primary
+  hoist e = PrimExp e
 
 --------------------------------------------------------------------------------
 
@@ -249,7 +241,6 @@ instance CompileExp Expr
 compile :: Expr a -> VHDL Expression
 compile = return . go
   where
-    -- | I need to stop lifting things... and use T somehow
     go :: Expr e -> Expression
     go exp = case exp of
       Var v    -> lift $ M.name $ show v
