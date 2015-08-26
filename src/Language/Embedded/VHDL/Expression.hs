@@ -182,7 +182,7 @@ evaluate env exp = case exp of
     bin f x y = f (evaluate env x) (evaluate env y)
 
 --------------------------------------------------------------------------------
--- ** Compilation
+-- ** Compilation -- this migth be the dumbest thing ever...
 
 -- | Lift one level
 class Hoist a where
@@ -233,53 +233,127 @@ instance {-# OVERLAPPABLE #-} (Hoist a, Lift (Next a) b) => Lift a b where
 
 --------------------------------------------------------------------------------
 
+data Kind =
+    E  Expression
+  | R  Relation
+  | Sh ShiftExpression
+  | Si SimpleExpression
+  | T  Term
+  | F  Factor
+  | P  Primary
+
+instance Lift Kind Expression where
+  lift (E e)   = lift e
+  lift (R r)   = lift r
+  lift (Sh sh) = lift sh
+  lift (Si si) = lift si
+  lift (T t)   = lift t
+  lift (F f)   = lift f
+  lift (P p)   = lift p
+
+instance Lift Kind Relation where
+  lift (E e)   = lift e
+  lift (R r)   = lift r
+  lift (Sh sh) = lift sh
+  lift (Si si) = lift si
+  lift (T t)   = lift t
+  lift (F f)   = lift f
+  lift (P p)   = lift p
+
+instance Lift Kind ShiftExpression where
+  lift (E e)   = lift e
+  lift (R r)   = lift r
+  lift (Sh sh) = lift sh
+  lift (Si si) = lift si
+  lift (T t)   = lift t
+  lift (F f)   = lift f
+  lift (P p)   = lift p
+
+instance Lift Kind SimpleExpression where
+  lift (E e)   = lift e
+  lift (R r)   = lift r
+  lift (Sh sh) = lift sh
+  lift (Si si) = lift si
+  lift (T t)   = lift t
+  lift (F f)   = lift f
+  lift (P p)   = lift p
+
+instance Lift Kind Term where
+  lift (E e)   = lift e
+  lift (R r)   = lift r
+  lift (Sh sh) = lift sh
+  lift (Si si) = lift si
+  lift (T t)   = lift t
+  lift (F f)   = lift f
+  lift (P p)   = lift p
+
+instance Lift Kind Factor where
+  lift (E e)   = lift e
+  lift (R r)   = lift r
+  lift (Sh sh) = lift sh
+  lift (Si si) = lift si
+  lift (T t)   = lift t
+  lift (F f)   = lift f
+  lift (P p)   = lift p
+
+instance Lift Kind Primary where
+  lift (E e)   = lift e
+  lift (R r)   = lift r
+  lift (Sh sh) = lift sh
+  lift (Si si) = lift si
+  lift (T t)   = lift t
+  lift (F f)   = lift f
+  lift (P p)   = lift p
+
+--------------------------------------------------------------------------------
+
 instance CompileExp Expr
   where
     varE  = Var
     compE = compile
 
 compile :: Expr a -> VHDL Expression
-compile = return . go
+compile = return . lift . go
   where
-    go :: Expr e -> Expression
+    go :: Expr e -> Kind
     go exp = case exp of
-      Var v    -> lift $ M.name $ show v
-      Val v    -> lift $ M.lit  $ show v
-    
-      Not  x   -> lift $ M.not  (lift $ go x)
-      And  x y -> lift $ M.and  $ (lift $ go x) : (lift $ go y) : []
-      Or   x y -> lift $ M.or   $ (lift $ go x) : (lift $ go y) : []
-      Xor  x y -> lift $ M.xor  $ (lift $ go x) : (lift $ go y) : []
-      Xnor x y -> lift $ M.and  $ (lift $ go x) : (lift $ go y) : []
-      Nand x y -> lift $ M.nand (lift $ go x) (lift $ go y)
-      Nor  x y -> lift $ M.nor  (lift $ go x) (lift $ go y)
+      Var v -> P $ M.name $ show v
+      Val v -> P $ M.lit  $ show v
 
-      Eq   x y -> lift $ M.eq  (lift $ go x) (lift $ go y)
-      Neq  x y -> lift $ M.neq (lift $ go x) (lift $ go y)
-      Lt   x y -> lift $ M.lt  (lift $ go x) (lift $ go y)
-      Lte  x y -> lift $ M.lte (lift $ go x) (lift $ go y)
-      Gt   x y -> lift $ M.gt  (lift $ go x) (lift $ go y)
-      Gte  x y -> lift $ M.gte (lift $ go x) (lift $ go y)
-                  
-      Sll  x y -> lift $ M.sll (lift $ go x) (lift $ go y)
-      Srl  x y -> lift $ M.srl (lift $ go x) (lift $ go y)
-      Sla  x y -> lift $ M.sla (lift $ go x) (lift $ go y)
-      Sra  x y -> lift $ M.sra (lift $ go x) (lift $ go y)
-      Rol  x y -> lift $ M.rol (lift $ go x) (lift $ go y)
-      Ror  x y -> lift $ M.ror (lift $ go x) (lift $ go y)
+      And  x y -> E $ M.and  [lift (go x), lift (go y)]
+      Or   x y -> E $ M.or   [lift (go x), lift (go y)]
+      Xor  x y -> E $ M.xor  [lift (go x), lift (go y)]
+      Xnor x y -> E $ M.xnor [lift (go x), lift (go y)]
+      Nand x y -> E $ M.nand (lift (go x)) (lift (go y))
+      Nor  x y -> E $ M.nor  (lift (go x)) (lift (go y))
 
-      Neg  x   -> lift $ M.neg (lift $ go x)
-      Add  x y -> lift $ M.add $ (lift $ go x) : (lift $ go y) : []
-      Sub  x y -> lift $ M.sub $ (lift $ go x) : (lift $ go y) : []
-      Cat  x y -> lift $ M.sub $ (lift $ go x) : (lift $ go y) : []
+      Eq   x y -> R $ M.eq   (lift (go x)) (lift (go y))
+      Neq  x y -> R $ M.neq  (lift (go x)) (lift (go y))
+      Lt   x y -> R $ M.lt   (lift (go x)) (lift (go y))
+      Lte  x y -> R $ M.lte  (lift (go x)) (lift (go y))
+      Gt   x y -> R $ M.gt   (lift (go x)) (lift (go y))
+      Gte  x y -> R $ M.gte  (lift (go x)) (lift (go y))
 
-      Mul  x y -> lift $ M.mul $ (lift $ go x) : (lift $ go y) : []
-      Div  x y -> lift $ M.div $ (lift $ go x) : (lift $ go y) : []
-      Mod  x y -> lift $ M.mod $ (lift $ go x) : (lift $ go y) : []
-      Rem  x y -> lift $ M.rem $ (lift $ go x) : (lift $ go y) : []
+      Sll  x y -> Sh $ M.sll (lift (go x)) (lift (go y))
+      Srl  x y -> Sh $ M.srl (lift (go x)) (lift (go y))
+      Sla  x y -> Sh $ M.sla (lift (go x)) (lift (go y))
+      Sra  x y -> Sh $ M.sra (lift (go x)) (lift (go y))
+      Rol  x y -> Sh $ M.rol (lift (go x)) (lift (go y))
+      Ror  x y -> Sh $ M.ror (lift (go x)) (lift (go y))
 
-      Exp  x y -> lift $ M.exp (lift $ go x) (lift $ go y)
-      Abs  x   -> lift $ M.abs (lift $ go x)
+      Neg  x   -> Si $ M.neg (lift (go x))
+      Add  x y -> Si $ M.add [lift (go x), lift (go y)]
+      Sub  x y -> Si $ M.sub [lift (go x), lift (go y)]
+      Cat  x y -> Si $ M.cat [lift (go x), lift (go y)]
+
+      Mul  x y -> T $ M.mul  [lift (go x), lift (go y)]
+      Div  x y -> T $ M.div  [lift (go x), lift (go y)]
+      Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
+      Rem  x y -> T $ M.rem  [lift (go x), lift (go y)]
+
+      Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
+      Abs  x   -> F $ M.abs  (lift (go x))
+      Not  x   -> F $ M.not  (lift (go x))
 
 --------------------------------------------------------------------------------
 -- ** User Interface

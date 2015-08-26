@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
--- used for the Eq inst. of XDeclaration etc.
-{-# LANGUAGE StandaloneDeriving    #-}
+-- used for the Ord/Eq inst. of XDeclaration etc.
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Language.Embedded.VHDL.Monad (
     Kind(..)
@@ -43,12 +43,17 @@ module Language.Embedded.VHDL.Monad (
 
 import Language.VHDL
 
-import Control.Applicative
+import Control.Applicative hiding (empty)
 import Control.Monad
 import Control.Monad.State hiding (lift)
 
-import Data.Char (toLower)
-import Data.List (find)
+import Data.Char     (toLower)
+import Data.Foldable (toList)
+import Data.List     (find)
+import Data.Set      (Set)
+import Data.Sequence (Seq, (|>))
+import qualified Data.Set      as Set
+import qualified Data.Sequence as Seq
 
 import Prelude hiding (not, and, or, div, mod, rem, exp, abs, null)
 import qualified Prelude as P
@@ -69,17 +74,17 @@ type Type = SubtypeIndication
 
 data EntityState = Entity {
     entity_ident             :: String
-  , entity_generics          :: Maybe GenericClause
-  , entity_ports             :: Maybe PortClause
-  , entity_declarative       :: EntityDeclarativePart
-  , entity_statements        :: Maybe EntityStatementPart
+  , entity_generics          :: Maybe GenericClause      -- Set InterfaceElement
+  , entity_ports             :: Maybe PortClause         -- Set InterfaceElement
+  , entity_declarative       :: Seq EntityDeclarativeItem
+  , entity_statements        :: Seq EntityStatement
   }
 
 data ArchitectureState = Architecture {
     architecture_ident       :: String
   , architecture_header      :: EntityState
   , architecture_declarative :: ArchitectureDeclarativePart
-  , architecture_statements  :: ArchitectureStatementPart
+  , architecture_statements  :: Seq ConcurrentStatement
   }
 
 newtype VHDL a = VHDL { unVHDL :: State ArchitectureState a}
@@ -93,13 +98,15 @@ newtype VHDL a = VHDL { unVHDL :: State ArchitectureState a}
 
 runVHDL :: ArchitectureState -> VHDL a -> (EntityDeclaration, ArchitectureBody)
 runVHDL s m =
-    ( EntityDeclaration (Ident ei) (EntityHeader eg ep) ed es
-    , ArchitectureBody  (Ident ai) (NSimple (Ident ei)) ad as )
+    ( EntityDeclaration (Ident ei) (EntityHeader eg ep) (toList ed) (Just $ toList es)
+    , ArchitectureBody  (Ident ai) (NSimple (Ident ei)) (toList ad) (toList as) )
   where
     (Architecture ai (Entity ei eg ep ed es) ad as) = execState (unVHDL m) s
+    
 
 emptyArchitectureState :: String -> String -> ArchitectureState
-emptyArchitectureState i n = Architecture i (Entity n Nothing Nothing [] Nothing) [] []
+emptyArchitectureState i n =
+  Architecture i (Entity n Nothing Nothing Seq.empty Seq.empty) [] Seq.empty
 
 behavioural, structural :: String -> ArchitectureState
 behavioural = emptyArchitectureState "behavioural"
@@ -230,7 +237,7 @@ fileL i typ = addLocal   i File         typ Nothing
 -- ** Gen. Body
 
 addStatement  :: ConcurrentStatement -> VHDL ()
-addStatement s = modify $ \state -> state {architecture_statements = s : architecture_statements state}
+addStatement s = modify $ \state -> state {architecture_statements = architecture_statements state |> s}
 
 addAssignment :: Identifier -> Expression -> VHDL ()
 addAssignment i e = addStatement $
@@ -341,7 +348,7 @@ instance Eq BlockDeclarativeItem
     (==) (BDISignalDecl l)   (BDISignalDecl r)   = l == r
     (==) (BDISharedDecl l)   (BDISharedDecl r)   = l == r
     (==) (BDIFileDecl l)     (BDIFileDecl r)     = l == r
-    (==) _                   _                   = False
+    (==) _                   _                   = False 
 
 deriving instance Eq InterfaceDeclaration
 
@@ -377,5 +384,40 @@ instance Eq Name -- todo
   where
     NSimple n1 == NSimple n2 = n1 == n2
     _          == _          = False 
+
+--------------------------------------------------------------------------------
+
+instance Ord BlockDeclarativeItem
+  where
+    compare (BDIConstantDecl l) (BDIConstantDecl r) = compare l r
+    compare (BDISignalDecl l)   (BDISignalDecl r)   = compare l r
+    compare (BDISharedDecl l)   (BDISharedDecl r)   = compare l r
+    compare (BDIFileDecl l)     (BDIFileDecl r)     = compare l r
+    compare l                   r                   = compare (ordBlock l) (ordBlock r)
+
+ordBlock :: BlockDeclarativeItem -> Int
+ordBlock block = case block of
+  (BDIConstantDecl r) -> 1
+  (BDISignalDecl r)   -> 2
+  (BDISharedDecl r)   -> 3
+  (BDIFileDecl r)     -> 4
+
+instance Ord ConstantDeclaration
+  where
+    compare l r = compare (const_identifier_list l) (const_identifier_list r)
+
+instance Ord SignalDeclaration
+  where
+    compare l r = compare (signal_identifier_list l) (signal_identifier_list r)
+
+instance Ord VariableDeclaration
+  where
+    compare l r = compare (var_shared l) (var_shared r)
+
+instance Ord FileDeclaration
+  where
+    compare l r = compare (fd_identifier_list l) (fd_identifier_list r)
+
+deriving instance Ord Identifier
 
 --------------------------------------------------------------------------------
