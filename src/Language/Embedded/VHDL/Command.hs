@@ -88,8 +88,8 @@ compEM = maybe (return Nothing) (>>= return . Just) . fmap compE
 
 data HeaderCMD exp (prog :: * -> *) a
   where
-    Port    :: String -> Kind -> Type -> Maybe (exp a) -> HeaderCMD exp prog Identifier
-    Generic :: String -> Kind -> Type -> Maybe (exp a) -> HeaderCMD exp prog Identifier
+    Port    :: Identifier -> Kind -> Type -> Maybe (exp a) -> HeaderCMD exp prog Identifier
+    Generic :: Identifier -> Kind -> Type -> Maybe (exp a) -> HeaderCMD exp prog Identifier
 
 instance MapInstr (HeaderCMD exp)
   where
@@ -103,40 +103,38 @@ type instance IExp (HeaderCMD e :+: i) = e
 
 constant, signal, variable, file
   :: (HeaderCMD (IExp instr) :<: instr)
-  => String
+  => Identifier
   -> Type
   -> Maybe (IExp instr a)
   -> ProgramT instr m Identifier
-constant s t = singleE . Port s M.Constant t
-signal   s t = singleE . Port s M.Signal   t
-variable s t = singleE . Port s M.Variable t
-file     s t = singleE . Port s M.File     t
+constant i t = singleE . Port i M.Constant t
+signal   i t = singleE . Port i M.Signal   t
+variable i t = singleE . Port i M.Variable t
+file     i t = singleE . Port i M.File     t
 
 constantG, signalG, variableG, fileG
   :: (HeaderCMD (IExp instr) :<: instr)
-  => String
+  => Identifier
   -> Type
   -> Maybe (IExp instr a)
   -> ProgramT instr m Identifier
-constantG s t = singleE . Generic s M.Constant t
-signalG   s t = singleE . Generic s M.Signal   t
-variableG s t = singleE . Generic s M.Variable t
-fileG     s t = singleE . Generic s M.File     t
+constantG i t = singleE . Generic i M.Constant t
+signalG   i t = singleE . Generic i M.Signal   t
+variableG i t = singleE . Generic i M.Variable t
+fileG     i t = singleE . Generic i M.File     t
 
 --------------------------------------------------------------------------------
 
 compileHeader :: CompileExp exp => HeaderCMD exp prog a -> VHDL a
-compileHeader (Port s k t e) =
-  do let i = Ident s
-     v <- compEM e
+compileHeader (Port i k t e) =
+  do v <- compEM e
      case k of
        M.Constant -> M.constant i         t v
        M.Signal   -> M.signal   i V.InOut t v
        M.Variable -> M.variable i V.InOut t v
        M.File     -> M.file     i         t
-compileHeader (Generic s k t e) =
-  do let i = Ident s
-     v <- compEM e
+compileHeader (Generic i k t e) =
+  do v <- compEM e
      case k of
        M.Constant -> M.constantG i         t v
        M.Signal   -> M.signalG   i V.InOut t v
