@@ -98,10 +98,14 @@ newtype VHDL a = VHDL { unVHDL :: State ArchitectureState a}
 
 runVHDL :: ArchitectureState -> VHDL a -> (EntityDeclaration, ArchitectureBody)
 runVHDL s m =
-    ( EntityDeclaration (Ident ei) (EntityHeader eg ep) (toList ed) (Just $ toList es)
+    ( EntityDeclaration (Ident ei) (EntityHeader eg ep) (toList ed) (toList' es)
     , ArchitectureBody  (Ident ai) (NSimple (Ident ei)) (toList ad) (toList as) )
   where
     (Architecture ai (Entity ei eg ep ed es) ad as) = execState (unVHDL m) s
+
+    toList' xs
+      | P.null xs = Nothing
+      | otherwise = Just $ toList xs
     
 
 emptyArchitectureState :: String -> String -> ArchitectureState
@@ -264,7 +268,7 @@ shiftexp s a b = ShiftExpression a (Just (s, b))
 simplexp :: Maybe Sign -> AddingOperator -> [Term] -> SimpleExpression
 simplexp s o (a:as) = SimpleExpression s a (fmap ((,) o) as)
 
-term     ::MultiplyingOperator -> [Factor] -> Term
+term     :: MultiplyingOperator -> [Factor] -> Term
 term     o (a:as) = Term a (fmap ((,) o) as)
 
 --------------------------------------------------------------------------------
