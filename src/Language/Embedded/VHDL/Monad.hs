@@ -99,7 +99,7 @@ newtype VHDL a = VHDL { unVHDL :: State ArchitectureState a}
 runVHDL :: ArchitectureState -> VHDL a -> (EntityDeclaration, ArchitectureBody)
 runVHDL s m =
     ( EntityDeclaration (Ident ei) (EntityHeader eg ep) (toList ed) (toList' es)
-    , ArchitectureBody  (Ident ai) (NSimple (Ident ei)) (toList ad) (toList as) )
+    , ArchitectureBody  (Ident ai) (NSimple (Ident ei)) (toList ad) (toList as))
   where
     (Architecture ai (Entity ei eg ep ed es) ad as) = execState (unVHDL m) s
 

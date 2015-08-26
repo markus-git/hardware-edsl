@@ -32,7 +32,7 @@ instance CompileExp exp => Interp (HeaderCMD exp) VHDL
 
 compile :: (Interp instr VHDL, MapInstr instr) => Program instr a -> String
 compile prog = let (decl, body) = M.runVHDL (M.behavioural "test") (interpret prog) in
-     show (pp decl) ++ "\n" ++ show (pp body)
+     show (pp decl) ++ "\n\n" ++ show (pp body)
 
 --------------------------------------------------------------------------------
 -- **
