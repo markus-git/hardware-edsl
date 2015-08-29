@@ -4,9 +4,10 @@
 module Language.Embedded.VHDL.Interface where
 
 import Language.VHDL                (Expression, Identifier(..))
-import Language.Embedded.VHDL.Monad (VHDL)
+import Language.Embedded.VHDL.Monad (VHDL, Type)
 
 import Data.Constraint
+import Data.Typeable   (Typeable)
 
 --------------------------------------------------------------------------------
 -- *
@@ -32,6 +33,9 @@ class CompileExp exp
 
     -- | Compilation of expressions
     compE :: exp a -> VHDL Expression
+
+    -- | 
+    compT :: Typeable a => exp a -> VHDL Type
 
 newVar :: Integer -> Identifier
 newVar = Ident . ('v' :) . show

@@ -39,6 +39,8 @@ module Language.Embedded.VHDL.Monad (
 
     -- ^ types
   , std_logic
+  , signed,  signed8,  signed16,  signed32,  signed64
+  , usigned, usigned8, usigned16, usigned32, usigned64
   ) where
 
 import Language.VHDL
@@ -106,7 +108,6 @@ runVHDL s m =
     toList' xs
       | P.null xs = Nothing
       | otherwise = Just $ toList xs
-    
 
 emptyArchitectureState :: String -> String -> ArchitectureState
 emptyArchitectureState i n =
@@ -338,7 +339,31 @@ null  = PrimLit LitNull
 -- ** Gen. Types
 
 std_logic :: Type
-std_logic = SubtypeIndication Nothing (TMType (NSimple (Ident "STD_LOGIC"))) Nothing
+std_logic = SubtypeIndication Nothing (TMType (NSimple (Ident "std_logic"))) Nothing
+
+arith :: String -> Int -> Type
+arith typ range = SubtypeIndication Nothing
+  (TMType (NSimple (Ident typ)))
+  (Just (CRange (RangeConstraint (RSimple (point range) DownTo (point 0)))))
+  where
+    point :: Int -> SimpleExpression
+    point i = SimpleExpression Nothing (Term (FacPrim (lit $ show i) Nothing) []) []
+ 
+signed, usigned :: Int -> Type
+signed  = arith "signed"
+usigned = arith "usigned"
+  
+signed8, signed16, signed32, signed64 :: Type
+signed8  = signed 8
+signed16 = signed 16
+signed32 = signed 32
+signed64 = signed 64
+
+usigned8, usigned16, usigned32, usigned64 :: Type
+usigned8  = usigned 8
+usigned16 = usigned 16
+usigned32 = usigned 32
+usigned64 = usigned 64
 
 -- .. add more ..
 

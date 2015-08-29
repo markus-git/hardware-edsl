@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 module Language.Embedded.VHDL.Command where
 
@@ -17,6 +18,7 @@ import Language.Embedded.VHDL.Interface
 import qualified Language.Embedded.VHDL.Monad as M
 
 import Control.Applicative
+import Data.Typeable
 
 --------------------------------------------------------------------------------
 -- *
@@ -39,13 +41,20 @@ compile prog = let (decl, body) = M.runVHDL (M.behavioural "test") (interpret pr
 
 data ConcurrentCMD exp (prog :: * -> *) a
   where
-    Assign :: Identifier -> exp a                           -> ConcurrentCMD exp prog ()
-    Local  :: Identifier -> Kind  -> Type  -> Maybe (exp a) -> ConcurrentCMD exp prog ()
+    Assign :: Identifier
+           -> exp a
+           -> ConcurrentCMD exp prog ()
+           
+    Local  :: Typeable a
+           => Identifier
+           -> Kind
+           -> Maybe (exp a)
+           -> ConcurrentCMD exp prog ()
 
 instance MapInstr (ConcurrentCMD exp)
   where
-    imap _ (Assign r a)     = Assign r a
-    imap _ (Local  i k e t) = Local  i k e t
+    imap _ (Assign r a)   = Assign r a
+    imap _ (Local  i k e) = Local  i k e
 
 type instance IExp (ConcurrentCMD e)       = e
 type instance IExp (ConcurrentCMD e :+: i) = e
@@ -56,15 +65,14 @@ type instance IExp (ConcurrentCMD e :+: i) = e
 (<==) i = singleE . Assign i
 
 constantL, signalL, variableL, fileL
-  :: (ConcurrentCMD (IExp instr) :<: instr)
+  :: (ConcurrentCMD (IExp instr) :<: instr, Typeable a)
   => Identifier
-  -> Type
   -> Maybe (IExp instr a)
   -> ProgramT instr m ()
-constantL i t = singleE . Local i M.Constant t
-signalL   i t = singleE . Local i M.Signal   t
-variableL i t = singleE . Local i M.Variable t
-fileL     i t = singleE . Local i M.File     t
+constantL i = singleE . Local i M.Constant
+signalL   i = singleE . Local i M.Signal
+variableL i = singleE . Local i M.Variable
+fileL     i = singleE . Local i M.File
 
 --------------------------------------------------------------------------------
 
@@ -72,29 +80,39 @@ compileConcurrent :: CompileExp exp => ConcurrentCMD exp prog a -> VHDL a
 compileConcurrent (Assign i exp) =
   do v <- compE exp
      M.addAssignment i v
-compileConcurrent (Local i k t e) =
+compileConcurrent (Local i k e) =
   do v <- compEM e
+     t <- compTM e
      void $ case k of
-       M.Constant -> M.constantL i          t v
-       M.Signal   -> M.signalL   i V.Buffer t v
-       M.Variable -> M.variableL i V.Buffer t v
-       M.File     -> M.fileL     i          t
+       M.Constant -> M.constantL i         t v
+       M.Signal   -> M.signalL   i V.InOut t v
+       M.Variable -> M.variableL i V.InOut t v
+       M.File     -> M.fileL     i         t
 
 compEM :: CompileExp exp => Maybe (exp a) -> VHDL (Maybe Expression)
 compEM = maybe (return Nothing) (>>= return . Just) . fmap compE
 
+compTM :: forall exp a. (CompileExp exp, Typeable a) => Maybe (exp a) -> VHDL Type
+compTM _ = compT (undefined :: exp a)
+
 --------------------------------------------------------------------------------
 -- **
 
+data DeclKind = Port | Generic
+
 data HeaderCMD exp (prog :: * -> *) a
   where
-    Port    :: Identifier -> Kind -> Type -> Maybe (exp a) -> HeaderCMD exp prog Identifier
-    Generic :: Identifier -> Kind -> Type -> Maybe (exp a) -> HeaderCMD exp prog Identifier
+    Decl :: Typeable a
+         => DeclKind
+         -> Identifier
+         -> Kind
+         -> Mode
+         -> Maybe (exp a)
+         -> HeaderCMD exp prog Identifier
 
 instance MapInstr (HeaderCMD exp)
   where
-    imap _ (Port    s k t e) = Port    s k t e
-    imap _ (Generic s k t e) = Generic s k t e
+    imap _ (Decl d i k m e) = Decl d i k m e
 
 type instance IExp (HeaderCMD e)       = e
 type instance IExp (HeaderCMD e :+: i) = e
@@ -102,43 +120,45 @@ type instance IExp (HeaderCMD e :+: i) = e
 --------------------------------------------------------------------------------
 
 constant, signal, variable, file
-  :: (HeaderCMD (IExp instr) :<: instr)
+  :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
   => Identifier
-  -> Type
+  -> Mode
   -> Maybe (IExp instr a)
   -> ProgramT instr m Identifier
-constant i t = singleE . Port i M.Constant t
-signal   i t = singleE . Port i M.Signal   t
-variable i t = singleE . Port i M.Variable t
-file     i t = singleE . Port i M.File     t
+constant i m = singleE . Decl Port i M.Constant m
+signal   i m = singleE . Decl Port i M.Signal   m
+variable i m = singleE . Decl Port i M.Variable m
+file     i m = singleE . Decl Port i M.File     m
 
 constantG, signalG, variableG, fileG
-  :: (HeaderCMD (IExp instr) :<: instr)
+  :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
   => Identifier
-  -> Type
+  -> Mode
   -> Maybe (IExp instr a)
   -> ProgramT instr m Identifier
-constantG i t = singleE . Generic i M.Constant t
-signalG   i t = singleE . Generic i M.Signal   t
-variableG i t = singleE . Generic i M.Variable t
-fileG     i t = singleE . Generic i M.File     t
+constantG i m = singleE . Decl Generic i M.Constant m
+signalG   i m = singleE . Decl Generic i M.Signal   m
+variableG i m = singleE . Decl Generic i M.Variable m
+fileG     i m = singleE . Decl Generic i M.File     m
 
 --------------------------------------------------------------------------------
 
 compileHeader :: CompileExp exp => HeaderCMD exp prog a -> VHDL a
-compileHeader (Port i k t e) =
+compileHeader (Decl Port i k m e) =
   do v <- compEM e
+     t <- compTM e
      case k of
-       M.Constant -> M.constant i         t v
-       M.Signal   -> M.signal   i V.InOut t v
-       M.Variable -> M.variable i V.InOut t v
-       M.File     -> M.file     i         t
-compileHeader (Generic i k t e) =
+       M.Constant -> M.constant i   t v
+       M.Signal   -> M.signal   i m t v
+       M.Variable -> M.variable i m t v
+       M.File     -> M.file     i   t
+compileHeader (Decl Generic i k m e) =
   do v <- compEM e
+     t <- compTM e
      case k of
-       M.Constant -> M.constantG i         t v
-       M.Signal   -> M.signalG   i V.InOut t v
-       M.Variable -> M.variableG i V.InOut t v
-       M.File     -> M.fileG     i         t
+       M.Constant -> M.constantG i   t v
+       M.Signal   -> M.signalG   i m t v
+       M.Variable -> M.variableG i m t v
+       M.File     -> M.fileG     i   t
 
 --------------------------------------------------------------------------------

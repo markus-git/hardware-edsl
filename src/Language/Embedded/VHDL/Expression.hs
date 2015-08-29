@@ -1,5 +1,6 @@
-{-# LANGUAGE GADTs         #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- these are needed for Hoist/Lift
 {-# LANGUAGE TypeFamilies          #-}
@@ -34,7 +35,7 @@ import Language.VHDL (Expression(..)
 import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Monad (VHDL)
+import Language.Embedded.VHDL.Monad (VHDL, Type)
 import qualified Language.Embedded.VHDL.Monad as M
 
 import Data.Bits hiding (xor)
@@ -310,10 +311,11 @@ instance Lift Kind Primary where
 instance CompileExp Expr
   where
     varE  = Var
-    compE = compile
+    compE = compileE
+    compT = compileT
 
-compile :: Expr a -> VHDL Expression
-compile = return . lift . go
+compileE :: Expr a -> VHDL Expression
+compileE = return . lift . go
   where
     go :: Expr e -> Kind
     go exp = case exp of
@@ -355,8 +357,25 @@ compile = return . lift . go
       Abs  x   -> F $ M.abs  (lift (go x))
       Not  x   -> F $ M.not  (lift (go x))
 
+-- *** add 'use' statements
+compileT :: forall a. Typeable a => Expr a -> VHDL Type
+compileT _ = return $ case show (typeOf (undefined :: a)) of
+  "Bool" -> M.std_logic
+  'I':'n':'t':xs -> case xs of
+    "8"  -> M.signed8
+    "16" -> M.signed16
+    "32" -> M.signed32
+    "64" -> M.signed64
+  'W':'o':'r':'d':xs -> case xs of
+    "8"  -> M.usigned8
+    "16" -> M.usigned16
+    "32" -> M.usigned32
+    "64" -> M.usigned64
+  _ -> error "compT: type not supported"
+
 --------------------------------------------------------------------------------
--- ** User Interface
+-- * User Interface
+--------------------------------------------------------------------------------
 
 not  :: Expr Bool -> Expr Bool
 not  = Not
