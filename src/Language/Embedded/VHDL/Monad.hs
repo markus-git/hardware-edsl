@@ -347,7 +347,7 @@ arith :: String -> Int -> Type
 arith typ range = SubtypeIndication Nothing
     (TMType (NSlice (SliceName
       (PName (NSimple (Ident typ)))
-      (DRRange (RSimple (point range) DownTo (point 0))))))
+      (DRRange (RSimple (point (range - 1)) DownTo (point 0))))))
     (Nothing)
   where
     point :: Int -> SimpleExpression
