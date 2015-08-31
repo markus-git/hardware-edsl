@@ -86,9 +86,10 @@ data Expr a
     Sub  :: Num a => Expr a -> Expr a -> Expr a
     Cat  :: Num a => Expr a -> Expr a -> Expr a
 
-    -- multiplyind operators
+    -- multiplying operators
     Mul  :: Num a        => Expr a -> Expr a -> Expr a
-    Div  :: Fractional a => Expr a -> Expr a -> Expr a
+    Div  :: Integral a   => Expr a -> Expr a -> Expr a
+    Dif  :: Fractional a => Expr a -> Expr a -> Expr a
     Mod  :: Integral a   => Expr a -> Expr a -> Expr a
     Rem  :: Integral a   => Expr a -> Expr a -> Expr a
 
@@ -154,25 +155,26 @@ evaluate env exp = case exp of
     Gt   x y -> bin (>)  x y
     Gte  x y -> bin (>=) x y
 
-    Sll  x y -> error "evaluation of _ not yet implemented for Expr"
-    Srl  x y -> error "evaluation of _ not yet implemented for Expr"  
-    Sla  x y -> error "evaluation of _ not yet implemented for Expr"  
-    Sra  x y -> error "evaluation of _ not yet implemented for Expr"  
-    Rol  x y -> error "evaluation of _ not yet implemented for Expr"  
-    Ror  x y -> error "evaluation of _ not yet implemented for Expr"  
+    Sll  x y -> error "evaluation of Sll not yet implemented for Expr"
+    Srl  x y -> error "evaluation of Srl not yet implemented for Expr"  
+    Sla  x y -> error "evaluation of Sla not yet implemented for Expr"  
+    Sra  x y -> error "evaluation of Sra not yet implemented for Expr"  
+    Rol  x y -> error "evaluation of Rol not yet implemented for Expr"  
+    Ror  x y -> error "evaluation of Ror not yet implemented for Expr"  
 
-    Neg  x   -> error "evaluation of _ not yet implemented for Expr"   
-    Add  x y -> error "evaluation of _ not yet implemented for Expr"  
-    Sub  x y -> error "evaluation of _ not yet implemented for Expr"  
-    Cat  x y -> error "evaluation of _ not yet implemented for Expr" 
+    Neg  x   -> error "evaluation of Neg not yet implemented for Expr"   
+    Add  x y -> error "evaluation of Add not yet implemented for Expr"  
+    Sub  x y -> error "evaluation of Sub not yet implemented for Expr"  
+    Cat  x y -> error "evaluation of Cat not yet implemented for Expr" 
 
-    Mul  x y -> error "evaluation of _ not yet implemented for Expr" 
-    Div  x y -> error "evaluation of _ not yet implemented for Expr" 
-    Mod  x y -> error "evaluation of _ not yet implemented for Expr" 
-    Rem  x y -> error "evaluation of _ not yet implemented for Expr" 
+    Mul  x y -> error "evaluation of Mul not yet implemented for Expr" 
+    Div  x y -> error "evaluation of Div not yet implemented for Expr"
+    Dif  x y -> error "evaluation of Dif not yet implemented for Expr"
+    Mod  x y -> error "evaluation of Mod not yet implemented for Expr" 
+    Rem  x y -> error "evaluation of Rem not yet implemented for Expr" 
 
-    Exp  x y -> error "evaluation of _ not yet implemented for Expr"
-    Abs  x   -> error "evaluation of _ not yet implemented for Expr"
+    Exp  x y -> error "evaluation of Exp not yet implemented for Expr"
+    Abs  x   -> error "evaluation of Abs not yet implemented for Expr"
   where
     xor a b = (a || b) && P.not (a && b)
     
@@ -350,6 +352,7 @@ compileE = return . lift . go
 
       Mul  x y -> T $ M.mul  [lift (go x), lift (go y)]
       Div  x y -> T $ M.div  [lift (go x), lift (go y)]
+      Dif  x y -> error "compilation of Dif not yet implemented for Expr"
       Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
       Rem  x y -> T $ M.rem  [lift (go x), lift (go y)]
 
@@ -417,7 +420,7 @@ neg = Neg
 mul :: Num a => Expr a -> Expr a -> Expr a
 mul = Mul
 
-div :: Fractional a => Expr a -> Expr a -> Expr a
+div :: Integral a => Expr a -> Expr a -> Expr a
 div = Div
 
 mod, rem :: Integral a => Expr a -> Expr a -> Expr a
