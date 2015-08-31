@@ -343,12 +343,14 @@ std_logic = SubtypeIndication Nothing (TMType (NSimple (Ident "std_logic"))) Not
 
 arith :: String -> Int -> Type
 arith typ range = SubtypeIndication Nothing
-  (TMType (NSimple (Ident typ)))
-  (Just (CRange (RangeConstraint (RSimple (point range) DownTo (point 0)))))
+    (TMType (NSlice (SliceName
+      (PName (NSimple (Ident typ)))
+      (DRRange (RSimple (point range) DownTo (point 0))))))
+    (Nothing)
   where
     point :: Int -> SimpleExpression
     point i = SimpleExpression Nothing (Term (FacPrim (lit $ show i) Nothing) []) []
- 
+
 signed, usigned :: Int -> Type
 signed  = arith "signed"
 usigned = arith "usigned"
