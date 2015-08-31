@@ -34,9 +34,10 @@ library
                        
   build-depends:       base            >=4   && <5,
                        mtl             >=2.2 && <3,
-                       imperative-edsl >=0.3,
-                       language-vhdl   >=0.1,
+                       bytestring,
                        constraints,
-                       containers      >=0.1 && <1
+                       containers      >=0.1 && <1,
+                       imperative-edsl >=0.3,
+                       language-vhdl   >=0.1
   hs-source-dirs:      .,src
   default-language:    Haskell2010

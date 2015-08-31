@@ -20,10 +20,12 @@ module Language.Embedded.VHDL.Expression
   , lit
   ) where
 
-import Language.VHDL (Identifier(..), Expression(..))
+import Language.VHDL (Identifier(..), Expression)
+
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Monad (VHDL, Type)
+import Language.Embedded.VHDL.Monad             (VHDL, Type)
 import Language.Embedded.VHDL.Expression.Hoist
+import Language.Embedded.VHDL.Expression.Format
 import qualified Language.Embedded.VHDL.Monad as M
 
 import Data.Bits hiding (xor)
@@ -173,16 +175,7 @@ evaluate env exp = case exp of
     bin f x y = f (evaluate env x) (evaluate env y)
 
 --------------------------------------------------------------------------------
--- ** Compilation -- this migth be the dumbest thing ever...
-
-
---------------------------------------------------------------------------------
-
--- | Lift any level
-
---------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
+-- ** Compilation
 
 instance CompileExp Expr
   where
