@@ -329,8 +329,11 @@ name :: String -> Primary
 name = PrimName . NSimple . Ident
 
 -- ! Same as name ...
-lit  :: String -> Primary
-lit  = PrimLit . LitString . SLit
+string :: String -> Primary
+string = PrimLit . LitString . SLit
+
+lit :: String -> Primary
+lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident
 
 null  :: Primary
 null  = PrimLit LitNull
@@ -349,7 +352,7 @@ arith typ range = SubtypeIndication Nothing
     (Nothing)
   where
     point :: Int -> SimpleExpression
-    point i = SimpleExpression Nothing (Term (FacPrim (lit $ show i) Nothing) []) []
+    point i = SimpleExpression Nothing (Term (FacPrim (lit (show i)) (Nothing)) []) []
 
 signed, usigned :: Int -> Type
 signed  = arith "signed"
