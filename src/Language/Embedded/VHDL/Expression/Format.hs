@@ -14,12 +14,58 @@ import Language.VHDL (
 import Data.Bits
 import Data.Char   (intToDigit)
 import Data.Word
+import Data.Int
 import Text.Printf (printf)
 import Numeric     (showIntAtBase)
 import qualified Data.ByteString as B
 
 --------------------------------------------------------------------------------
--- *
+-- * Kludge - until I come up with a better solution
+--------------------------------------------------------------------------------
+
+class Kludge a
+  where
+    format :: a -> String
+
+--------------------------------------------------------------------------------
+-- ** Boolean
+
+instance Kludge Bool where
+  format True  = "1"
+  format False = "0"
+
+--------------------------------------------------------------------------------
+-- ** Signed
+
+instance Kludge Int8 where
+  format = convert
+
+instance Kludge Int16 where
+  format = convert
+
+instance Kludge Int32 where
+  format = convert
+
+instance Kludge Int64 where
+  format = convert
+
+--------------------------------------------------------------------------------
+-- ** Unsigned
+
+instance Kludge Word8 where
+  format = convert
+
+instance Kludge Word16 where
+  format = convert
+
+instance Kludge Word32 where
+  format = convert
+
+instance Kludge Word64 where
+  format = convert
+
+--------------------------------------------------------------------------------
+-- * Converting Integers to their Binrary representation
 --------------------------------------------------------------------------------
 
 convert :: Integral a => a -> String

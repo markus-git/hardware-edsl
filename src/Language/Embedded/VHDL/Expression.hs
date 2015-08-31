@@ -37,12 +37,12 @@ import Prelude hiding (not, and, or, div, mod, rem, exp, abs, null)
 import qualified Prelude as P
 
 --------------------------------------------------------------------------------
--- *
+-- * VHDL Expression Type - a union of VHDLs' types + variables
 --------------------------------------------------------------------------------
 
 data Expr a
   where
-    Val :: Show a     => a          -> Expr a
+    Val :: Kludge a   => a          -> Expr a
     Var :: Typeable a => Identifier -> Expr a
 
     -- expression operators (plus Not)
@@ -87,16 +87,12 @@ data Expr a
     Exp  :: Floating a => Expr a -> Expr a -> Expr a
     Abs  :: Num a      => Expr a -> Expr a
 
-    -- and so on ...
-
-type instance PredicateExp Expr = Typeable :/\: Show
-
-instance Show Identifier where show (Ident s) = s
+type instance PredicateExp Expr = Typeable :/\: Show :/\: Kludge
 
 --------------------------------------------------------------------------------
 -- ** Useful Instances
 
-instance (Show a, Num a, Eq a) => Num (Expr a)
+instance (Kludge a, Num a, Eq a) => Num (Expr a)
   where
     fromInteger   = Val . fromInteger
     Val a + Val b = Val (a+b)
@@ -188,8 +184,8 @@ compileE = return . lift . go
   where
     go :: Expr e -> Kind
     go exp = case exp of
-      Var v -> P $ M.name $ show v
-      Val v -> P $ M.lit  $ show v
+      Var v -> P $ M.name $ showI v
+      Val v -> P $ M.lit  $ format v
 
       And  x y -> E $ M.and  [lift (go x), lift (go y)]
       Or   x y -> E $ M.or   [lift (go x), lift (go y)]
@@ -226,6 +222,9 @@ compileE = return . lift . go
       Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
       Abs  x   -> F $ M.abs  (lift (go x))
       Not  x   -> F $ M.not  (lift (go x))
+
+showI :: Identifier -> String
+showI (Ident s) = s
 
 -- *** add 'use' statements
 compileT :: forall a. Typeable a => Expr a -> VHDL Type
@@ -303,7 +302,7 @@ abs = Abs
 name :: Typeable a => Identifier -> Expr a
 name = Var
 
-lit :: Show a => a -> Expr a
+lit :: Kludge a => a -> Expr a
 lit = Val
 
 --------------------------------------------------------------------------------
