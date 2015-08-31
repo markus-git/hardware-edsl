@@ -33,9 +33,8 @@ module Language.Embedded.VHDL.Monad (
   , mul, div, mod, rem
   , exp
   , abs, not
-  , name
-  , lit
-  , null
+         
+  , name, string, lit, null
 
     -- ^ types
   , std_logic
