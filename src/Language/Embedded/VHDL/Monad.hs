@@ -36,6 +36,8 @@ module Language.Embedded.VHDL.Monad (
          
   , name, string, lit, null
 
+  , resize
+
     -- ^ types
   , std_logic
   , signed,  signed8,  signed16,  signed32,  signed64
@@ -43,6 +45,7 @@ module Language.Embedded.VHDL.Monad (
   ) where
 
 import Language.VHDL
+import Language.Embedded.VHDL.Expression.Hoist hiding (Kind)
 
 import Control.Applicative hiding (empty)
 import Control.Monad
@@ -336,6 +339,19 @@ lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Iden
 
 null  :: Primary
 null  = PrimLit LitNull
+
+--------------------------------------------------------------------------------
+-- Hack to try things out
+
+resize :: Int -> Term -> Primary
+resize size exp =
+  PrimFun (FunctionCall
+    (NSimple (Ident "resize"))
+    (Just (AssociationList
+      [ AssociationElement Nothing (APDesignator (ADExpression (lift exp)))
+      , AssociationElement Nothing (APDesignator (ADExpression (lift (lit (show size)))))
+      ])
+    ))
 
 --------------------------------------------------------------------------------
 -- ** Gen. Types
