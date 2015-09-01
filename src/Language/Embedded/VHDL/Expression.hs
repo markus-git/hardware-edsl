@@ -213,7 +213,8 @@ compileE = return . lift . go
       Sub  x y -> Si $ M.sub [lift (go x), lift (go y)]
       Cat  x y -> Si $ M.cat [lift (go x), lift (go y)]
 
-      Mul  x y -> T $ M.mul  [lift (go x), lift (go y)]
+      Mul  x y -> P $ M.resize 8 $ M.mul  [lift (go x), lift (go y)]
+    --Mul  x y -> T $ M.mul  [lift (go x), lift (go y)]
       Div  x y -> T $ M.div  [lift (go x), lift (go y)]
       Dif  x y -> error "compilation of Dif not yet implemented for Expr"
       Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
