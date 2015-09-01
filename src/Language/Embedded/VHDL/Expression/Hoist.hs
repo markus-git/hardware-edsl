@@ -17,8 +17,6 @@ import Language.VHDL (
   , Identifier(..)
   )
 
-import Language.Embedded.VHDL.Interface
-
 --------------------------------------------------------------------------------
 -- * Lifting / Hoisting of VHDL Expression
 --------------------------------------------------------------------------------
