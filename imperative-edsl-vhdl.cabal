@@ -23,7 +23,13 @@ library
                        Language.Embedded.VHDL.Expression.Hoist,
                        Language.Embedded.VHDL.Expression.Format,
                        Language.Embedded.VHDL.Command
-  -- other-modules:
+
+  other-modules:       Language.Embedded.VHDL.Monad.VHDL,
+                       Language.Embedded.VHDL.Monad.Type,
+                       Language.Embedded.VHDL.Monad.Expression,
+                       Language.Embedded.VHDL.Monad.Entity,
+                       Language.Embedded.VHDL.Monad.Architecture
+                       
   other-extensions:    TypeFamilies,
                        KindSignatures,
                        ConstraintKinds,
