@@ -18,18 +18,18 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Language.Embedded.VHDL,
                        Language.Embedded.VHDL.Monad,
+                       Language.Embedded.VHDL.Monad.VHDL,
+                       Language.Embedded.VHDL.Monad.Type,
+                       Language.Embedded.VHDL.Monad.Expression,
+                       Language.Embedded.VHDL.Monad.Entity,
+                       Language.Embedded.VHDL.Monad.Architecture,
                        Language.Embedded.VHDL.Interface,
                        Language.Embedded.VHDL.Expression,
                        Language.Embedded.VHDL.Expression.Hoist,
                        Language.Embedded.VHDL.Expression.Format,
                        Language.Embedded.VHDL.Command
 
-  other-modules:       Language.Embedded.VHDL.Monad.VHDL,
-                       Language.Embedded.VHDL.Monad.Type,
-                       Language.Embedded.VHDL.Monad.Expression,
-                       Language.Embedded.VHDL.Monad.Entity,
-                       Language.Embedded.VHDL.Monad.Architecture
-                       
+  -- other-modules:                              
   other-extensions:    TypeFamilies,
                        KindSignatures,
                        ConstraintKinds,
