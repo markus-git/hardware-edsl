@@ -68,12 +68,11 @@ instance Kludge Word64 where
 -- * Converting Integers to their Binrary representation
 --------------------------------------------------------------------------------
 
+-- Convert an Integral
 convert :: Integral a => a -> String
 convert = foldr1 (++) . fmap w2s . B.unpack . i2bs . toInteger
 
---------------------------------------------------------------------------------
-
--- Found on SO
+-- Go over an Integer and convert it into a Bytestring of its binary representation
 i2bs :: Integer -> B.ByteString
 i2bs x = B.reverse . B.unfoldr (fmap go) . Just $ sign x
   where
@@ -88,7 +87,7 @@ i2bs x = B.reverse . B.unfoldr (fmap go) . Just $ sign x
         i | x >= 128  = Just (x `shiftR` 8)
           | otherwise = Nothing
 
--- I assum the negative ones to already be padded
+-- I assum the negative numbers to already be padded with ones
 w2s :: Word8 -> String
 w2s w = printf "%08s" $ showIntAtBase 2 intToDigit w ""
 

@@ -182,7 +182,7 @@ instance CompileExp Expr
 compileE :: Expr a -> VHDL Expression
 compileE = return . lift . go
   where
-    go :: Expr e -> Kind
+    go :: Expr a -> Kind
     go exp = case exp of
       Var v -> P $ M.name   $ showI v
       Val v -> P $ M.string $ format v

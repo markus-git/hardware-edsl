@@ -15,13 +15,15 @@ module Language.Embedded.VHDL.Monad (
 
     -- ^ assignment
     -- port  / generic  / local
-  , constant, constantG, constantL
+  , constant, constantG, constantL, constantP
   , signal,   signalG,   signalL
-  , variable, variableG, variableL
-  , file,     fileG,     fileL
+  , variable, variableG, variableL, variableP
+  , file,     fileG,     fileL,     fileP
 
     -- ^ ..
-  , addAssignment
+  , addSignalAssignment
+  , insertProc
+  , enterProc
 
     -- ^ expressions
   , and, or, xor, xnor
@@ -54,8 +56,11 @@ import Control.Monad.State hiding (lift)
 import Data.Char     (toLower)
 import Data.Foldable (toList)
 import Data.List     (find)
+
+import Data.Map      (Map)
 import Data.Set      (Set)
 import Data.Sequence (Seq, (|>))
+import qualified Data.Map      as Map
 import qualified Data.Set      as Set
 import qualified Data.Sequence as Seq
 
@@ -84,11 +89,17 @@ data EntityState = Entity {
   , entity_statements        :: Seq EntityStatement
   }
 
+data ProcessState = Process {
+    process_current          :: Label
+  , process_all              :: Map Label ProcessStatement
+  }
+
 data ArchitectureState = Architecture {
     architecture_ident       :: String
   , architecture_header      :: EntityState
   , architecture_declarative :: ArchitectureDeclarativePart
   , architecture_statements  :: Seq ConcurrentStatement
+  , architecture_processes   :: ProcessState
   }
 
 newtype VHDL a = VHDL { unVHDL :: State ArchitectureState a}
@@ -105,7 +116,7 @@ runVHDL s m =
     ( EntityDeclaration (Ident ei) (EntityHeader eg ep) (toList ed) (toList' es)
     , ArchitectureBody  (Ident ai) (NSimple (Ident ei)) (toList ad) (toList as))
   where
-    (Architecture ai (Entity ei eg ep ed es) ad as) = execState (unVHDL m) s
+    (Architecture ai (Entity ei eg ep ed es) ad as _) = execState (unVHDL m) s
 
     toList' xs
       | P.null xs = Nothing
@@ -113,7 +124,10 @@ runVHDL s m =
 
 emptyArchitectureState :: String -> String -> ArchitectureState
 emptyArchitectureState i n =
-  Architecture i (Entity n Nothing Nothing Seq.empty Seq.empty) [] Seq.empty
+  Architecture i
+    (Entity n Nothing Nothing Seq.empty Seq.empty)
+    [] Seq.empty
+    (Process (error "label not set") Map.empty)
 
 behavioural, structural :: String -> ArchitectureState
 behavioural = emptyArchitectureState "behavioural"
@@ -149,12 +163,34 @@ addDeclaration new (InterfaceList is) = InterfaceList (insert new is)
 
 --------------------------------------------------------------------------------
 
+addPort :: Identifier -> Kind -> Maybe Mode -> Type -> Maybe Expression -> VHDL Identifier
+addPort ident kind mode typ exp =
+  do state <- get
+     let port  = newDeclaration ident kind mode typ exp
+         ports = case entity_ports (architecture_header state) of
+           Nothing              -> PortClause (InterfaceList [port])
+           Just (PortClause is) -> PortClause (addDeclaration port is)
+     put    $ state { architecture_header = (architecture_header state) { entity_ports = Just ports } }
+     return $ ident
+
+addGeneric :: Identifier -> Kind -> Maybe Mode -> Type -> Maybe Expression -> VHDL Identifier
+addGeneric ident kind mode typ exp =
+  do state <- get
+     let gen  = newDeclaration ident kind mode typ exp
+         gens = case entity_generics (architecture_header state) of
+           Nothing                 -> GenericClause (InterfaceList [gen])
+           Just (GenericClause is) -> GenericClause (addDeclaration gen is)
+     put    $ state { architecture_header = (architecture_header state) { entity_generics = Just gens } }
+     return $ ident
+
+--------------------------------------------------------------------------------
+
 newLocalDeclaration :: Identifier -> Kind -> Type -> Maybe Expression -> BlockDeclarativeItem
 newLocalDeclaration ident kind typ exp = case kind of
-  Constant -> BDIConstantDecl $ ConstantDeclaration       [ident] typ         exp
-  Signal   -> BDISignalDecl   $ SignalDeclaration         [ident] typ Nothing exp
-  Variable -> BDISharedDecl   $ VariableDeclaration False [ident] typ         exp
-  File     -> BDIFileDecl     $ FileDeclaration           [ident] typ file
+  Constant -> BDIConstant $ ConstantDeclaration       [ident] typ         exp
+  Signal   -> BDISignal   $ SignalDeclaration         [ident] typ Nothing exp
+  Variable -> BDIShared   $ VariableDeclaration False [ident] typ         exp
+  File     -> BDIFile     $ FileDeclaration           [ident] typ file
     where file = case exp of
             Nothing -> Nothing
             Just e  -> Just $ FileOpenInformation Nothing e
@@ -176,39 +212,19 @@ addLocalDeclaration new blocks = insert new blocks
 
     mappy :: (IdentifierList -> IdentifierList) -> BlockDeclarativeItem -> BlockDeclarativeItem
     mappy f b = case b of
-      (BDIConstantDecl l) -> BDIConstantDecl $ l {const_identifier_list  = f (const_identifier_list l)}
-      (BDISignalDecl l)   -> BDISignalDecl   $ l {signal_identifier_list = f (signal_identifier_list l)}
-      (BDISharedDecl l)   -> BDISharedDecl   $ l {var_identifier_list    = f (var_identifier_list l)}
-      (BDIFileDecl l)     -> BDIFileDecl     $ l {fd_identifier_list     = f (fd_identifier_list l)}
+      (BDIConstant l) -> BDIConstant $ l {const_identifier_list  = f (const_identifier_list l)}
+      (BDISignal l)   -> BDISignal   $ l {signal_identifier_list = f (signal_identifier_list l)}
+      (BDIShared l)   -> BDIShared   $ l {var_identifier_list    = f (var_identifier_list l)}
+      (BDIFile l)     -> BDIFile     $ l {fd_identifier_list     = f (fd_identifier_list l)}
 
     getty :: BlockDeclarativeItem -> Identifier
     getty b = case b of
-      (BDIConstantDecl l) -> head $ const_identifier_list l
-      (BDISignalDecl l)   -> head $ signal_identifier_list l
-      (BDISharedDecl l)   -> head $ var_identifier_list l
-      (BDIFileDecl l)     -> head $ fd_identifier_list l
+      (BDIConstant l) -> head $ const_identifier_list l
+      (BDISignal l)   -> head $ signal_identifier_list l
+      (BDIShared l)   -> head $ var_identifier_list l
+      (BDIFile l)     -> head $ fd_identifier_list l
 
 --------------------------------------------------------------------------------
-
-addPort :: Identifier -> Kind -> Maybe Mode -> Type -> Maybe Expression -> VHDL Identifier
-addPort ident kind mode typ exp =
-  do state <- get
-     let port  = newDeclaration ident kind mode typ exp
-         ports = case entity_ports (architecture_header state) of
-           Nothing              -> PortClause (InterfaceList [port])
-           Just (PortClause is) -> PortClause (addDeclaration port is)
-     put    $ state { architecture_header = (architecture_header state) { entity_ports = Just ports } }
-     return $ ident
-
-addGeneric :: Identifier -> Kind -> Maybe Mode -> Type -> Maybe Expression -> VHDL Identifier
-addGeneric ident kind mode typ exp =
-  do state <- get
-     let gen  = newDeclaration ident kind mode typ exp
-         gens = case entity_generics (architecture_header state) of
-           Nothing                 -> GenericClause (InterfaceList [gen])
-           Just (GenericClause is) -> GenericClause (addDeclaration gen is)
-     put    $ state { architecture_header = (architecture_header state) { entity_generics = Just gens } }
-     return $ ident
 
 addLocal  ::  Identifier -> Kind -> Type -> Maybe Expression -> VHDL Identifier
 addLocal ident kind typ exp =
@@ -246,8 +262,99 @@ fileL i typ = addLocal   i File         typ Nothing
 addStatement  :: ConcurrentStatement -> VHDL ()
 addStatement s = modify $ \state -> state {architecture_statements = architecture_statements state |> s}
 
-addAssignment :: Identifier -> Expression -> VHDL ()
-addAssignment i e = addStatement $
+--------------------------------------------------------------------------------
+-- **
+
+enterProc  :: Label -> VHDL ()
+enterProc l =
+  do state <- get
+     let processes = architecture_processes state
+     put $ state { architecture_processes = processes { process_current = l }}
+
+modifyProc :: (ProcessStatement -> ProcessStatement) -> VHDL ()
+modifyProc f =
+  do state <- get 
+     let processes = architecture_processes state
+         current   = process_current processes
+         new       = Map.adjust f current $ process_all processes
+     put $ state { architecture_processes = processes { process_all = new } }
+
+insertProc :: Label -> ProcessStatement -> VHDL ()
+insertProc l ps =
+  do state <- get
+     let processes = architecture_processes state
+         new       = Map.insert l ps $ process_all processes
+     put $ state { architecture_processes = processes { process_all = new } }
+
+insertEmptyProc :: Label -> VHDL ()
+insertEmptyProc l = insertProc l $ ProcessStatement (Just l) False Nothing [] []
+
+--------------------------------------------------------------------------------
+-- *** ...
+
+newProcDeclaration :: Identifier -> Kind -> Type -> Maybe Expression -> ProcessDeclarativeItem
+newProcDeclaration ident kind typ exp = case kind of
+  Constant -> PDIConstant $ ConstantDeclaration       [ident] typ         exp
+  Variable -> PDIVariable $ VariableDeclaration False [ident] typ         exp
+  File     -> PDIFile     $ FileDeclaration           [ident] typ file
+    where file = case exp of
+            Nothing -> Nothing
+            Just e  -> Just $ FileOpenInformation Nothing e
+
+addProcDeclaration :: ProcessDeclarativeItem -> ProcessDeclarativePart -> ProcessDeclarativePart
+addProcDeclaration new blocks = insert new blocks
+  where
+    insert :: ProcessDeclarativeItem -> [ProcessDeclarativeItem] -> [ProcessDeclarativeItem]
+    insert new [] = [new]
+    insert new (b:bs)
+      | b ~=~ new = b `add` new : bs
+      | otherwise = b           : insert new bs
+
+    (~=~)  :: ProcessDeclarativeItem -> ProcessDeclarativeItem -> Bool
+    (~=~) l r = mappy (const []) l == mappy (const []) r
+
+    add    :: ProcessDeclarativeItem -> ProcessDeclarativeItem -> ProcessDeclarativeItem
+    add l r = mappy (getty r :) l
+
+    mappy :: (IdentifierList -> IdentifierList) -> ProcessDeclarativeItem -> ProcessDeclarativeItem
+    mappy f b = case b of
+      (PDIConstant l) -> PDIConstant $ l {const_identifier_list  = f (const_identifier_list l)}
+      (PDIVariable l) -> PDIVariable $ l {var_identifier_list    = f (var_identifier_list l)}
+      (PDIFile l)     -> PDIFile     $ l {fd_identifier_list     = f (fd_identifier_list l)}
+
+    getty :: ProcessDeclarativeItem -> Identifier
+    getty b = case b of
+      (PDIConstant l) -> head $ const_identifier_list l
+      (PDIVariable l) -> head $ var_identifier_list l
+      (PDIFile l)     -> head $ fd_identifier_list l
+
+--------------------------------------------------------------------------------
+
+
+addProcessLocal :: Identifier -> Kind -> Type -> Maybe Expression -> VHDL Identifier
+addProcessLocal ident kind typ exp =
+  do state <- gets architecture_processes
+     let local  = newProcDeclaration ident kind typ exp
+         locals = addProcDeclaration local
+     modifyProc $ \s -> s { procs_declarative_part = locals (procs_declarative_part s) }
+     return ident
+
+--------------------------------------------------------------------------------
+
+constantP :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
+constantP i typ exp = addProcessLocal i Constant typ exp
+
+variableP :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
+variableP i mod typ exp = addProcessLocal i Variable typ exp
+
+fileP :: Identifier -> Type -> VHDL Identifier
+fileP i typ = addProcessLocal i File typ Nothing
+
+--------------------------------------------------------------------------------
+-- *** ...
+
+addSignalAssignment :: Identifier -> Expression -> VHDL ()
+addSignalAssignment i e = addStatement $
   ConSignalAss
     (CSASCond
       (Nothing)
@@ -259,6 +366,7 @@ addAssignment i e = addStatement $
           ([])
           ( (WaveElem [WaveEExp e Nothing])
           , (Nothing)))))
+
 
 --------------------------------------------------------------------------------
 
@@ -388,68 +496,23 @@ usigned64 = usigned 64
 -- .. add more ..
 
 --------------------------------------------------------------------------------
--- Hmm..
---------------------------------------------------------------------------------
-
-instance Eq BlockDeclarativeItem
-  where
-    (==) (BDIConstantDecl l) (BDIConstantDecl r) = l == r
-    (==) (BDISignalDecl l)   (BDISignalDecl r)   = l == r
-    (==) (BDISharedDecl l)   (BDISharedDecl r)   = l == r
-    (==) (BDIFileDecl l)     (BDIFileDecl r)     = l == r
-    (==) _                   _                   = False 
-
-deriving instance Eq InterfaceDeclaration
-
-deriving instance Eq ConstantDeclaration
-
-deriving instance Eq SignalDeclaration
-
-deriving instance Eq VariableDeclaration
-
-deriving instance Eq FileDeclaration
-
-deriving instance Eq Mode
-
-deriving instance Eq SignalKind
-
-deriving instance Eq FileOpenInformation
-  
-deriving instance Eq SubtypeIndication
-
-deriving instance Eq TypeMark
- 
-deriving instance Eq Identifier
-
-instance Eq Expression -- todo
-  where
-    _ == _ = True
-  
-instance Eq Constraint  -- todo
-  where
-    _ == _ = False
-
-instance Eq Name -- todo
-  where
-    NSimple n1 == NSimple n2 = n1 == n2
-    _          == _          = False 
-
+-- Ord instance for use in sequence
 --------------------------------------------------------------------------------
 
 instance Ord BlockDeclarativeItem
   where
-    compare (BDIConstantDecl l) (BDIConstantDecl r) = compare l r
-    compare (BDISignalDecl l)   (BDISignalDecl r)   = compare l r
-    compare (BDISharedDecl l)   (BDISharedDecl r)   = compare l r
-    compare (BDIFileDecl l)     (BDIFileDecl r)     = compare l r
-    compare l                   r                   = compare (ordBlock l) (ordBlock r)
-
-ordBlock :: BlockDeclarativeItem -> Int
-ordBlock block = case block of
-  (BDIConstantDecl r) -> 1
-  (BDISignalDecl r)   -> 2
-  (BDISharedDecl r)   -> 3
-  (BDIFileDecl r)     -> 4
+    compare (BDIConstant l) (BDIConstant r) = compare l r
+    compare (BDISignal l)   (BDISignal r)   = compare l r
+    compare (BDIShared l)   (BDIShared r)   = compare l r
+    compare (BDIFile l)     (BDIFile r)     = compare l r
+    compare l               r               = compare (ordBlock l) (ordBlock r)
+      where
+        ordBlock :: BlockDeclarativeItem -> Int
+        ordBlock block = case block of
+          (BDIConstant r) -> 1
+          (BDISignal r)   -> 2
+          (BDIShared r)   -> 3
+          (BDIFile r)     -> 4
 
 instance Ord ConstantDeclaration
   where

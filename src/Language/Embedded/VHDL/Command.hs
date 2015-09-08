@@ -10,7 +10,7 @@ module Language.Embedded.VHDL.Command where
 
 import Control.Monad.Operational.Compositional
 
-import Language.VHDL (Identifier, Expression)
+import Language.VHDL (Identifier, Label, Expression)
 import Language.VHDL as V
 
 import Language.Embedded.VHDL.Monad (VHDL, Kind, Type)
@@ -39,22 +39,48 @@ compile prog = let (decl, body) = M.runVHDL (M.behavioural "test") (interpret pr
 --------------------------------------------------------------------------------
 -- **
 
+data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    Process :: Label -> prog () -> SequentialCMD exp prog ()
+
+instance MapInstr (SequentialCMD exp)
+  where
+    imap f (Process l prog) = Process l (f prog)
+
+type instance IExp (SequentialCMD e)       = e
+type instance IExp (SequentialCMD e :+: i) = e
+
+--------------------------------------------------------------------------------
+
+
+
+--------------------------------------------------------------------------------
+
+compileSequential :: CompileExp exp => SequentialCMD exp prog a -> VHDL a
+compileSequential (Process l prg) =
+  do undefined
+
+--------------------------------------------------------------------------------
+-- **
+
 data ConcurrentCMD exp (prog :: * -> *) a
   where
-    Assign :: Identifier
-           -> exp a
-           -> ConcurrentCMD exp prog ()
+    Assign
+      :: Identifier
+      -> exp a
+      -> ConcurrentCMD exp prog ()
            
-    Local  :: Typeable a
-           => Identifier
-           -> Kind
-           -> Maybe (exp a)
-           -> ConcurrentCMD exp prog ()
+    Local
+      :: Typeable a
+      => Identifier
+      -> Kind
+      -> Maybe (exp a)
+      -> ConcurrentCMD exp prog ()
 
 instance MapInstr (ConcurrentCMD exp)
   where
-    imap _ (Assign r a)   = Assign r a
-    imap _ (Local  i k e) = Local  i k e
+    imap _ (Assign r a)   = Assign  r a
+    imap _ (Local  i k e) = Local   i k e
 
 type instance IExp (ConcurrentCMD e)       = e
 type instance IExp (ConcurrentCMD e :+: i) = e
@@ -79,7 +105,7 @@ fileL     i = singleE . Local i M.File
 compileConcurrent :: CompileExp exp => ConcurrentCMD exp prog a -> VHDL a
 compileConcurrent (Assign i exp) =
   do v <- compE exp
-     M.addAssignment i v
+     M.addSignalAssignment i v
 compileConcurrent (Local i k e) =
   do v <- compEM e
      t <- compTM e
