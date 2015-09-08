@@ -119,17 +119,17 @@ compileSequential (AssignVariable i e) =
 
 data ConcurrentCMD exp (prog :: * -> *) a
   where
-    Process
-      :: Label
-      -> [Identifier]
-      -> prog ()
-      -> ConcurrentCMD exp prog ()
-
     LocalC           -- I should merge these into a 'Seq + Conc'-CMD type
       :: Typeable a  -- These do however also take a 'Mode' param...
       => Identifier
       -> Kind
       -> Maybe (exp a)
+      -> ConcurrentCMD exp prog ()
+
+    Process
+      :: Label
+      -> [Identifier]
+      -> prog ()
       -> ConcurrentCMD exp prog ()
 
 instance MapInstr (ConcurrentCMD exp)
@@ -152,14 +152,17 @@ signalCL   i = singleE . LocalC i M.Signal
 variableCL i = singleE . LocalC i M.Variable
 fileCL     i = singleE . LocalC i M.File
 
+process
+  :: (ConcurrentCMD (IExp instr) :<: instr)
+  => Label
+  -> [Identifier]
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+process i is = singleE . Process i is
+
 --------------------------------------------------------------------------------
 
 compileConcurrent :: CompileExp exp => ConcurrentCMD exp VHDL a -> VHDL a
-compileConcurrent (Process l is p) =
-  do M.newProcess   l is
-     M.enterProcess l
-     p
-     M.enterGlobal
 compileConcurrent (LocalC i k e) =
   do v <- compEM e
      t <- compTM e
@@ -168,6 +171,11 @@ compileConcurrent (LocalC i k e) =
        M.Signal   -> M.signalL   i  t v
        M.Variable -> M.variableL i  t v
        M.File     -> M.fileL     i  t Nothing
+compileConcurrent (Process l is p) =
+  do M.newProcess   l is
+     M.enterProcess l
+     p
+     M.enterGlobal
 
 --------------------------------------------------------------------------------
 -- **
