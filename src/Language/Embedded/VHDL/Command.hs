@@ -57,13 +57,35 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> Kind
       -> Maybe (exp a)
       -> SequentialCMD exp prog ()
+
+    AssignSignal
+      :: Typeable a
+      => Identifier
+      -> exp a
+      -> SequentialCMD exp prog ()
+
+    AssignVariable
+      :: Typeable a
+      => Identifier
+      -> exp a
+      -> SequentialCMD exp prog ()
     
 instance MapInstr (SequentialCMD exp)
   where
-    imap _ (LocalS i k e) = LocalS i k e
+    imap _ (LocalS i k e)       = LocalS i k e
+    imap _ (AssignSignal i e)   = AssignSignal i e
+    imap _ (AssignVariable i e) = AssignVariable i e
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
+
+--------------------------------------------------------------------------------
+
+(<==) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
+(<==) i = singleE . AssignSignal i
+
+(==:) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
+(==:) i = singleE . AssignVariable i
 
 --------------------------------------------------------------------------------
 
@@ -76,6 +98,12 @@ compileSequential (LocalS i k e) =
        M.Signal   -> M.signalL   i t v
        M.Variable -> M.variableL i t v
        M.File     -> M.fileL     i t Nothing
+compileSequential (AssignSignal i e) =
+  do v <- compE e
+     M.seqSignalAssignment i v
+compileSequential (AssignVariable i e) =
+  do v <- compE e
+     M.seqVariableAssignment i v
 
 --------------------------------------------------------------------------------
 -- **
