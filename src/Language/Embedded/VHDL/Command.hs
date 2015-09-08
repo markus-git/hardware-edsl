@@ -37,41 +37,59 @@ compile prog = let (decl, body) = M.runVHDL (M.behavioural "test") (interpret pr
      show (pp decl) ++ "\n\n" ++ show (pp body)
 
 --------------------------------------------------------------------------------
+
+-- | Compile if 'exp' is set
+compEM :: CompileExp exp => Maybe (exp a) -> VHDL (Maybe Expression)
+compEM = maybe (return Nothing) (>>= return . Just) . fmap compE
+
+-- | Compile hidden type
+compTM :: forall exp a. (CompileExp exp, Typeable a) => Maybe (exp a) -> VHDL Type
+compTM _ = compT (undefined :: exp a)
+
+--------------------------------------------------------------------------------
 -- **
 
 data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
   where
-    Process :: Label -> prog () -> SequentialCMD exp prog ()
-
+    LocalS
+      :: Typeable a
+      => Identifier
+      -> Kind
+      -> Maybe (exp a)
+      -> SequentialCMD exp prog ()
+    
 instance MapInstr (SequentialCMD exp)
   where
-    imap f (Process l prog) = Process l (f prog)
+    imap _ (LocalS i k e) = LocalS i k e
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
-
-
---------------------------------------------------------------------------------
-
 compileSequential :: CompileExp exp => SequentialCMD exp prog a -> VHDL a
-compileSequential (Process l prg) =
-  do undefined
+compileSequential (LocalS i k e) =
+  do v <- compEM e
+     t <- compTM e
+     void $ case k of
+       M.Constant -> M.constantL i t v
+       M.Signal   -> M.signalL   i t v
+       M.Variable -> M.variableL i t v
+       M.File     -> M.fileL     i t Nothing
 
 --------------------------------------------------------------------------------
 -- **
 
 data ConcurrentCMD exp (prog :: * -> *) a
   where
-    Assign
-      :: Identifier
-      -> exp a
+    Process
+      :: Label
+      -> [Identifier]
+      -> prog ()
       -> ConcurrentCMD exp prog ()
-           
-    Local
-      :: Typeable a
+
+    LocalC           -- I should merge these into a 'Seq + Conc'-CMD type
+      :: Typeable a  -- These do however also take a 'Mode' param...
       => Identifier
       -> Kind
       -> Maybe (exp a)
@@ -79,47 +97,40 @@ data ConcurrentCMD exp (prog :: * -> *) a
 
 instance MapInstr (ConcurrentCMD exp)
   where
-    imap _ (Assign r a)   = Assign  r a
-    imap _ (Local  i k e) = Local   i k e
+    imap f (Process l is p) = Process l is $ f p
+    imap _ (LocalC  i k e)  = LocalC  i k e
 
 type instance IExp (ConcurrentCMD e)       = e
 type instance IExp (ConcurrentCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
-(<==) :: (ConcurrentCMD (IExp instr) :<: instr) => Identifier -> IExp instr a -> ProgramT instr m ()
-(<==) i = singleE . Assign i
-
-constantL, signalL, variableL, fileL
+constantCL, signalCL, variableCL, fileCL
   :: (ConcurrentCMD (IExp instr) :<: instr, Typeable a)
   => Identifier
   -> Maybe (IExp instr a)
   -> ProgramT instr m ()
-constantL i = singleE . Local i M.Constant
-signalL   i = singleE . Local i M.Signal
-variableL i = singleE . Local i M.Variable
-fileL     i = singleE . Local i M.File
+constantCL i = singleE . LocalC i M.Constant
+signalCL   i = singleE . LocalC i M.Signal
+variableCL i = singleE . LocalC i M.Variable
+fileCL     i = singleE . LocalC i M.File
 
 --------------------------------------------------------------------------------
 
-compileConcurrent :: CompileExp exp => ConcurrentCMD exp prog a -> VHDL a
-compileConcurrent (Assign i exp) =
-  do v <- compE exp
-     M.addSignalAssignment i v
-compileConcurrent (Local i k e) =
+compileConcurrent :: CompileExp exp => ConcurrentCMD exp VHDL a -> VHDL a
+compileConcurrent (Process l is p) =
+  do M.newProcess   l is
+     M.enterProcess l
+     p
+     M.enterGlobal
+compileConcurrent (LocalC i k e) =
   do v <- compEM e
      t <- compTM e
      void $ case k of
-       M.Constant -> M.constantL i         t v
-       M.Signal   -> M.signalL   i V.InOut t v
-       M.Variable -> M.variableL i V.InOut t v
-       M.File     -> M.fileL     i         t
-
-compEM :: CompileExp exp => Maybe (exp a) -> VHDL (Maybe Expression)
-compEM = maybe (return Nothing) (>>= return . Just) . fmap compE
-
-compTM :: forall exp a. (CompileExp exp, Typeable a) => Maybe (exp a) -> VHDL Type
-compTM _ = compT (undefined :: exp a)
+       M.Constant -> M.constantL i  t v
+       M.Signal   -> M.signalL   i  t v
+       M.Variable -> M.variableL i  t v
+       M.File     -> M.fileL     i  t Nothing
 
 --------------------------------------------------------------------------------
 -- **
