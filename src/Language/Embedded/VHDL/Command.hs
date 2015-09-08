@@ -81,6 +81,15 @@ type instance IExp (SequentialCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
+constantL, variableL, fileL
+  :: (SequentialCMD (IExp instr) :<: instr, Typeable a)
+  => Identifier
+  -> Maybe (IExp instr a)
+  -> ProgramT instr m ()
+constantL i = singleE . LocalS i M.Constant
+variableL i = singleE . LocalS i M.Variable
+fileL     i = singleE . LocalS i M.File
+
 (<==) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
 (<==) i = singleE . AssignSignal i
 
