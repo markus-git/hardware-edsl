@@ -124,8 +124,8 @@ addSequentialStatement :: SequentialStatement -> VHDL ()
 addSequentialStatement s =
   do current <- gets architecture_process
      case current of
-       Global    -> error "can't add sequential statements to main architecture body" -- Hmmm...
        Labeled l -> modify $ \state -> state {architecture_processes = update l (architecture_processes state)}
+       Global    -> error  $ "can't add sequential statements to main architecture body"
   where
     update :: Label -> [ProcessState] -> [ProcessState]
     update l [] = []
