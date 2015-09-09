@@ -24,6 +24,10 @@ import Data.Typeable
 -- *
 --------------------------------------------------------------------------------
 
+instance CompileExp exp => Interp (SequentialCMD exp) VHDL
+  where
+    interp = compileSequential
+
 instance CompileExp exp => Interp (ConcurrentCMD exp) VHDL
   where
     interp = compileConcurrent
