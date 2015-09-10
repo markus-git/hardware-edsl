@@ -198,6 +198,9 @@ type instance IExp (HeaderCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
+clock :: forall instr m. (HeaderCMD (IExp instr) :<: instr) => ProgramT instr m Identifier
+clock = signal (Ident "clk") In (Nothing :: Maybe ((IExp instr) Bool))
+
 constant, signal, variable, file
   :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
   => Identifier

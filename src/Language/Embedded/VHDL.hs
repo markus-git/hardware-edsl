@@ -9,7 +9,7 @@ module Language.Embedded.VHDL
   , module Language.Embedded.VHDL.Command
   ) where
 
-import Language.VHDL (Mode(..))
+import Language.VHDL (Mode(..), Identifier(..))
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Expression
 import Language.Embedded.VHDL.Command
