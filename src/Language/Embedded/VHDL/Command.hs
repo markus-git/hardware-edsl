@@ -13,7 +13,7 @@ import Control.Monad.Operational.Compositional
 import Language.VHDL (Identifier, Label, Expression)
 import Language.VHDL as V
 
-import Language.Embedded.VHDL.Monad (VHDL, Kind, Type)
+import Language.Embedded.VHDL.Monad (VHDL, Kind(..), Type)
 import Language.Embedded.VHDL.Interface
 import qualified Language.Embedded.VHDL.Monad as M
 
@@ -55,30 +55,24 @@ compTM _ = compT (undefined :: exp a)
 
 data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
   where
-    LocalS
+    Local
       :: Typeable a
       => Identifier
       -> Kind
       -> Maybe (exp a)
       -> SequentialCMD exp prog ()
 
-    AssignSignal
+    SAssignment
       :: Typeable a
       => Identifier
-      -> exp a
-      -> SequentialCMD exp prog ()
-
-    AssignVariable
-      :: Typeable a
-      => Identifier
+      -> Kind
       -> exp a
       -> SequentialCMD exp prog ()
     
 instance MapInstr (SequentialCMD exp)
   where
-    imap _ (LocalS i k e)       = LocalS i k e
-    imap _ (AssignSignal i e)   = AssignSignal i e
-    imap _ (AssignVariable i e) = AssignVariable i e
+    imap _ (Local i k e)       = Local i k e
+    imap _ (SAssignment i k e) = SAssignment i k e
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
@@ -90,20 +84,20 @@ constantL, variableL, fileL
   => Identifier
   -> Maybe (IExp instr a)
   -> ProgramT instr m ()
-constantL i = singleE . LocalS i M.Constant
-variableL i = singleE . LocalS i M.Variable
-fileL     i = singleE . LocalS i M.File
+constantL i = singleE . Local i M.Constant
+variableL i = singleE . Local i M.Variable
+fileL     i = singleE . Local i M.File
 
 (<==) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
-(<==) i = singleE . AssignSignal i
+(<==) i = singleE . SAssignment i Signal
 
 (==:) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
-(==:) i = singleE . AssignVariable i
+(==:) i = singleE . SAssignment i Variable
 
 --------------------------------------------------------------------------------
 
 compileSequential :: CompileExp exp => SequentialCMD exp prog a -> VHDL a
-compileSequential (LocalS i k e) =
+compileSequential (Local i k e) =
   do v <- compEM e
      t <- compTM e
      void $ case k of
@@ -111,19 +105,18 @@ compileSequential (LocalS i k e) =
        M.Signal   -> M.signalL   i t v
        M.Variable -> M.variableL i t v
        M.File     -> M.fileL     i t Nothing
-compileSequential (AssignSignal i e) =
+compileSequential (SAssignment i k e) =
   do v <- compE e
-     M.seqSignalAssignment i v
-compileSequential (AssignVariable i e) =
-  do v <- compE e
-     M.seqVariableAssignment i v
+     case k of
+       Signal -> M.seqSignalAssignment   i v
+       _      -> M.seqVariableAssignment i v
 
 --------------------------------------------------------------------------------
 -- **
 
 data ConcurrentCMD exp (prog :: * -> *) a
   where
-    LocalC           -- I should merge these into a 'Seq + Conc'-CMD type
+    Global           -- I should merge these into a 'Seq + Conc'-CMD type
       :: Typeable a  -- These do however also take a 'Mode' param...
       => Identifier
       -> Kind
@@ -138,8 +131,8 @@ data ConcurrentCMD exp (prog :: * -> *) a
 
 instance MapInstr (ConcurrentCMD exp)
   where
+    imap _ (Global  i k e)  = Global  i k e
     imap f (Process l is p) = Process l is $ f p
-    imap _ (LocalC  i k e)  = LocalC  i k e
 
 type instance IExp (ConcurrentCMD e)       = e
 type instance IExp (ConcurrentCMD e :+: i) = e
@@ -151,10 +144,10 @@ constantG, signalG, variableG, fileG
   => Identifier
   -> Maybe (IExp instr a)
   -> ProgramT instr m ()
-constantG i = singleE . LocalC i M.Constant
-signalG   i = singleE . LocalC i M.Signal
-variableG i = singleE . LocalC i M.Variable
-fileG     i = singleE . LocalC i M.File
+constantG i = singleE . Global i M.Constant
+signalG   i = singleE . Global i M.Signal
+variableG i = singleE . Global i M.Variable
+fileG     i = singleE . Global i M.File
 
 process
   :: (ConcurrentCMD (IExp instr) :<: instr)
@@ -167,14 +160,14 @@ process i is = singleE . Process i is
 --------------------------------------------------------------------------------
 
 compileConcurrent :: CompileExp exp => ConcurrentCMD exp VHDL a -> VHDL a
-compileConcurrent (LocalC i k e) =
+compileConcurrent (Global i k e) =
   do v <- compEM e
      t <- compTM e
      void $ case k of
-       M.Constant -> M.constantL i  t v
-       M.Signal   -> M.signalL   i  t v
-       M.Variable -> M.variableL i  t v
-       M.File     -> M.fileL     i  t Nothing
+       M.Constant -> M.constantG i  t v
+       M.Signal   -> M.signalG   i  t v
+       M.Variable -> M.variableG i  t v
+       M.File     -> M.fileG     i  t Nothing
 compileConcurrent (Process l is p) =
   do M.newProcess   l is
      M.enterProcess l

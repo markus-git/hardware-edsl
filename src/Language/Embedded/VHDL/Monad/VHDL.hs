@@ -129,7 +129,7 @@ toPDP = map toP
   where
     toP :: DeclarativeItem -> ProcessDeclarativeItem
     toP (C c) = PDIConstant c
-    toP (S s) = error "no signals for you!"
+    toP (S s) = error (show s)
     toP (V v) = PDIVariable v
     toP (F f) = PDIFile f
 
