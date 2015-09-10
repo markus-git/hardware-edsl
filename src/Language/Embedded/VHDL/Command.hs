@@ -146,15 +146,15 @@ type instance IExp (ConcurrentCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
-constantCL, signalCL, variableCL, fileCL
+constantG, signalG, variableG, fileG
   :: (ConcurrentCMD (IExp instr) :<: instr, Typeable a)
   => Identifier
   -> Maybe (IExp instr a)
   -> ProgramT instr m ()
-constantCL i = singleE . LocalC i M.Constant
-signalCL   i = singleE . LocalC i M.Signal
-variableCL i = singleE . LocalC i M.Variable
-fileCL     i = singleE . LocalC i M.File
+constantG i = singleE . LocalC i M.Constant
+signalG   i = singleE . LocalC i M.Signal
+variableG i = singleE . LocalC i M.Variable
+fileG     i = singleE . LocalC i M.File
 
 process
   :: (ConcurrentCMD (IExp instr) :<: instr)
@@ -216,16 +216,16 @@ signal   i m = singleE . Decl Port i M.Signal   m
 variable i m = singleE . Decl Port i M.Variable m
 file     i m = singleE . Decl Port i M.File     m
 
-constantG, signalG, variableG, fileG
+constantGeneric, signalGeneric, variableGeneric, fileGeneric
   :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
   => Identifier
   -> Mode
   -> Maybe (IExp instr a)
   -> ProgramT instr m Identifier
-constantG i m = singleE . Decl Generic i M.Constant m
-signalG   i m = singleE . Decl Generic i M.Signal   m
-variableG i m = singleE . Decl Generic i M.Variable m
-fileG     i m = singleE . Decl Generic i M.File     m
+constantGeneric i m = singleE . Decl Generic i M.Constant m
+signalGeneric   i m = singleE . Decl Generic i M.Signal   m
+variableGeneric i m = singleE . Decl Generic i M.Variable m
+fileGeneric     i m = singleE . Decl Generic i M.File     m
 
 --------------------------------------------------------------------------------
 
@@ -242,9 +242,9 @@ compileHeader (Decl Generic i k m e) =
   do v <- compEM e
      t <- compTM e
      case k of
-       M.Constant -> M.constantG i   t v
-       M.Signal   -> M.signalG   i m t v
-       M.Variable -> M.variableG i m t v
-       M.File     -> M.fileG     i   t
+       M.Constant -> M.constantGeneric i   t v
+       M.Signal   -> M.signalGeneric   i m t v
+       M.Variable -> M.variableGeneric i m t v
+       M.File     -> M.fileGeneric     i   t
 
 --------------------------------------------------------------------------------

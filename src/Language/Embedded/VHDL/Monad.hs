@@ -14,11 +14,11 @@ module Language.Embedded.VHDL.Monad (
   , structural
 
     -- ^ assignment
-    -- port  / generic  / local
-  , constant, constantG, constantL
-  , signal,   signalG,   signalL
-  , variable, variableG, variableL
-  , file,     fileG,     fileL
+    -- port  / generic  / global / local
+  , constant, constantGeneric, constantG, constantL
+  , signal,   signalGeneric,   signalG,   signalL
+  , variable, variableGeneric, variableG, variableL
+  , file,     fileGeneric,     fileG,     fileL
 
     -- ^ ..
   , conSignalAssignment

@@ -87,15 +87,36 @@ newProcess l s = modify $ \s -> s { architecture_processes = new : architecture_
     new :: ProcessState
     new = Process l False (SensitivityList $ map NSimple s) [] Seq.empty
 
+--------------------------------------------------------------------------------
+-- **
+
+addGlobal :: DeclarativeItem -> VHDL ()
+addGlobal = mergeArchitecture
+
+constantG :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
+constantG i t e = addGlobal (iConstant [i] t e) >> return i
+
+signalG   :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
+signalG   i t e = addGlobal (iSignal [i] t Nothing e) >> return i
+
+variableG :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
+variableG i t e = addGlobal (iVariable False [i] t e) >> return i
+
+fileG     :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
+fileG     i t e = addGlobal (iFile [i] t file) >> return i
+  where file = case e of
+          Nothing  -> Nothing
+          Just exp -> Just (fileInfo Nothing exp)
+
+--------------------------------------------------------------------------------
+-- **
+
 addLocal :: DeclarativeItem -> VHDL ()
 addLocal item =
   do state <- get
      case architecture_process state of
        Global    -> mergeArchitecture item
        Labeled l -> mergeProcess      item l
-
---------------------------------------------------------------------------------
--- **
 
 constantL :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
 constantL i t e = addLocal (iConstant [i] t e) >> return i

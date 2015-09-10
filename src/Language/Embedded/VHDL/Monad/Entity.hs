@@ -2,10 +2,10 @@ module Language.Embedded.VHDL.Monad.Entity
   ( addPort
   , addGeneric
 
-  , constant, constantG -- :: Identifier         -> Type -> Maybe Expression -> VHDL Identifier
-  , signal,   signalG   -- :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
-  , variable, variableG -- :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
-  , file,     fileG     -- :: Identifier         -> Type                     -> VHDL Identifier
+  , constant, constantGeneric -- :: Identifier         -> Type -> Maybe Expression -> VHDL Identifier
+  , signal,   signalGeneric   -- :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
+  , variable, variableGeneric -- :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
+  , file,     fileGeneric     -- :: Identifier         -> Type                     -> VHDL Identifier
   ) where
 
 import Language.VHDL
@@ -75,20 +75,20 @@ addGeneric ident kind mode typ exp =
 --------------------------------------------------------------------------------
 -- ** Common declarations
 
-constant, constantG :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
-constant  i typ exp = addPort    i Constant Nothing typ exp
-constantG i typ exp = addGeneric i Constant Nothing typ exp
+constant, constantGeneric :: Identifier -> Type -> Maybe Expression -> VHDL Identifier
+constant        i = addPort    i Constant Nothing 
+constantGeneric i = addGeneric i Constant Nothing 
 
-signal, signalG :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
-signal  i mod typ exp = addPort    i Signal (Just mod) typ exp
-signalG i mod typ exp = addGeneric i Signal (Just mod) typ exp
+signal, signalGeneric :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
+signal          i mod = addPort    i Signal (Just mod) 
+signalGeneric   i mod = addGeneric i Signal (Just mod) 
 
-variable, variableG :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
-variable  i mod typ exp = addPort    i Variable (Just mod) typ exp
-variableG i mod typ exp = addGeneric i Variable (Just mod) typ exp
+variable, variableGeneric :: Identifier -> Mode -> Type -> Maybe Expression -> VHDL Identifier
+variable        i mod = addPort    i Variable (Just mod) 
+variableGeneric i mod = addGeneric i Variable (Just mod) 
 
-file, fileG :: Identifier -> Type -> VHDL Identifier
-file  i typ = addPort    i File Nothing typ Nothing
-fileG i typ = addGeneric i File Nothing typ Nothing
+file, fileGeneric :: Identifier -> Type -> VHDL Identifier
+file            i typ = addPort    i File Nothing typ Nothing
+fileGeneric     i typ = addGeneric i File Nothing typ Nothing
 
 --------------------------------------------------------------------------------
