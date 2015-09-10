@@ -1,5 +1,5 @@
 module Language.Embedded.VHDL
-  ( Mode(..)
+  ( Mode(..), Type(..), Kind(..)
   , std_logic
   , signed,  signed8,  signed16,  signed32,  signed64
   , usigned, usigned8, usigned16, usigned32, usigned64
