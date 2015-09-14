@@ -3,20 +3,21 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
 module Language.Embedded.VHDL.Command where
 
-import Control.Monad.Operational.Compositional
+import Language.VHDL (Identifier(..), Label, Expression, Mode(..))
+import qualified Language.VHDL as V
 
-import Language.VHDL (Identifier, Label, Expression)
-import Language.VHDL as V
-
-import Language.Embedded.VHDL.Monad (VHDL, Kind(..), Type)
+import Language.Embedded.VHDL.Monad (VHDLT, VHDL, Type, Kind(..))
 import Language.Embedded.VHDL.Interface
 import qualified Language.Embedded.VHDL.Monad as M
 
+import Control.Monad.Identity
+import Control.Monad.Operational.Compositional
 import Control.Applicative
 import Data.Typeable
 
@@ -37,8 +38,7 @@ instance CompileExp exp => Interp (HeaderCMD exp) VHDL
     interp = compileHeader
 
 compile :: (Interp instr VHDL, MapInstr instr) => Program instr a -> String
-compile prog = let (decl, body) = M.runVHDL (M.behavioural "test") (interpret prog) in
-     show (pp decl) ++ "\n\n" ++ show (pp body)
+compile = show . M.prettyVHDL . interpret
 
 --------------------------------------------------------------------------------
 
@@ -100,16 +100,15 @@ compileSequential :: CompileExp exp => SequentialCMD exp prog a -> VHDL a
 compileSequential (Local i k e) =
   do v <- compEM e
      t <- compTM e
-     void $ case k of
-       M.Constant -> M.constantL i t v
-       M.Signal   -> M.signalL   i t v
-       M.Variable -> M.variableL i t v
-       M.File     -> M.fileL     i t Nothing
+     M.addLocal $ case k of
+       M.Constant -> M.declConstant i t v
+       M.Signal   -> M.declSignal   i t v
+       M.Variable -> M.declVariable i t v
 compileSequential (SAssignment i k e) =
   do v <- compE e
-     case k of
-       Signal -> M.seqSignalAssignment   i v
-       _      -> M.seqVariableAssignment i v
+     M.addSequential $ case k of
+       Signal -> M.assignSignal   i v
+       _      -> M.assignVariable i v
 
 --------------------------------------------------------------------------------
 -- **
@@ -163,16 +162,14 @@ compileConcurrent :: CompileExp exp => ConcurrentCMD exp VHDL a -> VHDL a
 compileConcurrent (Global i k e) =
   do v <- compEM e
      t <- compTM e
-     void $ case k of
-       M.Constant -> M.constantG i  t v
-       M.Signal   -> M.signalG   i  t v
-       M.Variable -> M.variableG i  t v
-       M.File     -> M.fileG     i  t Nothing
+     M.addGlobal $ case k of
+       M.Constant -> M.declConstant i t v
+       M.Signal   -> M.declSignal   i t v 
+       M.Variable -> M.declVariable i t v
 compileConcurrent (Process l is p) =
-  do M.newProcess   l is
-     M.enterProcess l
-     p
-     M.enterGlobal
+  do (a, process) <- M.inProcess l is p
+     M.addConcurrent (V.ConProcess process)
+     return a
 
 --------------------------------------------------------------------------------
 -- **
@@ -229,18 +226,18 @@ compileHeader :: CompileExp exp => HeaderCMD exp prog a -> VHDL a
 compileHeader (Decl Port i k m e) =
   do v <- compEM e
      t <- compTM e
-     case k of
-       M.Constant -> M.constant i   t v
-       M.Signal   -> M.signal   i m t v
-       M.Variable -> M.variable i m t v
-       M.File     -> M.file     i   t
+     M.addPort $ case k of
+       M.Constant -> M.interfaceConstant i   t v
+       M.Signal   -> M.interfaceSignal   i m t v
+       M.Variable -> M.interfaceVariable i m t v
+     return i
 compileHeader (Decl Generic i k m e) =
   do v <- compEM e
      t <- compTM e
-     case k of
-       M.Constant -> M.constantGeneric i   t v
-       M.Signal   -> M.signalGeneric   i m t v
-       M.Variable -> M.variableGeneric i m t v
-       M.File     -> M.fileGeneric     i   t
+     M.addGeneric $ case k of
+       M.Constant -> M.interfaceConstant i   t v
+       M.Signal   -> M.interfaceSignal   i m t v
+       M.Variable -> M.interfaceVariable i m t v
+     return i
 
 --------------------------------------------------------------------------------

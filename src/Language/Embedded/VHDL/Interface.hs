@@ -37,7 +37,4 @@ class CompileExp exp
     -- | 
     compT :: Typeable a => exp a -> VHDL Type
 
-newVar :: Integer -> Identifier
-newVar = Ident . ('v' :) . show
-
 --------------------------------------------------------------------------------

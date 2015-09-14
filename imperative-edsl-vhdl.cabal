@@ -18,11 +18,8 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Language.Embedded.VHDL,
                        Language.Embedded.VHDL.Monad,
-                       Language.Embedded.VHDL.Monad.VHDL,
                        Language.Embedded.VHDL.Monad.Type,
                        Language.Embedded.VHDL.Monad.Expression,
-                       Language.Embedded.VHDL.Monad.Entity,
-                       Language.Embedded.VHDL.Monad.Architecture,
                        Language.Embedded.VHDL.Interface,
                        Language.Embedded.VHDL.Expression,
                        Language.Embedded.VHDL.Expression.Hoist,
@@ -46,6 +43,7 @@ library
                        constraints,
                        containers      >=0.1 && <1,
                        imperative-edsl >=0.3,
-                       language-vhdl   >=0.1.0.4
+                       language-vhdl   >=0.1.0.4,
+                       pretty          >=1.0
   hs-source-dirs:      .,src
   default-language:    Haskell2010
