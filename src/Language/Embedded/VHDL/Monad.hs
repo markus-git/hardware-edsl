@@ -253,7 +253,7 @@ inConditional (c, m) os e =
 addArchitecture :: MonadV m => V.ArchitectureBody -> m ()
 addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures s)}
 
-inArchitecture :: MonadV m => String -> m a -> m ()
+inArchitecture :: MonadV m => String -> m a -> m a
 inArchitecture name m =
   do oldEntity     <- CMS.gets _entity
      oldGlobal     <- CMS.gets _global
@@ -263,7 +263,7 @@ inArchitecture name m =
                           , _local      = []
                           , _concurrent = []
                           }
-     m
+     a <- m
      newGlobal     <- reverse <$> CMS.gets _global
      newLocal      <- reverse <$> CMS.gets _local
      newConcurrent <- reverse <$> CMS.gets _concurrent
@@ -276,6 +276,7 @@ inArchitecture name m =
                           , _local      = oldLocal
                           , _concurrent = oldConcurrent
                           }
+     return a
 
 --------------------------------------------------------------------------------
 -- * Pretty

@@ -189,8 +189,8 @@ data HeaderCMD exp (prog :: * -> *) a
 
     Architecture
       :: String
-      -> prog ()
-      -> HeaderCMD exp prog ()
+      -> prog a
+      -> HeaderCMD exp prog a
 
 instance MapInstr (HeaderCMD exp)
   where
