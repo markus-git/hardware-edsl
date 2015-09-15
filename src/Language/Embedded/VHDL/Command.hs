@@ -16,6 +16,7 @@ import Language.Embedded.VHDL.Monad (VHDLT, VHDL, Type, Kind(..))
 import Language.Embedded.VHDL.Interface
 import qualified Language.Embedded.VHDL.Monad as M
 
+import Control.Arrow (second)
 import Control.Monad.Identity
 import Control.Monad.Operational.Compositional
 import Control.Applicative
@@ -68,17 +69,29 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> Kind
       -> exp a
       -> SequentialCMD exp prog ()
+
+    If 
+      :: ( exp Bool -- if this
+         , prog ()  -- do this
+         )
+      -> [( exp Bool -- elseif this
+         ,  prog ()  -- do that
+         )]
+      -> prog ()     -- otherwise do this
+      -> SequentialCMD exp prog ()
     
 instance MapInstr (SequentialCMD exp)
   where
     imap _ (Local i k e)       = Local i k e
     imap _ (SAssignment i k e) = SAssignment i k e
+    imap f (If (b, t) os e)    = If (b, f t) (map (second f) os) (f e)
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
+-- | Declare local constands/variables/files
 constantL, variableL, fileL
   :: (SequentialCMD (IExp instr) :<: instr, Typeable a)
   => Identifier
@@ -88,15 +101,34 @@ constantL i = singleE . Local i M.Constant
 variableL i = singleE . Local i M.Variable
 fileL     i = singleE . Local i M.File
 
+-- | Assign a signal to some expression
 (<==) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
 (<==) i = singleE . SAssignment i Signal
 
+-- | Assign a variable to some expression
 (==:) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
 (==:) i = singleE . SAssignment i Variable
 
+-- | Guards a program by some predicate
+when 
+  :: (SequentialCMD (IExp instr) :<: instr, Monad m)
+  => IExp instr Bool
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+when b prg = singleE $ If (b, prg) [] (return ())
+
+-- | Standard 'if .. then .. else ..' statement
+ifThen 
+  :: (SequentialCMD (IExp instr) :<: instr)
+  => IExp instr Bool
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+ifThen b th el = singleE $ If (b, th) [] el
+
 --------------------------------------------------------------------------------
 
-compileSequential :: CompileExp exp => SequentialCMD exp prog a -> VHDL a
+compileSequential :: CompileExp exp => SequentialCMD exp VHDL a -> VHDL a
 compileSequential (Local i k e) =
   do v <- compEM e
      t <- compTM e
@@ -109,6 +141,10 @@ compileSequential (SAssignment i k e) =
      M.addSequential $ case k of
        Signal -> M.assignSignal   i v
        _      -> M.assignVariable i v
+compileSequential (If (b, th) eif els) =
+  do v  <- compE b
+     pe <- mapM (\(c, p) -> do b <- compE c; return (b, p)) eif
+     M.inConditional (v, th) pe els
 
 --------------------------------------------------------------------------------
 -- **
