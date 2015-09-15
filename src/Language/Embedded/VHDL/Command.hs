@@ -142,9 +142,10 @@ compileSequential (SAssignment i k e) =
        Signal -> M.assignSignal   i v
        _      -> M.assignVariable i v
 compileSequential (If (b, th) eif els) =
-  do v  <- compE b
-     pe <- mapM (\(c, p) -> do b <- compE c; return (b, p)) eif
-     s  <- M.inConditional (v, th) pe els
+  do let (cs, es) = unzip eif
+     v  <- compE b
+     bs <- mapM compE cs
+     s  <- M.inConditional (v, th) (zip bs es) els
      M.addSequential $ V.SIf s
 
 --------------------------------------------------------------------------------
