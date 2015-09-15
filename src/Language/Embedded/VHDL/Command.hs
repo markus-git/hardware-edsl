@@ -178,52 +178,60 @@ data DeclKind = Port | Generic
 
 data HeaderCMD exp (prog :: * -> *) a
   where
-    Decl :: Typeable a
-         => DeclKind
-         -> Identifier
-         -> Kind
-         -> Mode
-         -> Maybe (exp a)
-         -> HeaderCMD exp prog Identifier
+    Declare
+      :: Typeable a
+      => DeclKind
+      -> Identifier
+      -> Kind
+      -> Mode
+      -> Maybe (exp a)
+      -> HeaderCMD exp prog Identifier
+
+    Architecture
+      :: String
+      -> prog ()
+      -> HeaderCMD exp prog ()
 
 instance MapInstr (HeaderCMD exp)
   where
-    imap _ (Decl d i k m e) = Decl d i k m e
+    imap _ (Declare d i k m e) = Declare d i k m e
+    imap f (Architecture s p)  = Architecture s (f p)
 
 type instance IExp (HeaderCMD e)       = e
 type instance IExp (HeaderCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
+constantPort, constantGeneric, signalPort, signalGeneric, variablePort, variableGeneric, filePort, fileGeneric 
+  :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
+  => Identifier
+  -> Mode
+  -> Maybe (IExp instr a)
+  -> ProgramT instr m Identifier
+constantPort    i m = singleE . Declare Port    i M.Constant m
+constantGeneric i m = singleE . Declare Generic i M.Constant m
+signalPort      i m = singleE . Declare Port    i M.Signal   m
+signalGeneric   i m = singleE . Declare Generic i M.Signal   m
+variablePort    i m = singleE . Declare Port    i M.Variable m
+variableGeneric i m = singleE . Declare Generic i M.Variable m
+filePort        i m = singleE . Declare Port    i M.File     m
+fileGeneric     i m = singleE . Declare Generic i M.File     m
+
+-- | Declares a clock input port
 clock :: forall instr m. (HeaderCMD (IExp instr) :<: instr) => ProgramT instr m Identifier
-clock = signal (Ident "clk") In (Nothing :: Maybe ((IExp instr) Bool))
+clock = signalPort (Ident "clk") In (Nothing :: Maybe ((IExp instr) Bool))
 
-constant, signal, variable, file
-  :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
-  => Identifier
-  -> Mode
-  -> Maybe (IExp instr a)
-  -> ProgramT instr m Identifier
-constant i m = singleE . Decl Port i M.Constant m
-signal   i m = singleE . Decl Port i M.Signal   m
-variable i m = singleE . Decl Port i M.Variable m
-file     i m = singleE . Decl Port i M.File     m
-
-constantGeneric, signalGeneric, variableGeneric, fileGeneric
-  :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
-  => Identifier
-  -> Mode
-  -> Maybe (IExp instr a)
-  -> ProgramT instr m Identifier
-constantGeneric i m = singleE . Decl Generic i M.Constant m
-signalGeneric   i m = singleE . Decl Generic i M.Signal   m
-variableGeneric i m = singleE . Decl Generic i M.Variable m
-fileGeneric     i m = singleE . Decl Generic i M.File     m
+architecture
+  :: (HeaderCMD (IExp instr) :<: instr)
+  => String
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+architecture name = singleE . Architecture name
 
 --------------------------------------------------------------------------------
 
-compileHeader :: CompileExp exp => HeaderCMD exp prog a -> VHDL a
-compileHeader (Decl Port i k m e) =
+compileHeader :: CompileExp exp => HeaderCMD exp VHDL a -> VHDL a
+compileHeader (Declare Port i k m e) =
   do v <- compEM e
      t <- compTM e
      M.addPort $ case k of
@@ -231,7 +239,7 @@ compileHeader (Decl Port i k m e) =
        M.Signal   -> M.interfaceSignal   i m t v
        M.Variable -> M.interfaceVariable i m t v
      return i
-compileHeader (Decl Generic i k m e) =
+compileHeader (Declare Generic i k m e) =
   do v <- compEM e
      t <- compTM e
      M.addGeneric $ case k of
@@ -239,5 +247,7 @@ compileHeader (Decl Generic i k m e) =
        M.Signal   -> M.interfaceSignal   i m t v
        M.Variable -> M.interfaceVariable i m t v
      return i
+compileHeader (Architecture name prg) =
+  do M.inArchitecture name prg
 
 --------------------------------------------------------------------------------
