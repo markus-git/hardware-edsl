@@ -224,8 +224,8 @@ clock = signalPort (Ident "clk") In (Nothing :: Maybe ((IExp instr) Bool))
 architecture
   :: (HeaderCMD (IExp instr) :<: instr)
   => String
-  -> ProgramT instr m ()
-  -> ProgramT instr m ()
+  -> ProgramT instr m a
+  -> ProgramT instr m a
 architecture name = singleE . Architecture name
 
 --------------------------------------------------------------------------------
