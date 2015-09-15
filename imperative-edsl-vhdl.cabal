@@ -43,7 +43,7 @@ library
                        constraints,
                        containers      >=0.1 && <1,
                        imperative-edsl >=0.3,
-                       language-vhdl   >=0.1.0.5,
+                       language-vhdl   >=0.1.1.0,
                        pretty          >=1.0
   hs-source-dirs:      .,src
   default-language:    Haskell2010
