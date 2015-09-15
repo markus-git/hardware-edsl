@@ -144,7 +144,8 @@ compileSequential (SAssignment i k e) =
 compileSequential (If (b, th) eif els) =
   do v  <- compE b
      pe <- mapM (\(c, p) -> do b <- compE c; return (b, p)) eif
-     M.inConditional (v, th) pe els
+     s  <- M.inConditional (v, th) pe els
+     M.addSequential $ V.SIf s
 
 --------------------------------------------------------------------------------
 -- **

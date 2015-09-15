@@ -220,7 +220,7 @@ addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 
 --------------------------------------------------------------------------------
 
-inConditional :: MonadV m => (V.Condition, m ()) -> [(V.Condition, m ())] -> m () -> m ()
+inConditional :: MonadV m => (V.Condition, m ()) -> [(V.Condition, m ())] -> m () -> m (V.IfStatement)
 inConditional (c, m) os e =
   do let (cs, ns) = unzip os
      oldSequential <- CMS.gets _sequential
@@ -228,13 +228,13 @@ inConditional (c, m) os e =
      m'  <- contain m
      ns' <- mapM contain ns
      e'  <- contain e
-     addSequential $ V.SIf $
+     CMS.modify $ \e -> e { _sequential = oldSequential }
+     return $
        V.IfStatement
          (Nothing)
          (c, m')
          (zip cs ns')
          (maybeList e')
-     CMS.modify $ \e -> e { _sequential = oldSequential }
   where
     contain :: MonadV m => m () -> m [V.SequentialStatement]
     contain m =
