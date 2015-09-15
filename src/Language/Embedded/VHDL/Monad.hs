@@ -243,10 +243,10 @@ inConditional (c, m) os e =
          CMS.modify $ \e -> e { _sequential = [] }  -- reset
          return $ new
 
-    maybeList :: [a] -> Maybe [a]
+    maybeList :: [V.SequentialStatement] -> Maybe [V.SequentialStatement]
     maybeList xs
-      | P.null xs = Just xs
-      | otherwise = Nothing
+      | P.null xs = Nothing
+      | otherwise = Just xs
 
 --------------------------------------------------------------------------------
 -- **
@@ -310,6 +310,8 @@ prettyVEnv (VHDLEnv _ name port generic architecture _ _ _ _) =
 --------------------------------------------------------------------------------
 -- Some helper functions
 --------------------------------------------------------------------------------
+--
+-- ! The groupBy doesn't group all, only those adjacent to each other
 
 -- | Groups the names of similar declarations
 groupDeclarations :: [DeclarativeItem] -> [DeclarativeItem]
