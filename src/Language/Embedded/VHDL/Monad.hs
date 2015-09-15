@@ -332,7 +332,7 @@ groupDeclarations = fmap merge . groupBy (~=~)
     fids (DF f) = V.fd_identifier_list f
 
 groupInterfaces :: [V.InterfaceDeclaration] -> [V.InterfaceDeclaration]
-groupInterfaces = undefined
+groupInterfaces = fmap merge . groupBy (~=~)
   where
     (~=~) :: V.InterfaceDeclaration -> V.InterfaceDeclaration -> Bool
     (~=~) l r = l { V.idecl_identifier_list = [] } == r { V.idecl_identifier_list = [] }
