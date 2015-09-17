@@ -77,11 +77,11 @@ data Expr a
     Cat  :: Num a => Expr a -> Expr a -> Expr a
 
     -- multiplying operators
-    Mul  :: Num a        => Expr a -> Expr a -> Expr a
-    Div  :: Integral a   => Expr a -> Expr a -> Expr a
-    Dif  :: Fractional a => Expr a -> Expr a -> Expr a
-    Mod  :: Integral a   => Expr a -> Expr a -> Expr a
-    Rem  :: Integral a   => Expr a -> Expr a -> Expr a
+    Mul  :: (Bits a, Num a) => Expr a -> Expr a -> Expr a
+    Div  :: Integral a      => Expr a -> Expr a -> Expr a
+    Dif  :: Fractional a    => Expr a -> Expr a -> Expr a
+    Mod  :: Integral a      => Expr a -> Expr a -> Expr a
+    Rem  :: Integral a      => Expr a -> Expr a -> Expr a
 
     -- misc. operators (minus Not)
     Exp  :: Floating a => Expr a -> Expr a -> Expr a
@@ -92,7 +92,7 @@ type instance PredicateExp Expr = Typeable :/\: Show :/\: Kludge
 --------------------------------------------------------------------------------
 -- ** Useful Instances
 
-instance (Kludge a, Num a, Eq a) => Num (Expr a)
+instance (Kludge a, Num a, Bits a, Eq a) => Num (Expr a)
   where
     fromInteger   = Val . fromInteger
     Val a + Val b = Val (a+b)
@@ -182,7 +182,7 @@ instance CompileExp Expr
 compileE :: Expr a -> VHDL Expression
 compileE = return . lift . go
   where
-    go :: Expr a -> Kind
+    go :: forall a. Expr a -> Kind
     go exp = case exp of
       Var v -> P $ M.name   $ showI v
       Val v -> P $ M.string $ format v
@@ -213,8 +213,9 @@ compileE = return . lift . go
       Sub  x y -> Si $ M.sub [lift (go x), lift (go y)]
       Cat  x y -> Si $ M.cat [lift (go x), lift (go y)]
 
-      Mul  x y -> P $ M.resize 8 $ M.mul  [lift (go x), lift (go y)]
-    --Mul  x y -> T $ M.mul  [lift (go x), lift (go y)]
+      Mul  x y -> case bitSizeMaybe (undefined :: a) of
+        Just bits -> P $ M.resize bits $ M.mul [lift (go x), lift (go y)]
+        Nothing   -> T $ M.mul [lift (go x), lift (go y)]
       Div  x y -> T $ M.div  [lift (go x), lift (go y)]
       Dif  x y -> error "compilation of Dif not yet implemented for Expr"
       Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
@@ -284,7 +285,7 @@ cat = Cat
 neg :: Num a => Expr a -> Expr a
 neg = Neg
 
-mul :: Num a => Expr a -> Expr a -> Expr a
+mul :: (Num a, Bits a) => Expr a -> Expr a -> Expr a
 mul = Mul
 
 div :: Integral a => Expr a -> Expr a -> Expr a
