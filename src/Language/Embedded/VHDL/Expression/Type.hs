@@ -1,4 +1,4 @@
-module Language.Embedded.VHDL.Monad.Type where
+module Language.Embedded.VHDL.Expression.Type where
 
 import Language.VHDL
 import Language.Embedded.VHDL.Expression.Hoist hiding (Kind) -- resize
@@ -63,6 +63,5 @@ resize size exp =
       , AssociationElement Nothing (APDesignator (ADExpression (lift (lit (show size)))))
       ])
     ))
-
 
 --------------------------------------------------------------------------------

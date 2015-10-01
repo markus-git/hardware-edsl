@@ -18,12 +18,12 @@ cabal-version:       >=1.10
 library
   exposed-modules:     Language.Embedded.VHDL,
                        Language.Embedded.VHDL.Monad,
-                       Language.Embedded.VHDL.Monad.Type,
                        Language.Embedded.VHDL.Monad.Expression,
                        Language.Embedded.VHDL.Interface,
                        Language.Embedded.VHDL.Expression,
                        Language.Embedded.VHDL.Expression.Hoist,
                        Language.Embedded.VHDL.Expression.Format,
+                       Language.Embedded.VHDL.Expression.Type,
                        Language.Embedded.VHDL.Command
 
   -- other-modules:                              

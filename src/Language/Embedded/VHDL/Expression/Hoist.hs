@@ -21,22 +21,21 @@ import Language.VHDL (
 -- * Lifting / Hoisting of VHDL Expression
 --------------------------------------------------------------------------------
 
--- | A collection type for VHDLs expression types.
---
--- Going from "Expr a -> VHDL.Exp" means recovering the structure of vhdls
--- expressions, since Exp isn't a single type. Hence the need for "Kind".  
-data Kind =
-    E  Expression
-  | R  Relation
-  | Sh ShiftExpression
-  | Si SimpleExpression
-  | T  Term
-  | F  Factor
-  | P  Primary
+-- | Lift any number of levels
+class Lift a b where
+  lift :: a -> b
+
+-- | Base case: we are the correct level
+instance {-# OVERLAPPING #-} Lift a a where
+  lift = id
+
+-- | Step case: we can get to the correct level by using a kind of induction step
+instance {-# OVERLAPPABLE #-} (Hoist a, Lift (Next a) b) => Lift a b where
+  lift = lift . hoist
 
 --------------------------------------------------------------------------------
--- ** Lift one level
 
+-- | Lift one level
 class Hoist a where
   type Next a :: *
   hoist :: a -> Next a
@@ -70,21 +69,20 @@ instance Hoist Expression where
   hoist e = PrimExp e
 
 --------------------------------------------------------------------------------
--- ** Lift any number of levels
+-- ** Lifting of explicit Kinds since I don't have a better solution
 
-class Lift a b where
-  lift :: a -> b
-
--- | Base case: we are the correct level
-instance {-# OVERLAPPING #-} Lift a a where
-  lift = id
-
--- | Step case: we can get to the correct level by using a kind of induction step
-instance {-# OVERLAPPABLE #-} (Hoist a, Lift (Next a) b) => Lift a b where
-  lift = lift . hoist
-
---------------------------------------------------------------------------------
--- ** Lifting of Kind
+-- | A collection type for VHDLs expression types.
+--
+-- Going from "Expr a -> VHDL.Exp" means recovering the structure of VHDL's
+-- expressions since Exp isn't a single type. Hence the need for "Kind".
+data Kind =
+    E  Expression
+  | R  Relation
+  | Sh ShiftExpression
+  | Si SimpleExpression
+  | T  Term
+  | F  Factor
+  | P  Primary
 
 instance Lift Kind Expression where
   lift (E e)   = lift e

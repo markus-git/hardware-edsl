@@ -47,17 +47,13 @@ module Language.Embedded.VHDL.Monad (
   , assignSignal
   , assignVariable
 
-  , module Language.Embedded.VHDL.Monad.Type
   , module Language.Embedded.VHDL.Monad.Expression
   ) where
 
-import Language.VHDL ( Identifier(..)
-                     , Mode(..)
-                     , Expression
-                     )
+import Language.VHDL (Identifier(..), Mode(..), Expression)
 import qualified Language.VHDL as V
 
-import Language.Embedded.VHDL.Monad.Type
+import Language.Embedded.VHDL.Expression.Type
 import Language.Embedded.VHDL.Monad.Expression
 
 import Control.Arrow          (first, second)

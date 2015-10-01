@@ -12,9 +12,11 @@ module Language.Embedded.VHDL.Command where
 import Language.VHDL (Identifier(..), Label, Expression, Mode(..))
 import qualified Language.VHDL as V
 
-import Language.Embedded.VHDL.Monad (VHDLT, VHDL, Type, Kind(..))
+import Language.Embedded.VHDL.Monad           (VHDLT, VHDL)
 import Language.Embedded.VHDL.Interface
-import qualified Language.Embedded.VHDL.Monad as M
+import Language.Embedded.VHDL.Expression.Type (Type, Kind)
+import qualified Language.Embedded.VHDL.Monad           as M
+import qualified Language.Embedded.VHDL.Expression.Type as T
 
 import Control.Arrow (second)
 import Control.Monad.Identity
@@ -38,6 +40,7 @@ instance CompileExp exp => Interp (HeaderCMD exp) VHDL
   where
     interp = compileHeader
 
+-- | Compile an VHDL program into a pretty printed text
 compile :: (Interp instr VHDL, MapInstr instr) => Program instr a -> String
 compile = show . M.prettyVHDL . interpret
 
@@ -48,43 +51,39 @@ compEM :: CompileExp exp => Maybe (exp a) -> VHDL (Maybe Expression)
 compEM = maybe (return Nothing) (>>= return . Just) . fmap compE
 
 -- | Compile hidden type
-compTM :: forall exp a. (CompileExp exp, Typeable a) => Maybe (exp a) -> VHDL Type
+compTM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL Type
 compTM _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
--- **
+-- ** Sequential commands offered by VHDL
 
 data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
   where
     Local
-      :: Typeable a
+      :: PredicateExp exp a
       => Identifier
       -> Kind
       -> Maybe (exp a)
       -> SequentialCMD exp prog ()
 
-    SAssignment
+    Assignment
       :: Typeable a
       => Identifier
       -> Kind
       -> exp a
       -> SequentialCMD exp prog ()
 
-    If 
-      :: ( exp Bool -- if this
-         , prog ()  -- do this
-         )
-      -> [( exp Bool -- elseif this
-         ,  prog ()  -- do that
-         )]
-      -> prog ()     -- otherwise do this
+    If
+      :: (exp Bool, prog ())     -- if
+      -> [(exp Bool,  prog ())]  -- elseif*
+      -> prog ()                 -- else
       -> SequentialCMD exp prog ()
     
 instance MapInstr (SequentialCMD exp)
   where
-    imap _ (Local i k e)       = Local i k e
-    imap _ (SAssignment i k e) = SAssignment i k e
-    imap f (If (b, t) os e)    = If (b, f t) (map (second f) os) (f e)
+    imap _ (Local i k e)      = Local i k e
+    imap _ (Assignment i k e) = Assignment i k e
+    imap f (If (b, t) os e)   = If (b, f t) (map (second f) os) (f e)
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
@@ -93,21 +92,21 @@ type instance IExp (SequentialCMD e :+: i) = e
 
 -- | Declare local constands/variables/files
 constantL, variableL, fileL
-  :: (SequentialCMD (IExp instr) :<: instr, Typeable a)
+  :: (SequentialCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
   => Identifier
   -> Maybe (IExp instr a)
   -> ProgramT instr m ()
-constantL i = singleE . Local i M.Constant
-variableL i = singleE . Local i M.Variable
-fileL     i = singleE . Local i M.File
+constantL i = singleE . Local i T.Constant
+variableL i = singleE . Local i T.Variable
+fileL     i = singleE . Local i T.File
 
 -- | Assign a signal to some expression
 (<==) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
-(<==) i = singleE . SAssignment i Signal
+(<==) i = singleE . Assignment i T.Signal
 
 -- | Assign a variable to some expression
 (==:) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
-(==:) i = singleE . SAssignment i Variable
+(==:) i = singleE . Assignment i T.Variable
 
 -- | Guards a program by some predicate
 when 
@@ -133,14 +132,14 @@ compileSequential (Local i k e) =
   do v <- compEM e
      t <- compTM e
      M.addLocal $ case k of
-       M.Constant -> M.declConstant i t v
-       M.Signal   -> M.declSignal   i t v
-       M.Variable -> M.declVariable i t v
-compileSequential (SAssignment i k e) =
+       T.Constant -> M.declConstant i t v
+       T.Signal   -> M.declSignal   i t v
+       T.Variable -> M.declVariable i t v
+compileSequential (Assignment i k e) =
   do v <- compE e
      M.addSequential $ case k of
-       Signal -> M.assignSignal   i v
-       _      -> M.assignVariable i v
+       T.Signal -> M.assignSignal   i v
+       _        -> M.assignVariable i v
 compileSequential (If (b, th) eif els) =
   do let (cs, es) = unzip eif
      v  <- compE b
@@ -149,12 +148,12 @@ compileSequential (If (b, th) eif els) =
      M.addSequential $ V.SIf s
 
 --------------------------------------------------------------------------------
--- **
+-- ** Concurrent commands offered by VHDL
 
 data ConcurrentCMD exp (prog :: * -> *) a
   where
-    Global           -- I should merge these into a 'Seq + Conc'-CMD type
-      :: Typeable a  -- These do however also take a 'Mode' param...
+    Global
+      :: PredicateExp exp a  
       => Identifier
       -> Kind
       -> Maybe (exp a)
@@ -176,16 +175,18 @@ type instance IExp (ConcurrentCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
-constantG, signalG, variableG, fileG
-  :: (ConcurrentCMD (IExp instr) :<: instr, Typeable a)
+-- | Declare global constands/variables/files
+constantG, signalG, variableG, fileG 
+  :: (ConcurrentCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
   => Identifier
   -> Maybe (IExp instr a)
   -> ProgramT instr m ()
-constantG i = singleE . Global i M.Constant
-signalG   i = singleE . Global i M.Signal
-variableG i = singleE . Global i M.Variable
-fileG     i = singleE . Global i M.File
+constantG i = singleE . Global i T.Constant
+signalG   i = singleE . Global i T.Signal
+variableG i = singleE . Global i T.Variable
+fileG     i = singleE . Global i T.File
 
+-- | Declare a process
 process
   :: (ConcurrentCMD (IExp instr) :<: instr)
   => Label
@@ -201,23 +202,23 @@ compileConcurrent (Global i k e) =
   do v <- compEM e
      t <- compTM e
      M.addGlobal $ case k of
-       M.Constant -> M.declConstant i t v
-       M.Signal   -> M.declSignal   i t v 
-       M.Variable -> M.declVariable i t v
+       T.Constant -> M.declConstant i t v
+       T.Signal   -> M.declSignal   i t v 
+       T.Variable -> M.declVariable i t v
 compileConcurrent (Process l is p) =
   do (a, process) <- M.inProcess l is p
      M.addConcurrent (V.ConProcess process)
      return a
 
 --------------------------------------------------------------------------------
--- **
+-- ** Entity declaration related commands offered by VHDL
 
 data DeclKind = Port | Generic
 
 data HeaderCMD exp (prog :: * -> *) a
   where
     Declare
-      :: Typeable a
+      :: PredicateExp exp a
       => DeclKind
       -> Identifier
       -> Kind
@@ -240,25 +241,28 @@ type instance IExp (HeaderCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
-constantPort, constantGeneric, signalPort, signalGeneric, variablePort, variableGeneric, filePort, fileGeneric 
-  :: (HeaderCMD (IExp instr) :<: instr, Typeable a)
+-- | Declare constands/signal/variables/files ports and generics
+constantPort, constantGeneric, signalPort, signalGeneric, variablePort, variableGeneric, filePort, fileGeneric
+  :: (HeaderCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
   => Identifier
   -> Mode
   -> Maybe (IExp instr a)
   -> ProgramT instr m Identifier
-constantPort    i m = singleE . Declare Port    i M.Constant m
-constantGeneric i m = singleE . Declare Generic i M.Constant m
-signalPort      i m = singleE . Declare Port    i M.Signal   m
-signalGeneric   i m = singleE . Declare Generic i M.Signal   m
-variablePort    i m = singleE . Declare Port    i M.Variable m
-variableGeneric i m = singleE . Declare Generic i M.Variable m
-filePort        i m = singleE . Declare Port    i M.File     m
-fileGeneric     i m = singleE . Declare Generic i M.File     m
+constantPort    i m = singleE . Declare Port    i T.Constant m
+constantGeneric i m = singleE . Declare Generic i T.Constant m
+signalPort      i m = singleE . Declare Port    i T.Signal   m
+signalGeneric   i m = singleE . Declare Generic i T.Signal   m
+variablePort    i m = singleE . Declare Port    i T.Variable m
+variableGeneric i m = singleE . Declare Generic i T.Variable m
+filePort        i m = singleE . Declare Port    i T.File     m
+fileGeneric     i m = singleE . Declare Generic i T.File     m
 
 -- | Declares a clock input port
-clock :: forall instr m. (HeaderCMD (IExp instr) :<: instr) => ProgramT instr m Identifier
+clock :: forall instr m. (HeaderCMD (IExp instr) :<: instr, PredicateExp (IExp instr) Bool)
+      => ProgramT instr m Identifier
 clock = signalPort (Ident "clk") In (Nothing :: Maybe ((IExp instr) Bool))
 
+-- | Declare an architecture
 architecture
   :: (HeaderCMD (IExp instr) :<: instr)
   => String
@@ -273,17 +277,17 @@ compileHeader (Declare Port i k m e) =
   do v <- compEM e
      t <- compTM e
      M.addPort $ case k of
-       M.Constant -> M.interfaceConstant i   t v
-       M.Signal   -> M.interfaceSignal   i m t v
-       M.Variable -> M.interfaceVariable i m t v
+       T.Constant -> M.interfaceConstant i   t v
+       T.Signal   -> M.interfaceSignal   i m t v
+       T.Variable -> M.interfaceVariable i m t v
      return i
 compileHeader (Declare Generic i k m e) =
   do v <- compEM e
      t <- compTM e
      M.addGeneric $ case k of
-       M.Constant -> M.interfaceConstant i   t v
-       M.Signal   -> M.interfaceSignal   i m t v
-       M.Variable -> M.interfaceVariable i m t v
+       T.Constant -> M.interfaceConstant i   t v
+       T.Signal   -> M.interfaceSignal   i m t v
+       T.Variable -> M.interfaceVariable i m t v
      return i
 compileHeader (Architecture name prg) =
   do M.inArchitecture name prg

@@ -10,7 +10,8 @@ module Language.Embedded.VHDL
   ) where
 
 import Language.VHDL (Mode(..), Identifier(..))
+
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Expression
+import Language.Embedded.VHDL.Expression.Type
 import Language.Embedded.VHDL.Command
-import Language.Embedded.VHDL.Monad.Type

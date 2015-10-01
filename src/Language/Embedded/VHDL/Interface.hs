@@ -3,8 +3,9 @@
 
 module Language.Embedded.VHDL.Interface where
 
-import Language.VHDL                (Expression, Identifier(..))
-import Language.Embedded.VHDL.Monad (VHDL, Type)
+import Language.VHDL                          (Expression, Identifier(..))
+import Language.Embedded.VHDL.Monad           (VHDL)
+import Language.Embedded.VHDL.Expression.Type (Type)
 
 import Data.Constraint
 import Data.Typeable   (Typeable)
@@ -31,10 +32,10 @@ class CompileExp exp
     -- | Variable expressions
     varE  :: PredicateExp exp a => Identifier -> exp a
 
+    -- | Compilation of type kind
+    compT :: PredicateExp exp a => exp a -> VHDL Type
+
     -- | Compilation of expressions
     compE :: exp a -> VHDL Expression
-
-    -- | 
-    compT :: Typeable a => exp a -> VHDL Type
 
 --------------------------------------------------------------------------------

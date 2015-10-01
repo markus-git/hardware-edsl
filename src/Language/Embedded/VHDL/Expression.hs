@@ -7,15 +7,17 @@
 
 module Language.Embedded.VHDL.Expression
   ( Expr
-  , and, or, xor, xnor
-  , eq, neq, lt, lte, gt, gte
-  , nand, nor
-  , sll, srl, sla, sra, rol, ror
-  , add, sub, cat
-  , neg
-  , mul, div, mod, rem
-  , exp
-  , abs, not
+  , not                             -- :: Expr Bool -> Expr Bool
+  , and, or, xor, xnor, nand, nor   -- :: Expr Bool -> Expr Bool -> Expr Bool
+  , eq, neq                         -- :: Eq a       => Expr a -> Expr a -> Expr Bool
+  , lt, lte, gt, gte                -- :: Ord a      => Expr a -> Expr a -> Expr Bool
+  , sll, srl, sla, sra, rol, ror    -- :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
+  , add, sub, cat                   -- :: Num a      => Expr a -> Expr a -> Expr a
+  , mul                             -- :: (Num a, Rep a) => Expr a -> Expr a -> Expr a
+  , div, mod, rem                   -- :: Integral a => Expr a -> Expr a -> Expr a
+  , neg                             -- :: Num a      => Expr a -> Expr a
+  , exp                             -- :: Floating a => Expr a -> Expr a -> Expr a
+  , abs                             -- :: Num a      => Expr a -> Expr a
   , name
   , lit
   ) where
@@ -23,13 +25,15 @@ module Language.Embedded.VHDL.Expression
 import Language.VHDL (Identifier(..), Expression)
 
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Monad             (VHDL, Type)
+import Language.Embedded.VHDL.Monad             (VHDL)
 import Language.Embedded.VHDL.Expression.Hoist
 import Language.Embedded.VHDL.Expression.Format
+import Language.Embedded.VHDL.Expression.Type hiding (Kind)
 import qualified Language.Embedded.VHDL.Monad as M
 
-import Data.Bits hiding (xor)
+import Data.Bits           hiding (xor)
 import Data.Dynamic
+import Data.Maybe                 (fromJust)
 import Data.Typeable
 import Data.TypePredicates hiding (sub)
 
@@ -42,8 +46,8 @@ import qualified Prelude as P
 
 data Expr a
   where
-    Val :: Kludge a   => a          -> Expr a
-    Var :: Typeable a => Identifier -> Expr a
+    Val :: Rep a => a          -> Expr a
+    Var :: Rep a => Identifier -> Expr a
 
     -- expression operators (plus Not)
     Not  :: Expr Bool -> Expr Bool
@@ -63,12 +67,12 @@ data Expr a
     Gte  :: Ord a => Expr a -> Expr a -> Expr Bool
 
     -- shift operators
-    Sll  :: Bits a => Expr a -> Expr a -> Expr a
-    Srl  :: Bits a => Expr a -> Expr a -> Expr a
-    Sla  :: Bits a => Expr a -> Expr a -> Expr a
-    Sra  :: Bits a => Expr a -> Expr a -> Expr a
-    Rol  :: Bits a => Expr a -> Expr a -> Expr a
-    Ror  :: Bits a => Expr a -> Expr a -> Expr a
+    Sll  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
+    Srl  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
+    Sla  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
+    Sra  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
+    Rol  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
+    Ror  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
 
     -- adding operators
     Neg  :: Num a => Expr a -> Expr a
@@ -77,120 +81,160 @@ data Expr a
     Cat  :: Num a => Expr a -> Expr a -> Expr a
 
     -- multiplying operators
-    Mul  :: (Bits a, Num a) => Expr a -> Expr a -> Expr a
-    Div  :: Integral a      => Expr a -> Expr a -> Expr a
-    Dif  :: Fractional a    => Expr a -> Expr a -> Expr a
-    Mod  :: Integral a      => Expr a -> Expr a -> Expr a
-    Rem  :: Integral a      => Expr a -> Expr a -> Expr a
+    Mul  :: (Rep a, Num a) => Expr a -> Expr a -> Expr a
+    Div  :: Integral a   => Expr a -> Expr a -> Expr a -- integer division
+    Dif  :: Fractional a => Expr a -> Expr a -> Expr a -- floating point division
+    Mod  :: Integral a   => Expr a -> Expr a -> Expr a
+    Rem  :: Integral a   => Expr a -> Expr a -> Expr a
 
     -- misc. operators (minus Not)
     Exp  :: Floating a => Expr a -> Expr a -> Expr a
     Abs  :: Num a      => Expr a -> Expr a
 
-type instance PredicateExp Expr = Typeable :/\: Show :/\: Kludge
+type instance PredicateExp Expr = Rep
 
 --------------------------------------------------------------------------------
 -- ** Useful Instances
 
-instance (Kludge a, Num a, Bits a, Eq a) => Num (Expr a)
+instance (Rep a, Bounded a) => Bounded (Expr a)
   where
-    fromInteger   = Val . fromInteger
-    Val a + Val b = Val (a+b)
-    Val 0 + b     = b
-    a     + Val 0 = a
-    a     + b     = Add a b
-    Val a - Val b = Val (a-b)
-    Val 0 - b     = b
-    a     - Val 0 = a
-    a     - b     = Sub a b
-    Val a * Val b = Val (a*b)
-    Val 0 * b     = Val 0
-    a     * Val 0 = Val 0
-    Val 1 * b     = b
-    a     * Val 1 = a
-    a     * b     = Mul a b
+    minBound = Val minBound
+    maxBound = Val maxBound
 
-    abs    = error "abs not implemented for Expr"
-    signum = error "signum not implemented for Expr"
+instance (Rep a, Enum a) => Enum (Expr a) -- needed for integral
+  where
+    toEnum   = error "toEnum not supported"
+    fromEnum = error "fromEnum not supported"
+
+instance (Rep a, Num a) => Num (Expr a)
+  where
+    fromInteger  = Val . fromInteger
+    (+)          = Add
+    (-)          = Sub
+    (*)          = Mul
+    abs          = Abs
+    signum       = error "signum not implemented for Expr"
 
 --------------------------------------------------------------------------------
--- ** Evaluation
+-- ** Logical operators
 
-instance EvaluateExp Expr
-  where
-    litE  = Val
-    evalE = evaluate (error "eval: free variable")
+and, or, xor, xnor, nand, nor :: Expr Bool -> Expr Bool -> Expr Bool
 
-evaluate :: (Identifier -> Dynamic) -> Expr a -> a
-evaluate env exp = case exp of
-    Var  v | Just a <- fromDynamic (env v) -> a
-    Val  v                                 -> v
-    
-    Not  x   -> un P.not x
-    And  x y -> bin (&&) x y
-    Or   x y -> bin (||) x y
-    Xor  x y -> bin xor  x y
-    Xnor x y -> P.not $ bin xor  x y
-    Nand x y -> P.not $ bin (&&) x y
-    Nor  x y -> P.not $ bin (||) x y
-
-    Eq   x y -> bin (==) x y
-    Neq  x y -> bin (/=) x y
-    Lt   x y -> bin (<)  x y
-    Lte  x y -> bin (<=) x y
-    Gt   x y -> bin (>)  x y
-    Gte  x y -> bin (>=) x y
-
-    Sll  x y -> error "evaluation of Sll not yet implemented for Expr"
-    Srl  x y -> error "evaluation of Srl not yet implemented for Expr"  
-    Sla  x y -> error "evaluation of Sla not yet implemented for Expr"  
-    Sra  x y -> error "evaluation of Sra not yet implemented for Expr"  
-    Rol  x y -> error "evaluation of Rol not yet implemented for Expr"  
-    Ror  x y -> error "evaluation of Ror not yet implemented for Expr"  
-
-    Neg  x   -> error "evaluation of Neg not yet implemented for Expr"   
-    Add  x y -> error "evaluation of Add not yet implemented for Expr"  
-    Sub  x y -> error "evaluation of Sub not yet implemented for Expr"  
-    Cat  x y -> error "evaluation of Cat not yet implemented for Expr" 
-
-    Mul  x y -> error "evaluation of Mul not yet implemented for Expr" 
-    Div  x y -> error "evaluation of Div not yet implemented for Expr"
-    Dif  x y -> error "evaluation of Dif not yet implemented for Expr"
-    Mod  x y -> error "evaluation of Mod not yet implemented for Expr" 
-    Rem  x y -> error "evaluation of Rem not yet implemented for Expr" 
-
-    Exp  x y -> error "evaluation of Exp not yet implemented for Expr"
-    Abs  x   -> error "evaluation of Abs not yet implemented for Expr"
-  where
-    xor a b = (a || b) && P.not (a && b)
-    
-    un :: (a -> b) -> Expr a -> b
-    un  f x   = f (evaluate env x)
-
-    bin :: (a -> b -> c) -> Expr a -> Expr b -> c
-    bin f x y = f (evaluate env x) (evaluate env y)
+and  = And
+or   = Or
+xor  = Xor
+xnor = Xnor
+nand = Nand
+nor  = Nor
 
 --------------------------------------------------------------------------------
--- ** Compilation
+-- ** Relational operators
+
+eq, neq          :: Eq a  => Expr a -> Expr a -> Expr Bool
+lt, lte, gt, gte :: Ord a => Expr a -> Expr a -> Expr Bool
+
+eq  = Eq
+neq = Neq
+lt  = Lt
+lte = Lte
+gt  = Gt
+gte = Gte
+
+--------------------------------------------------------------------------------
+-- ** Shift operators
+
+sll, srl, sra, sla, rol, ror :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
+
+sll = Sll
+srl = Srl
+sra = Sra
+sla = Sla
+rol = Rol
+ror = Ror
+
+--------------------------------------------------------------------------------
+-- ** Adding operators
+
+add, sub, cat :: Num a => Expr a -> Expr a -> Expr a
+
+add = Add
+sub = Sub
+cat = Cat
+
+--------------------------------------------------------------------------------
+-- ** Multiplying operators
+
+mul           :: (Num a, Rep a) => Expr a -> Expr a -> Expr a
+div, mod, rem :: Integral a => Expr a -> Expr a -> Expr a
+
+mod = Mod
+rem = Rem
+mul = Mul
+div = Div
+
+--------------------------------------------------------------------------------
+-- ** Sign operators
+
+neg :: Num a => Expr a -> Expr a
+neg = Neg
+
+--------------------------------------------------------------------------------
+-- ** Miscellaneous operators
+
+not :: Expr Bool -> Expr Bool
+not = Not
+
+exp :: Floating a => Expr a -> Expr a -> Expr a
+exp = Exp
+
+abs :: Num a => Expr a -> Expr a
+abs = Abs
+
+--------------------------------------------------------------------------------
+-- ** Naming operators
+
+name :: Rep a => Identifier -> Expr a
+name = Var
+
+lit :: Rep a => a -> Expr a
+lit = Val
+
+--------------------------------------------------------------------------------
+-- ** Formal operators
+--
+-- These are dangerous... as in no type difference between formal/actual names.
+-- Do not use with 'lit', only 'name'.
+
+risingEdge :: Identifier -> Expr Bool
+risingEdge (Ident formal) = name . Ident $ "rising_edge(" ++ formal ++ ")"
+
+-- ...
+
+--------------------------------------------------------------------------------
+-- * Compilation of expressions
+--------------------------------------------------------------------------------
 
 instance CompileExp Expr
   where
     varE  = Var
-    compE = compileE
     compT = compileT
+    compE = compileE
+
+compileT :: forall a. Rep a => Expr a -> VHDL Type
+compileT _ = return $ unTag $ (typed :: Tagged a Type)
 
 compileE :: Expr a -> VHDL Expression
 compileE = return . lift . go
   where
     go :: forall a. Expr a -> Kind
     go exp = case exp of
-      Var v -> P $ M.name   $ showI v
+      Var v -> P $ M.name   $ show   v
       Val v -> P $ M.string $ format v
 
-      And  x y -> E $ M.and  [lift (go x), lift (go y)]
-      Or   x y -> E $ M.or   [lift (go x), lift (go y)]
-      Xor  x y -> E $ M.xor  [lift (go x), lift (go y)]
-      Xnor x y -> E $ M.xnor [lift (go x), lift (go y)]
+      And  x y -> E $ M.and  [lift (go x),  lift (go y)]
+      Or   x y -> E $ M.or   [lift (go x),  lift (go y)]
+      Xor  x y -> E $ M.xor  [lift (go x),  lift (go y)]
+      Xnor x y -> E $ M.xnor [lift (go x),  lift (go y)]
       Nand x y -> E $ M.nand (lift (go x)) (lift (go y))
       Nor  x y -> E $ M.nor  (lift (go x)) (lift (go y))
 
@@ -213,11 +257,9 @@ compileE = return . lift . go
       Sub  x y -> Si $ M.sub [lift (go x), lift (go y)]
       Cat  x y -> Si $ M.cat [lift (go x), lift (go y)]
 
-      Mul  x y -> case bitSizeMaybe (undefined :: a) of
-        Just bits -> P $ M.resize bits $ M.mul [lift (go x), lift (go y)]
-        Nothing   -> T $ M.mul [lift (go x), lift (go y)]
+      Mul  x y -> P $ resize (unTag (width :: Tagged a Int)) $ M.mul  [lift (go x), lift (go y)]
+      Dif  x y -> error "compilation of floating point division is not yet supported"
       Div  x y -> T $ M.div  [lift (go x), lift (go y)]
-      Dif  x y -> error "compilation of Dif not yet implemented for Expr"
       Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
       Rem  x y -> T $ M.rem  [lift (go x), lift (go y)]
 
@@ -225,86 +267,65 @@ compileE = return . lift . go
       Abs  x   -> F $ M.abs  (lift (go x))
       Not  x   -> F $ M.not  (lift (go x))
 
-showI :: Identifier -> String
-showI (Ident s) = s
-
--- *** add 'use' statements
-compileT :: forall a. Typeable a => Expr a -> VHDL Type
-compileT _ = return $ case show (typeOf (undefined :: a)) of
-  "Bool" -> M.std_logic
-  'I':'n':'t':xs -> case xs of
-    "8"  -> M.signed8
-    "16" -> M.signed16
-    "32" -> M.signed32
-    "64" -> M.signed64
-  'W':'o':'r':'d':xs -> case xs of
-    "8"  -> M.usigned8
-    "16" -> M.usigned16
-    "32" -> M.usigned32
-    "64" -> M.usigned64
-  _ -> error "compT: type not supported"
-
 --------------------------------------------------------------------------------
--- * User Interface
+-- * Evaluation of Expressions
 --------------------------------------------------------------------------------
 
-not  :: Expr Bool -> Expr Bool
-not  = Not
+instance EvaluateExp Expr
+  where
+    litE  = Val
+    evalE = evaluate
 
-and, or, xor, xnor, nand, nor :: Expr Bool -> Expr Bool -> Expr Bool
-and  = And
-or   = Or
-xor  = Xor
-xnor = Xnor
-nand = Nand
-nor  = Nor
+evaluate :: Expr a -> a
+evaluate exp = case exp of
+    Var  v -> error "eval: free variable"
+    Val  v -> v
+    
+    Not  x   -> un P.not x
+    And  x y -> bin (&&) x y
+    Or   x y -> bin (||) x y
+    Xor  x y -> bin xor  x y
+    Xnor x y -> P.not $ bin xor  x y
+    Nand x y -> P.not $ bin (&&) x y
+    Nor  x y -> P.not $ bin (||) x y
 
-eq, neq :: Eq a => Expr a -> Expr a -> Expr Bool
-eq  = Eq
-neq = Neq
+    Eq   x y -> bin (==) x y
+    Neq  x y -> bin (/=) x y
+    Lt   x y -> bin (<)  x y
+    Lte  x y -> bin (<=) x y
+    Gt   x y -> bin (>)  x y
+    Gte  x y -> bin (>=) x y
 
-lt, lte, gt, gte :: Ord a => Expr a -> Expr a -> Expr Bool
-lt  = Lt
-lte = Lte
-gt  = Gt
-gte = Gte
+    Sll  x y -> bin (\a b -> shiftL a (fromIntegral b) `clearBit` msb a) x y
+    Srl  x y -> bin (\a b -> shiftR a (fromIntegral b) `clearBit` msb a) x y  
+    Sla  x y -> bin (\a -> shiftL a  . fromIntegral) x y
+    Sra  x y -> bin (\a -> shiftR a  . fromIntegral) x y
+    Rol  x y -> bin (\a -> rotateL a . fromIntegral) x y
+    Ror  x y -> bin (\a -> rotateR a . fromIntegral) x y
 
-sll, srl, sra, sla, rol, ror :: Bits a => Expr a -> Expr a -> Expr a
-sll = Sll
-srl = Srl
-sra = Sra
-sla = Sla
-rol = Rol
-ror = Ror
+    Neg  x   -> un negate x
+    Add  x y -> bin (+) x y
+    Sub  x y -> bin (-) x y
+    Cat  x y -> error "evaluation of bit concatenation not yet implemented" 
 
-add, sub, cat :: Num a => Expr a -> Expr a -> Expr a
-add = Add
-sub = Sub
-cat = Cat
+    Mul  x y -> bin (*)   x y
+    Dif  x y -> bin (/)   x y
+    Div  x y -> bin P.div x y
+    Mod  x y -> bin P.mod x y
+    Rem  x y -> bin P.rem x y
 
-neg :: Num a => Expr a -> Expr a
-neg = Neg
+    Exp  x y -> bin (**) x y
+    Abs  x   -> un P.abs x
+  where
+    xor a b = (a || b) && P.not (a && b)
+    
+    un :: (a -> b) -> Expr a -> b
+    un  f x   = f (evaluate x)
 
-mul :: (Num a, Bits a) => Expr a -> Expr a -> Expr a
-mul = Mul
+    bin :: (a -> b -> c) -> Expr a -> Expr b -> c
+    bin f x y = f (evaluate x) (evaluate y)
 
-div :: Integral a => Expr a -> Expr a -> Expr a
-div = Div
-
-mod, rem :: Integral a => Expr a -> Expr a -> Expr a
-mod = Mod
-rem = Rem
-
-exp :: Floating a => Expr a -> Expr a -> Expr a
-exp = Exp
-
-abs :: Num a => Expr a -> Expr a
-abs = Abs
-
-name :: Typeable a => Identifier -> Expr a
-name = Var
-
-lit :: Kludge a => a -> Expr a
-lit = Val
+    msb :: Bits a => a -> Int
+    msb = fromJust . bitSizeMaybe
 
 --------------------------------------------------------------------------------
