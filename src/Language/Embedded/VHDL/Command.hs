@@ -189,11 +189,11 @@ fileG     i = singleE . Global i T.File
 -- | Declare a process
 process
   :: (ConcurrentCMD (IExp instr) :<: instr)
-  => Label
+  => String
   -> [Identifier]
   -> ProgramT instr m ()
   -> ProgramT instr m ()
-process i is = singleE . Process i is
+process i is = singleE . Process (Ident i) is
 
 --------------------------------------------------------------------------------
 
