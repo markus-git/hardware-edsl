@@ -20,6 +20,7 @@ module Language.Embedded.VHDL.Expression
   , abs                             -- :: Num a      => Expr a -> Expr a
   , name
   , lit
+  , risingEdge
   ) where
 
 import Language.VHDL (Identifier(..), Expression)
