@@ -228,8 +228,8 @@ compileE = return . lift . go
   where
     go :: forall a. Expr a -> Kind
     go exp = case exp of
-      Var v -> P $ M.name   $ show   v
-      Val v -> P $ M.string $ format v
+      Var (Ident i) -> P $ M.name i
+      Val v         -> P $ M.string $ format v
 
       And  x y -> E $ M.and  [lift (go x),  lift (go y)]
       Or   x y -> E $ M.or   [lift (go x),  lift (go y)]
