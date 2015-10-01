@@ -1,4 +1,7 @@
-module Language.Embedded.VHDL.Expression.Format where
+module Language.Embedded.VHDL.Expression.Format
+  ( Tagged(..)
+  , Rep(..)
+  ) where
 
 import Language.Embedded.VHDL.Expression.Type
 

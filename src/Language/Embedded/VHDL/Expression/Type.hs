@@ -1,4 +1,12 @@
-module Language.Embedded.VHDL.Expression.Type where
+module Language.Embedded.VHDL.Expression.Type
+  ( Type
+  , Kind(..)
+  , std_logic
+  , signed, usigned
+  , signed8, signed16, signed32, signed64
+  , usigned8, usigned16, usigned32, usigned64
+  , resize
+  ) where
 
 import Language.VHDL
 import Language.Embedded.VHDL.Expression.Hoist hiding (Kind) -- resize
