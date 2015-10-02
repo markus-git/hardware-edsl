@@ -264,9 +264,22 @@ filePort        i m = singleE . Declare Port    i T.File     m
 fileGeneric     i m = singleE . Declare Generic i T.File     m
 
 -- | Declares a clock input port
-clock :: forall instr m. (HeaderCMD (IExp instr) :<: instr, PredicateExp (IExp instr) Bool)
-      => ProgramT instr m Identifier
+clock
+  :: forall instr m.
+     ( HeaderCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool
+     )
+  => ProgramT instr m Identifier
 clock = signalPort (Ident "clk") In (Nothing :: Maybe ((IExp instr) Bool))
+
+-- | Declares a reset input port
+reset
+  :: forall instr m.
+     ( HeaderCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool
+     )
+  => ProgramT instr m Identifier
+reset = signalPort (Ident "reset") In (Nothing :: Maybe ((IExp instr) Bool))
 
 -- | Declare an architecture
 architecture
