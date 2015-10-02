@@ -67,7 +67,7 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> SequentialCMD exp prog ()
 
     Assignment
-      :: Typeable a
+      :: PredicateExp exp a
       => Identifier
       -> Kind
       -> exp a
@@ -101,11 +101,17 @@ variableL i = singleE . Local i T.Variable
 fileL     i = singleE . Local i T.File
 
 -- | Assign a signal to some expression
-(<==) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
+(<==) :: (SequentialCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
+      => Identifier
+      -> IExp instr a
+      -> ProgramT instr m ()
 (<==) i = singleE . Assignment i T.Signal
 
 -- | Assign a variable to some expression
-(==:) :: (SequentialCMD (IExp instr) :<: instr, Typeable a) => Identifier -> IExp instr a -> ProgramT instr m ()
+(==:) :: (SequentialCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
+      => Identifier
+      -> IExp instr a
+      -> ProgramT instr m ()
 (==:) i = singleE . Assignment i T.Variable
 
 -- | Guards a program by some predicate
