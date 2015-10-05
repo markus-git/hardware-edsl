@@ -1,25 +1,20 @@
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- these are needed for Hoist
-{-# LANGUAGE TypeFamilies #-}
-
 module Language.Embedded.VHDL.Expression
   ( Expr
-  , not                             -- :: Expr Bool -> Expr Bool
-  , and, or, xor, xnor, nand, nor   -- :: Expr Bool -> Expr Bool -> Expr Bool
-  , eq, neq                         -- :: Eq a       => Expr a -> Expr a -> Expr Bool
-  , lt, lte, gt, gte                -- :: Ord a      => Expr a -> Expr a -> Expr Bool
-  , sll, srl, sla, sra, rol, ror    -- :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
-  , add, sub, cat                   -- :: Num a      => Expr a -> Expr a -> Expr a
-  , mul                             -- :: (Num a, Rep a) => Expr a -> Expr a -> Expr a
-  , div, mod, rem                   -- :: Integral a => Expr a -> Expr a -> Expr a
-  , neg                             -- :: Num a      => Expr a -> Expr a
-  , exp                             -- :: Floating a => Expr a -> Expr a -> Expr a
-  , abs                             -- :: Num a      => Expr a -> Expr a
-  , name
-  , lit
+  , not, and, or, xor, xnor, nand, nor
+  , eq, neq
+  , lt, lte, gt, gte
+  , sll, srl, sla, sra, rol, ror
+  , add, sub, cat
+  , mul
+  , div, mod, rem
+  , neg
+  , exp, abs
+  , name, lit
   , risingEdge
   ) where
 
@@ -266,7 +261,7 @@ compileE = return . lift . go
 
       Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
       Abs  x   -> F $ M.abs  (lift (go x))
-      Not  x   -> F $ M.not  (lift (go x))
+      Not  x   -> F $ M.not  (lift (go x))    
 
 --------------------------------------------------------------------------------
 -- * Evaluation of Expressions
@@ -299,8 +294,8 @@ evaluate exp = case exp of
 
     Sll  x y -> bin (\a b -> shiftL a (fromIntegral b) `clearBit` msb a) x y
     Srl  x y -> bin (\a b -> shiftR a (fromIntegral b) `clearBit` msb a) x y  
-    Sla  x y -> bin (\a -> shiftL a  . fromIntegral) x y
-    Sra  x y -> bin (\a -> shiftR a  . fromIntegral) x y
+    Sla  x y -> bin (\a -> shiftL a . fromIntegral) x y
+    Sra  x y -> bin (\a -> shiftR a . fromIntegral) x y
     Rol  x y -> bin (\a -> rotateL a . fromIntegral) x y
     Ror  x y -> bin (\a -> rotateR a . fromIntegral) x y
 
