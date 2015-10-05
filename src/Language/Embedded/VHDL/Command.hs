@@ -78,12 +78,19 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> [(exp Bool,  prog ())]  -- elseif*
       -> prog ()                 -- else
       -> SequentialCMD exp prog ()
+
+    Case
+      :: PredicateExp exp a
+      => exp a
+      -> [(exp a, prog ())]
+      -> SequentialCMD exp prog ()
     
 instance MapInstr (SequentialCMD exp)
   where
     imap _ (Local i k e)      = Local i k e
     imap _ (Assignment i k e) = Assignment i k e
     imap f (If (b, t) os e)   = If (b, f t) (map (second f) os) (f e)
+    imap f (Case e cs)        = Case e (map (second f) cs)
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
@@ -114,6 +121,25 @@ fileL     i = singleE . Local i T.File
       -> ProgramT instr m ()
 (==:) i = singleE . Assignment i T.Variable
 
+-- | Conventional if statement
+iff
+  :: (SequentialCMD (IExp instr) :<: instr)
+  =>  (IExp instr Bool, ProgramT instr m ())
+  -> [(IExp instr Bool, ProgramT instr m ())]
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+iff th eif el = singleE $ If th eif el
+
+-- | Conventional switch (or case) statement
+switch
+  :: (SequentialCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
+  => IExp instr a
+  -> [(IExp instr a, ProgramT instr m ())]
+  -> ProgramT instr m ()
+switch e choices = singleE $ Case e choices
+
+--------------------------------------------------------------------------------
+
 -- | Guards a program by some predicate
 when 
   :: (SequentialCMD (IExp instr) :<: instr, Monad m)
@@ -130,7 +156,7 @@ ifThen
   -> ProgramT instr m ()
   -> ProgramT instr m ()
 ifThen b th el = singleE $ If (b, th) [] el
-
+  
 --------------------------------------------------------------------------------
 
 compileSequential :: CompileExp exp => SequentialCMD exp VHDL a -> VHDL a
@@ -152,6 +178,9 @@ compileSequential (If (b, th) eif els) =
      bs <- mapM compE cs
      s  <- M.inConditional (v, th) (zip bs es) els
      M.addSequential $ V.SIf s
+compileSequential (Case e choices) =
+  do -- Need V.Case ...
+     undefined
 
 --------------------------------------------------------------------------------
 -- ** Concurrent commands offered by VHDL
