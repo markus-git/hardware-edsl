@@ -214,6 +214,13 @@ addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
 addSequential :: MonadV m => V.SequentialStatement -> m ()
 addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 
+contain :: MonadV m => m () -> m [V.SequentialStatement]
+contain m =
+ do m                                          -- do
+    new <- reverse <$> CMS.gets _sequential    -- get
+    CMS.modify $ \e -> e { _sequential = [] }  -- reset
+    return $ new
+
 --------------------------------------------------------------------------------
 
 inConditional :: MonadV m => (V.Condition, m ()) -> [(V.Condition, m ())] -> m () -> m (V.IfStatement)
@@ -232,17 +239,25 @@ inConditional (c, m) os e =
          (zip cs ns')
          (maybeList e')
   where
-    contain :: MonadV m => m () -> m [V.SequentialStatement]
-    contain m =
-      do m                                          -- do
-         new <- reverse <$> CMS.gets _sequential    -- get
-         CMS.modify $ \e -> e { _sequential = [] }  -- reset
-         return $ new
-
     maybeList :: [V.SequentialStatement] -> Maybe [V.SequentialStatement]
     maybeList xs
       | P.null xs = Nothing
       | otherwise = Just xs
+
+--------------------------------------------------------------------------------
+
+inCase :: MonadV m => V.Expression -> [(V.Choices, m ())] -> m (V.CaseStatement)
+inCase e choices =
+  do let (cs, ns) = unzip choices
+     oldSequential <- CMS.gets _sequential
+     CMS.modify $ \e -> e { _sequential = [] }
+     ns' <- mapM contain ns
+     CMS.modify $ \e -> e { _sequential = oldSequential }     
+     return $
+       V.CaseStatement
+         (Nothing)
+         (e)
+         (zipWith V.CaseStatementAlternative cs ns')
 
 --------------------------------------------------------------------------------
 -- **
