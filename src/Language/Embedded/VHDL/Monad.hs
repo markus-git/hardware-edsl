@@ -36,6 +36,7 @@ module Language.Embedded.VHDL.Monad (
   , inArchitecture
   , inProcess
   , inConditional
+  , inCase
 
     -- ^ common
   , interfaceConstant
