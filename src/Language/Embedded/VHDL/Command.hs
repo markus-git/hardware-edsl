@@ -15,8 +15,9 @@ import qualified Language.VHDL as V
 import Language.Embedded.VHDL.Monad           (VHDLT, VHDL)
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Expression.Type (Type, Kind)
-import qualified Language.Embedded.VHDL.Monad           as M
-import qualified Language.Embedded.VHDL.Expression.Type as T
+import qualified Language.Embedded.VHDL.Monad            as M
+import qualified Language.Embedded.VHDL.Expression.Type  as T
+import qualified Language.Embedded.VHDL.Expression.Hoist as H
 
 import Control.Arrow (second)
 import Control.Monad.Identity
@@ -83,6 +84,7 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       :: PredicateExp exp a
       => exp a
       -> [(exp a, prog ())]
+      -> Maybe (prog ())
       -> SequentialCMD exp prog ()
     
 instance MapInstr (SequentialCMD exp)
@@ -90,7 +92,7 @@ instance MapInstr (SequentialCMD exp)
     imap _ (Local i k e)      = Local i k e
     imap _ (Assignment i k e) = Assignment i k e
     imap f (If (b, t) os e)   = If (b, f t) (map (second f) os) (f e)
-    imap f (Case e cs)        = Case e (map (second f) cs)
+    imap f (Case e cs d)      = Case e (map (second f) cs) (fmap f d)
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
@@ -135,8 +137,9 @@ switch
   :: (SequentialCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
   => IExp instr a
   -> [(IExp instr a, ProgramT instr m ())]
+  -> Maybe (ProgramT instr m ())
   -> ProgramT instr m ()
-switch e choices = singleE $ Case e choices
+switch e choices def = singleE $ Case e choices def
 
 --------------------------------------------------------------------------------
 
@@ -178,9 +181,29 @@ compileSequential (If (b, th) eif els) =
      bs <- mapM compE cs
      s  <- M.inConditional (v, th) (zip bs es) els
      M.addSequential $ V.SIf s
-compileSequential (Case e choices) =
-  do -- Need V.Case ...
-     undefined
+compileSequential (Case e choices def) =
+  do let (cs, es) = unzip choices
+     v  <- compE e
+     bs <- mapM (compE >=> return . lower) cs
+     s  <- M.inCase v (zip bs es)
+     M.addSequential $ V.SCase s
+  where
+    lower :: V.Expression -> V.Choices
+    lower exp = V.Choices . (:[]) . V.ChoiceSimple $
+      case exp of
+        (V.EAnd  rels) -> head' rels
+        (V.EOr   rels) -> head' rels
+        (V.EXor  rels) -> head' rels
+        (V.ENand r _)  -> drop' r
+        (V.ENor  r _)  -> drop' r
+        (V.EXnor rels) -> head' rels
+
+    head' :: [V.Relation] -> V.SimpleExpression
+    head' [] = H.lift $ V.PrimLit V.LitNull
+    head' xs = drop' (head xs)
+
+    drop' :: V.Relation -> V.SimpleExpression
+    drop' (V.Relation (V.ShiftExpression x _) _) = x
 
 --------------------------------------------------------------------------------
 -- ** Concurrent commands offered by VHDL
