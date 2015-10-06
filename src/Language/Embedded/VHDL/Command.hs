@@ -185,7 +185,7 @@ compileSequential (Case e choices def) =
   do let (cs, es) = unzip choices
      v  <- compE e
      bs <- mapM (compE >=> return . lower) cs
-     s  <- M.inCase v (zip bs es)
+     s  <- M.inCase v (others def $ zip bs es)
      M.addSequential $ V.SCase s
   where
     lower :: V.Expression -> V.Choices
@@ -197,13 +197,17 @@ compileSequential (Case e choices def) =
         (V.ENand r _)  -> drop' r
         (V.ENor  r _)  -> drop' r
         (V.EXnor rels) -> head' rels
+      where
+        head' :: [V.Relation] -> V.SimpleExpression
+        head' [] = H.lift $ V.PrimLit V.LitNull
+        head' xs = drop' (head xs)
 
-    head' :: [V.Relation] -> V.SimpleExpression
-    head' [] = H.lift $ V.PrimLit V.LitNull
-    head' xs = drop' (head xs)
+        drop' :: V.Relation -> V.SimpleExpression
+        drop' (V.Relation (V.ShiftExpression x _) _) = x
 
-    drop' :: V.Relation -> V.SimpleExpression
-    drop' (V.Relation (V.ShiftExpression x _) _) = x
+    others :: Maybe x -> [(V.Choices, x)] -> [(V.Choices, x)]
+    others (Nothing) cs = cs
+    others (Just d)  cs = cs ++ [(V.Choices [V.ChoiceOthers], d)]
 
 --------------------------------------------------------------------------------
 -- ** Concurrent commands offered by VHDL
