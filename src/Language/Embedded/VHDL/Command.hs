@@ -227,10 +227,17 @@ data ConcurrentCMD exp (prog :: * -> *) a
       -> prog ()
       -> ConcurrentCMD exp prog ()
 
+    PortMap
+      :: Label
+      -> Identifier
+      -> [Identifier]
+      -> ConcurrentCMD exp prog ()
+
 instance MapInstr (ConcurrentCMD exp)
   where
     imap _ (Global  i k e)  = Global  i k e
     imap f (Process l is p) = Process l is $ f p
+    imap _ (PortMap l n is) = PortMap l n is
 
 type instance IExp (ConcurrentCMD e)       = e
 type instance IExp (ConcurrentCMD e :+: i) = e
@@ -271,7 +278,9 @@ compileConcurrent (Process l is p) =
   do (a, process) <- M.inProcess l is p
      M.addConcurrent (V.ConProcess process)
      return a
-
+compileConcurrent (PortMap l n is) =
+  do undefined
+     
 --------------------------------------------------------------------------------
 -- ** Entity declaration related commands offered by VHDL
 

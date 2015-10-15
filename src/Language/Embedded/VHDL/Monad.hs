@@ -10,7 +10,6 @@ module Language.Embedded.VHDL.Monad (
   , VHDL
   , VHDLEnv
   , emptyVHDLEnv
-  , DeclarativeItem
     
     -- ^ run
   , runVHDLT
@@ -26,6 +25,7 @@ module Language.Embedded.VHDL.Monad (
     -- ^ declarations
   , addPort
   , addGeneric
+  , addComponent
   , addGlobal
   , addLocal
 
@@ -45,13 +45,14 @@ module Language.Embedded.VHDL.Monad (
   , declConstant
   , declSignal
   , declVariable
+  , portMap
   , assignSignal
   , assignVariable
 
   , module Language.Embedded.VHDL.Monad.Expression
   ) where
 
-import Language.VHDL (Identifier(..), Mode(..), Expression)
+import Language.VHDL (Identifier(..), Mode(..), Expression, Label)
 import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Expression.Type
@@ -65,9 +66,13 @@ import Control.Monad.State    (StateT, MonadState, MonadIO)
 import qualified Control.Monad.Identity as CMI
 import qualified Control.Monad.State    as CMS
 
+import Data.Maybe       (catMaybes)
 import Data.Foldable    (toList)
 import Data.Functor
 import Data.List        (groupBy)
+import Data.Set         (Set)
+import qualified Data.Set as Set
+
 import Text.PrettyPrint (Doc, ($+$))
 
 import Prelude hiding (null, not, abs, exp, rem, mod, div, and, or)
@@ -75,16 +80,6 @@ import qualified Prelude as P
 
 --------------------------------------------------------------------------------
 -- * ..
---------------------------------------------------------------------------------
-
--- A (soon-to-be) superset of VHDL's declaration/assignment/statement types,
--- specific versions (Block../Process../etc) only supports subsets of these
-data DeclarativeItem =
-    DC V.ConstantDeclaration
-  | DS V.SignalDeclaration
-  | DV V.VariableDeclaration
-  | DF V.FileDeclaration
-
 --------------------------------------------------------------------------------
 
 -- | Code generation state
@@ -98,8 +93,9 @@ data VHDLEnv = VHDLEnv
   , _architectures :: [V.ArchitectureBody]
     
     -- declarations
-  , _global        :: [DeclarativeItem]
-  , _local         :: [DeclarativeItem]
+  , _component     :: Set V.ComponentDeclaration
+  , _global        :: [V.BlockDeclarativeItem]
+  , _local         :: [V.BlockDeclarativeItem]
 
     -- statements
   , _concurrent    :: [V.ConcurrentStatement]
@@ -113,6 +109,7 @@ emptyVHDLEnv = VHDLEnv
   , _ports         = []
   , _generics      = []
   , _architectures = []
+  , _component     = Set.empty
   , _global        = []
   , _local         = []
   , _concurrent    = []
@@ -120,6 +117,7 @@ emptyVHDLEnv = VHDLEnv
   }
 
 --------------------------------------------------------------------------------
+-- *
 
 -- | Type constraints for the VHDL monads
 type MonadV m = (Functor m, Applicative m, Monad m, MonadState VHDLEnv m)
@@ -170,21 +168,28 @@ addGeneric :: MonadV m => V.InterfaceDeclaration -> m ()
 addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 
 --------------------------------------------------------------------------------
+-- ** Component declarations
+
+addComponent :: MonadV m => V.ComponentDeclaration -> m ()
+addComponent c = CMS.modify $ \s -> s { _component = Set.insert c (_component s) }
+
+--------------------------------------------------------------------------------
 -- ** Item declarations
 
 -- | Adds a global declaration
-addGlobal :: MonadV m => DeclarativeItem -> m ()
+addGlobal :: MonadV m => V.BlockDeclarativeItem -> m ()
 addGlobal g = CMS.modify $ \s -> s { _global = g : (_global s) }
 
 -- | Adds a local declaration
-addLocal :: MonadV m => DeclarativeItem -> m ()
+addLocal :: MonadV m => V.BlockDeclarativeItem -> m ()
 addLocal l = CMS.modify $ \s -> s { _local = l : (_local s) }
 
 --------------------------------------------------------------------------------
 -- ** Concurrent statements
 
 -- | Runs the given action inside a process
-inProcess :: MonadV m => V.Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
+-- ! Due to how translate works, some local declarations might dissapear.
+inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
 inProcess l is m =
   do oldLocals     <- CMS.gets _local
      oldSequential <- CMS.gets _sequential
@@ -197,11 +202,11 @@ inProcess l is m =
                           , _sequential = oldSequential }
      return ( a
             , V.ProcessStatement
-                (Just l)                                   -- label
-                (False)                                     -- postponed
-                (sensitivity)                               -- sensitivitylist
-                (fmap decl $ groupDeclarations $ newLocals) -- declarativepart
-                (newSequential))                            -- statementpart
+                (Just l)                        -- label
+                (False)                         -- postponed
+                (sensitivity)                   -- sensitivitylist
+                (translate $ merge $ newLocals) -- declarativepart
+                (newSequential))                -- statementpart
   where
     sensitivity | P.null is = Nothing
                 | otherwise = Just $ V.SensitivityList $ fmap V.NSimple is
@@ -214,6 +219,8 @@ addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
 
 addSequential :: MonadV m => V.SequentialStatement -> m ()
 addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
+
+--------------------------------------------------------------------------------
 
 contain :: MonadV m => m () -> m [V.SequentialStatement]
 contain m =
@@ -269,23 +276,29 @@ addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures 
 inArchitecture :: MonadV m => String -> m a -> m a
 inArchitecture name m =
   do oldEntity     <- CMS.gets _entity
+     oldComponent  <- CMS.gets _component
      oldGlobal     <- CMS.gets _global
      oldLocal      <- CMS.gets _local
      oldConcurrent <- CMS.gets _concurrent
-     CMS.modify $ \e -> e { _global     = []
+     CMS.modify $ \e -> e { _component  = Set.empty
+                          , _global     = []
                           , _local      = []
                           , _concurrent = []
                           }
      a <- m
+     newComponent  <-             CMS.gets _component
      newGlobal     <- reverse <$> CMS.gets _global
      newLocal      <- reverse <$> CMS.gets _local
      newConcurrent <- reverse <$> CMS.gets _concurrent
+     let declarations =
+           merge $ newGlobal ++ newLocal
      addArchitecture $ V.ArchitectureBody
        (V.Ident name)
        (V.NSimple (V.Ident oldEntity))
-       (fmap decl $ groupDeclarations $ newGlobal ++ newLocal)
+       (merge $ newGlobal ++ newLocal)
        (newConcurrent)
-     CMS.modify $ \e -> e { _global     = oldGlobal
+     CMS.modify $ \e -> e { _component  = oldComponent
+                          , _global     = oldGlobal
                           , _local      = oldLocal
                           , _concurrent = oldConcurrent
                           }
@@ -302,7 +315,7 @@ prettyVHDLT :: Monad m => VHDLT m a -> m Doc
 prettyVHDLT m = prettyVEnv . snd <$> runVHDLT m emptyVHDLEnv
 
 prettyVEnv  :: VHDLEnv -> Doc
-prettyVEnv (VHDLEnv _ name port generic architecture _ _ _ _) =
+prettyVEnv (VHDLEnv _ name port generic architecture _ _ _ _ _) =
     foldr1 ($+$) (V.pp entity : fmap V.pp architecture)
   where
     entity :: V.EntityDeclaration
@@ -317,47 +330,8 @@ prettyVEnv (VHDLEnv _ name port generic architecture _ _ _ _) =
 
     maybeNull :: [V.InterfaceDeclaration] -> Maybe V.InterfaceList
     maybeNull [] = Nothing
-    maybeNull xs = Just $ V.InterfaceList $ groupInterfaces xs
+    maybeNull xs = Just $ V.InterfaceList $ merge xs
     
---------------------------------------------------------------------------------
--- Some helper functions
---------------------------------------------------------------------------------
---
--- ! The groupBy doesn't group all, only those adjacent to each other
-
--- | Groups the names of similar declarations
-groupDeclarations :: [DeclarativeItem] -> [DeclarativeItem]
-groupDeclarations = fmap merge . groupBy (~=~)
-  where
-    (~=~) :: DeclarativeItem -> DeclarativeItem -> Bool
-    (~=~) (DC l) (DC r) = l { V.const_identifier_list  = [] } == r { V.const_identifier_list  = [] }
-    (~=~) (DS l) (DS r) = l { V.signal_identifier_list = [] } == r { V.signal_identifier_list = [] }
-    (~=~) (DV l) (DV r) = l { V.var_identifier_list    = [] } == r { V.var_identifier_list    = [] }
-    (~=~) (DF l) (DF r) = l { V.fd_identifier_list     = [] } == r { V.fd_identifier_list     = [] }
-    (~=~) _      _      = False
-
-    merge :: [DeclarativeItem] -> DeclarativeItem
-    merge (o@(DC c):cs) = DC $ c { V.const_identifier_list  = cids o ++ concatMap cids cs}
-    merge (o@(DS s):ss) = DS $ s { V.signal_identifier_list = sids o ++ concatMap sids ss}
-    merge (o@(DV v):vs) = DV $ v { V.var_identifier_list    = vids o ++ concatMap vids vs}
-    merge (o@(DF f):fs) = DF $ f { V.fd_identifier_list     = fids o ++ concatMap fids fs}
-
-    cids (DC c) = V.const_identifier_list c
-    sids (DS s) = V.signal_identifier_list s
-    vids (DV v) = V.var_identifier_list v
-    fids (DF f) = V.fd_identifier_list f
-
-groupInterfaces :: [V.InterfaceDeclaration] -> [V.InterfaceDeclaration]
-groupInterfaces = fmap merge . groupBy (~=~)
-  where
-    (~=~) :: V.InterfaceDeclaration -> V.InterfaceDeclaration -> Bool
-    (~=~) l r = l { V.idecl_identifier_list = [] } == r { V.idecl_identifier_list = [] }
-
-    merge :: [V.InterfaceDeclaration] -> V.InterfaceDeclaration
-    merge (x:xs) = x { V.idecl_identifier_list = ids x ++ concatMap ids xs }
-      where
-        ids = V.idecl_identifier_list
-
 --------------------------------------------------------------------------------
 -- * Common things
 --------------------------------------------------------------------------------
@@ -377,14 +351,28 @@ interfaceVariable i m t e = V.InterfaceVariableDeclaration [i] (Just m) t e
 --------------------------------------------------------------------------------
 -- ** Global/Local Declarations
 
-declConstant :: Identifier -> Type -> Maybe Expression -> DeclarativeItem
-declConstant i t e = DC $ V.ConstantDeclaration [i] t e
+declConstant :: Identifier -> Type -> Maybe Expression -> V.BlockDeclarativeItem
+declConstant i t e = V.BDIConstant $ V.ConstantDeclaration [i] t e
 
-declSignal :: Identifier -> Type -> Maybe Expression -> DeclarativeItem
-declSignal i t e = DS $ V.SignalDeclaration [i] t Nothing e
+declSignal :: Identifier -> Type -> Maybe Expression -> V.BlockDeclarativeItem
+declSignal i t e = V.BDISignal $ V.SignalDeclaration [i] t Nothing e
 
-declVariable :: Identifier -> Type -> Maybe Expression -> DeclarativeItem
-declVariable i t e = DV $ V.VariableDeclaration False [i] t e
+declVariable :: Identifier -> Type -> Maybe Expression -> V.BlockDeclarativeItem
+declVariable i t e = V.BDIShared $ V.VariableDeclaration False [i] t e
+
+--------------------------------------------------------------------------------
+-- ** Component instantiation (port mapping)
+
+portMap :: Label -> Identifier -> [V.ActualDesignator] -> V.ConcurrentStatement
+portMap l n ns = V.ConComponent $
+  V.ComponentInstantiationStatement
+    (l)
+    (V.IUComponent (V.NSimple n))
+    (Nothing)
+    (Just $ V.PortMapAspect
+      (V.AssociationList $
+        fmap (V.AssociationElement Nothing) $
+          fmap V.APDesignator ns))
 
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable
@@ -407,30 +395,74 @@ assignVariable i e = V.SVarAss $
 --------------------------------------------------------------------------------
 -- Some helper classes and their instances
 --------------------------------------------------------------------------------
--- ! I should replace these.. 
+
+class Merge a
+  where
+    -- group two items if this holds
+    group  :: a -> a -> Bool
+
+    -- merge in this way
+    reduce :: [a] -> a
+
+    merge :: [a] -> [a]
+    merge = fmap reduce . groupBy group
+
+
+instance Merge V.BlockDeclarativeItem
+  where
+    group  l r      = setBlockIds l [] == setBlockIds r []
+    reduce bs@(b:_) = setBlockIds b $ concatMap getBlockIds bs
+
+instance Merge V.InterfaceDeclaration
+  where
+    group  l r    = l { V.idecl_identifier_list = [] } == r { V.idecl_identifier_list = [] }
+    reduce (x:xs) = x { V.idecl_identifier_list = ids x ++ concatMap ids xs }
+      where ids   = V.idecl_identifier_list
+
+--------------------------------------------------------------------------------
+
+setBlockIds :: V.BlockDeclarativeItem -> [Identifier] -> V.BlockDeclarativeItem
+setBlockIds (V.BDIConstant c) is = V.BDIConstant $ c { V.const_identifier_list  = is }
+setBlockIds (V.BDISignal   s) is = V.BDISignal   $ s { V.signal_identifier_list = is }
+setBlockIds (V.BDIShared   v) is = V.BDIShared   $ v { V.var_identifier_list    = is }
+setBlockIds (V.BDIFile     f) is = V.BDIFile     $ f { V.fd_identifier_list     = is }
+setBlockIds x                 _  = x
+
+getBlockIds :: V.BlockDeclarativeItem -> [Identifier]
+getBlockIds (V.BDIConstant c) = V.const_identifier_list c
+getBlockIds (V.BDISignal   s) = V.signal_identifier_list s
+getBlockIds (V.BDIShared   v) = V.var_identifier_list v
+getBlockIds (V.BDIFile     f) = V.fd_identifier_list f
+
+--------------------------------------------------------------------------------
+-- I use BlockDeclarativeItem to represent all declarative items, which means we
+-- have to translate them over to their correct VHDL kind when generating an AST
+--------------------------------------------------------------------------------
 
 class Declarative a
   where
-    decl :: DeclarativeItem -> a
+    -- lists are used so we can fail without having to throw errors
+    translate :: [V.BlockDeclarativeItem] -> [a]
 
 instance Declarative V.ProcessDeclarativeItem
   where
-    decl (DC c) = V.PDIConstant c
-    decl (DV v) = V.PDIVariable v
-    decl (DF f) = V.PDIFile f
-    decl _      = error "processes: unsupported declaration"
+    translate = catMaybes . fmap tryProcess
 
-instance Declarative V.BlockDeclarativeItem
-  where
-    decl (DC c) = V.BDIConstant c
-    decl (DS s) = V.BDISignal s
-    decl (DV v) = V.BDIShared v
-    decl (DF f) = V.BDIFile f
+tryProcess :: V.BlockDeclarativeItem -> Maybe (V.ProcessDeclarativeItem)
+tryProcess (V.BDIConstant c) = Just $ V.PDIConstant c
+tryProcess (V.BDIShared   v) = Just $ V.PDIVariable v
+tryProcess (V.BDIFile     f) = Just $ V.PDIFile     f
+tryProcess _                 = Nothing
 
 --------------------------------------------------------------------------------
 -- Ord instance for use in Set
 --------------------------------------------------------------------------------
 
 deriving instance Ord Identifier
+
+instance Ord V.ComponentDeclaration
+  where
+    compare l r = compare (V.comp_identifier l) (V.comp_identifier r)
+
 
 --------------------------------------------------------------------------------
