@@ -144,7 +144,7 @@ switch e choices def = singleE $ Case e choices def
 --------------------------------------------------------------------------------
 
 -- | Guards a program by some predicate
-when 
+when
   :: (SequentialCMD (IExp instr) :<: instr, Monad m)
   => IExp instr Bool
   -> ProgramT instr m ()
@@ -152,7 +152,7 @@ when
 when b prg = singleE $ If (b, prg) [] (return ())
 
 -- | Standard 'if .. then .. else ..' statement
-ifThen 
+ifThen
   :: (SequentialCMD (IExp instr) :<: instr)
   => IExp instr Bool
   -> ProgramT instr m ()
@@ -228,16 +228,15 @@ data ConcurrentCMD exp (prog :: * -> *) a
       -> ConcurrentCMD exp prog ()
 
     PortMap
-      :: Label
-      -> Identifier
+      :: Identifier
       -> [Identifier]
       -> ConcurrentCMD exp prog ()
 
 instance MapInstr (ConcurrentCMD exp)
   where
     imap _ (Global  i k e)  = Global  i k e
-    imap f (Process l is p) = Process l is $ f p
-    imap _ (PortMap l n is) = PortMap l n is
+    imap f (Process l is p) = Process l is (f p)
+    imap _ (PortMap n is)   = PortMap n is
 
 type instance IExp (ConcurrentCMD e)       = e
 type instance IExp (ConcurrentCMD e :+: i) = e
@@ -278,8 +277,10 @@ compileConcurrent (Process l is p) =
   do (a, process) <- M.inProcess l is p
      M.addConcurrent (V.ConProcess process)
      return a
-compileConcurrent (PortMap l n is) =
-  do undefined
+compileConcurrent (PortMap n is) =
+  do let ads = fmap (V.ADSignal . V.NSimple) is
+     lbl <- M.newLabel
+     M.addConcurrent (M.portMap lbl n ads)
      
 --------------------------------------------------------------------------------
 -- ** Entity declaration related commands offered by VHDL
@@ -331,18 +332,16 @@ fileGeneric     i m = singleE . Declare Generic i T.File     m
 -- | Declares a clock input port
 clock
   :: forall instr m.
-     ( HeaderCMD (IExp instr) :<: instr
-     , PredicateExp (IExp instr) Bool
-     )
+     ( HeaderCMD    (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool)
   => ProgramT instr m Identifier
 clock = signalPort (Ident "clk") In (Nothing :: Maybe ((IExp instr) Bool))
 
 -- | Declares a reset input port
 reset
   :: forall instr m.
-     ( HeaderCMD (IExp instr) :<: instr
-     , PredicateExp (IExp instr) Bool
-     )
+     ( HeaderCMD    (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool)
   => ProgramT instr m Identifier
 reset = signalPort (Ident "reset") In (Nothing :: Maybe ((IExp instr) Bool))
 

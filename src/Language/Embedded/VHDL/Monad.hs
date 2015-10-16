@@ -6,8 +6,8 @@
 {-# LANGUAGE StandaloneDeriving #-}
 
 module Language.Embedded.VHDL.Monad (    
-    VHDLT
-  , VHDL
+    VHDL
+  , VHDLT
   , VHDLEnv
   , emptyVHDLEnv
     
@@ -19,8 +19,10 @@ module Language.Embedded.VHDL.Monad (
   , prettyVHDL
   , prettyVHDLT
 
+    -- ^ ...
   , freshUnique
   , newVar
+  , newLabel
 
     -- ^ declarations
   , addPort
@@ -32,7 +34,9 @@ module Language.Embedded.VHDL.Monad (
     -- ^ statements
   , addConcurrent
   , addSequential
-    
+
+    -- ^ key statements
+  , inEntity
   , inArchitecture
   , inProcess
   , inConditional
@@ -82,10 +86,16 @@ import qualified Prelude as P
 -- * ..
 --------------------------------------------------------------------------------
 
+-- | ...
+data VFile = VFile (V.EntityDeclaration) [V.ArchitectureBody]
+
 -- | Code generation state
 data VHDLEnv = VHDLEnv
   { _unique        :: !Integer
   , _entity        :: String
+
+    -- ..
+  , _parts         :: [VFile]
 
     -- headers
   , _ports         :: [V.InterfaceDeclaration]
@@ -105,7 +115,8 @@ data VHDLEnv = VHDLEnv
 -- | Initial state during code generation
 emptyVHDLEnv = VHDLEnv
   { _unique        = 0
-  , _entity        = "gen"
+  , _entity        = "invisible"
+  , _parts         = []
   , _ports         = []
   , _generics      = []
   , _architectures = []
@@ -154,7 +165,11 @@ freshUnique =
 
 -- | Generates a fresh and unique identifier
 newVar :: MonadV m => m Identifier
-newVar = freshUnique >>= return . Ident . ('v' :) . show
+newVar = freshUnique >>= return . Ident . ('u' :) . show
+
+-- | Generates a fresh and unique label
+newLabel :: MonadV m => m Label
+newLabel = freshUnique >>= return . Ident . ('l' :) . show
 
 --------------------------------------------------------------------------------
 -- ** Header declarations -- ignores port/generic maps for now
@@ -170,6 +185,7 @@ addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 --------------------------------------------------------------------------------
 -- ** Component declarations
 
+-- | Adds a component declaration to the architecture
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _component = Set.insert c (_component s) }
 
@@ -290,20 +306,63 @@ inArchitecture name m =
      newGlobal     <- reverse <$> CMS.gets _global
      newLocal      <- reverse <$> CMS.gets _local
      newConcurrent <- reverse <$> CMS.gets _concurrent
-     let declarations =
-           merge $ newGlobal ++ newLocal
-     addArchitecture $ V.ArchitectureBody
-       (V.Ident name)
-       (V.NSimple (V.Ident oldEntity))
-       (merge $ newGlobal ++ newLocal)
-       (newConcurrent)
      CMS.modify $ \e -> e { _component  = oldComponent
                           , _global     = oldGlobal
                           , _local      = oldLocal
                           , _concurrent = oldConcurrent
                           }
+
+     addArchitecture $ V.ArchitectureBody
+       (V.Ident name)
+       (V.NSimple (V.Ident oldEntity))
+       (merge $ newGlobal ++ newLocal)
+       (newConcurrent)
      return a
 
+--------------------------------------------------------------------------------
+-- **
+
+addPart  :: MonadV m => VFile -> m ()
+addPart v = CMS.modify $ \s -> s { _parts = v : (_parts s) }
+
+inEntity :: MonadV m => String -> m a -> m a
+inEntity name m =
+  do oldUnique        <- CMS.gets _unique
+     oldEntity        <- CMS.gets _entity
+     oldPorts         <- CMS.gets _ports
+     oldGenerics      <- CMS.gets _generics
+     oldArchitectures <- CMS.gets _architectures
+     CMS.modify $ \e -> e { _unique        = 0
+                          , _entity        = name
+                          , _ports         = []
+                          , _generics      = []
+                          , _architectures = []
+                          }
+     a <- m
+     newPorts         <- reverse <$> CMS.gets _ports
+     newGenerics      <- reverse <$> CMS.gets _generics
+     newArchitectures <- reverse <$> CMS.gets _architectures
+     CMS.modify $ \e -> e { _unique        = oldUnique
+                          , _entity        = oldEntity
+                          , _ports         = oldPorts
+                          , _generics      = oldGenerics
+                          , _architectures = oldArchitectures
+                          }
+     addPart $ VFile
+       (V.EntityDeclaration
+         (V.Ident name)
+         (V.EntityHeader
+           (V.GenericClause <$> maybeNull newGenerics)
+           (V.PortClause    <$> maybeNull newPorts))
+         ([])
+         (Nothing))
+       (newArchitectures)
+     return a
+  where
+    maybeNull :: [V.InterfaceDeclaration] -> Maybe V.InterfaceList
+    maybeNull [] = Nothing
+    maybeNull xs = Just $ V.InterfaceList $ merge xs
+    
 --------------------------------------------------------------------------------
 -- * Pretty
 --------------------------------------------------------------------------------
@@ -312,25 +371,16 @@ prettyVHDL :: VHDL a -> Doc
 prettyVHDL = CMI.runIdentity . prettyVHDLT
 
 prettyVHDLT :: Monad m => VHDLT m a -> m Doc
-prettyVHDLT m = prettyVEnv . snd <$> runVHDLT m emptyVHDLEnv
+prettyVHDLT m = prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDLEnv
 
 prettyVEnv  :: VHDLEnv -> Doc
-prettyVEnv (VHDLEnv _ name port generic architecture _ _ _ _ _) =
-    foldr1 ($+$) (V.pp entity : fmap V.pp architecture)
+prettyVEnv (VHDLEnv _ _ parts _ _ _ _ _ _ _ _) = stack (fmap prettyPart parts)
   where
-    entity :: V.EntityDeclaration
-    entity =
-      V.EntityDeclaration
-        (V.Ident name)
-        (V.EntityHeader
-          (V.GenericClause <$> maybeNull generic)
-          (V.PortClause    <$> maybeNull port))
-        ([])
-        (Nothing)
-
-    maybeNull :: [V.InterfaceDeclaration] -> Maybe V.InterfaceList
-    maybeNull [] = Nothing
-    maybeNull xs = Just $ V.InterfaceList $ merge xs
+    stack :: [Doc] -> Doc
+    stack = foldr1 ($+$)
+    
+    prettyPart :: VFile -> Doc
+    prettyPart (VFile e as) = stack (V.pp e : fmap V.pp as)
     
 --------------------------------------------------------------------------------
 -- * Common things
