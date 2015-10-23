@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Embedded.VHDL.Expression
@@ -41,9 +42,17 @@ import qualified Prelude as P
 
 data Expr a
   where
+    -- ^ ...
     Val :: Rep a => a          -> Expr a
     Var :: Rep a => Identifier -> Expr a
 
+    -- ^ ...
+    Pair :: Expr a -> Expr b -> Expr (a, b)
+    Fst  :: Expr (a, b) -> Expr a
+    Snd  :: Expr (a, b) -> Expr b
+
+    -- ^ VHDL Expressions
+    
     -- expression operators (plus Not)
     Not  :: Expr Bool -> Expr Bool
     And  :: Expr Bool -> Expr Bool -> Expr Bool
@@ -89,7 +98,33 @@ data Expr a
 type instance PredicateExp Expr = Rep
 
 --------------------------------------------------------------------------------
--- ** Useful Instances
+-- ** Sugared constructs
+
+class Rep (Internal a) => Syntactic a
+  where
+    type Internal a
+
+    sugar   :: a -> Expr (Internal a)
+    desugar :: Expr (Internal a) -> a
+
+instance Rep a => Syntactic (Expr a)
+  where
+    type Internal (Expr a) = a
+
+    sugar   = id
+    desugar = id
+
+instance (Syntactic a, Syntactic b) => Syntactic (a, b)
+  where
+    type Internal (a, b) = (Internal a, Internal b)
+
+    sugar   (a, b) = Pair (sugar a) (sugar b)
+    desugar p      = (desugar (Fst p), desugar (Snd p))
+
+-- ...
+
+--------------------------------------------------------------------------------
+-- ** Useful Expr Instances
 
 instance (Rep a, Bounded a) => Bounded (Expr a)
   where
@@ -109,6 +144,10 @@ instance (Rep a, Num a) => Num (Expr a)
     (*)          = Mul
     abs          = Abs
     signum       = error "signum not implemented for Expr"
+
+--------------------------------------------------------------------------------
+-- * User interface
+--------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
 -- ** Logical operators
