@@ -27,6 +27,7 @@ module Language.Embedded.VHDL.Monad (
     -- ^ declarations
   , addPort
   , addGeneric
+  , addType
   , addComponent
   , addGlobal
   , addLocal
@@ -46,6 +47,7 @@ module Language.Embedded.VHDL.Monad (
   , interfaceConstant
   , interfaceSignal
   , interfaceVariable
+  , declRecord
   , declConstant
   , declSignal
   , declVariable
