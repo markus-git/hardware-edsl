@@ -247,15 +247,7 @@ addSequential :: MonadV m => V.SequentialStatement -> m ()
 addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 
 --------------------------------------------------------------------------------
-
-contain :: MonadV m => m () -> m [V.SequentialStatement]
-contain m =
- do m                                          -- do
-    new <- reverse <$> CMS.gets _sequential    -- get
-    CMS.modify $ \e -> e { _sequential = [] }  -- reset
-    return $ new
-
---------------------------------------------------------------------------------
+-- **
 
 inConditional :: MonadV m => (V.Condition, m ()) -> [(V.Condition, m ())] -> m () -> m (V.IfStatement)
 inConditional (c, m) os e =
@@ -278,7 +270,15 @@ inConditional (c, m) os e =
       | P.null xs = Nothing
       | otherwise = Just xs
 
+contain :: MonadV m => m () -> m [V.SequentialStatement]
+contain m =
+ do m                                          -- do
+    new <- reverse <$> CMS.gets _sequential    -- get
+    CMS.modify $ \e -> e { _sequential = [] }  -- reset
+    return $ new
+
 --------------------------------------------------------------------------------
+-- **
 
 inCase :: MonadV m => V.Expression -> [(V.Choices, m ())] -> m (V.CaseStatement)
 inCase e choices =
@@ -372,7 +372,7 @@ inEntity name m =
     maybeNull :: [V.InterfaceDeclaration] -> Maybe V.InterfaceList
     maybeNull [] = Nothing
     maybeNull xs = Just $ V.InterfaceList $ merge xs
-    
+
 --------------------------------------------------------------------------------
 -- * Pretty
 --------------------------------------------------------------------------------
@@ -384,14 +384,19 @@ prettyVHDLT :: Monad m => VHDLT m a -> m Doc
 prettyVHDLT m = prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDLEnv
 
 prettyVEnv  :: VHDLEnv -> Doc
-prettyVEnv (VHDLEnv _ _ parts _ _ _ _ _ _ _ _ _) =
-    stack (fmap prettyPart parts)
+prettyVEnv (VHDLEnv _ _ parts types _ _ _ _ _ _ _ _) =
+    stack $ (genPackage "types" $ Set.toList types) : (fmap prettyPart parts)
   where
     stack :: [Doc] -> Doc
     stack = foldr1 ($+$)
     
     prettyPart :: VFile -> Doc
     prettyPart (VFile e as) = stack (V.pp e : fmap V.pp as)
+
+--------------------------------------------------------------------------------
+
+genPackage :: String -> [V.TypeDeclaration] -> Doc
+genPackage name = V.pp . V.PackageDeclaration (V.Ident name) . fmap V.PHDIType
     
 --------------------------------------------------------------------------------
 -- * Common things
