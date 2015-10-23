@@ -15,7 +15,6 @@ module Language.Embedded.VHDL.Expression
   , neg
   , exp, abs
   , name, lit
-  , risingEdge
   ) where
 
 import Language.VHDL (Identifier(..), Expression)
@@ -78,10 +77,10 @@ data Expr a
 
     -- multiplying operators
     Mul  :: (Rep a, Num a) => Expr a -> Expr a -> Expr a
-    Div  :: Integral a   => Expr a -> Expr a -> Expr a -- integer division
-    Dif  :: Fractional a => Expr a -> Expr a -> Expr a -- floating point division
-    Mod  :: Integral a   => Expr a -> Expr a -> Expr a
-    Rem  :: Integral a   => Expr a -> Expr a -> Expr a
+    Dif  :: Fractional a   => Expr a -> Expr a -> Expr a -- floating point division
+    Div  :: Integral a     => Expr a -> Expr a -> Expr a -- integer division
+    Mod  :: Integral a     => Expr a -> Expr a -> Expr a
+    Rem  :: Integral a     => Expr a -> Expr a -> Expr a
 
     -- misc. operators (minus Not)
     Exp  :: Floating a => Expr a -> Expr a -> Expr a
@@ -196,17 +195,6 @@ lit :: Rep a => a -> Expr a
 lit = Val
 
 --------------------------------------------------------------------------------
--- ** Formal operators
---
--- These are dangerous... as in no type difference between formal/actual names.
--- Do not use with 'lit', only 'name'.
-
-risingEdge :: Identifier -> Expr Bool
-risingEdge (Ident formal) = name . Ident $ "rising_edge(" ++ formal ++ ")"
-
--- ...
-
---------------------------------------------------------------------------------
 -- * Compilation of expressions
 --------------------------------------------------------------------------------
 
@@ -253,15 +241,18 @@ compileE = return . lift . go
       Sub  x y -> Si $ M.sub [lift (go x), lift (go y)]
       Cat  x y -> Si $ M.cat [lift (go x), lift (go y)]
 
-      Mul  x y -> P $ resize (unTag (width :: Tagged a Int)) $ M.mul  [lift (go x), lift (go y)]
-      Dif  x y -> error "compilation of floating point division is not yet supported"
+      Mul  x y -> P $ resize (unTag (width :: Tagged a Int))
+                    $ M.mul  [lift (go x), lift (go y)]
       Div  x y -> T $ M.div  [lift (go x), lift (go y)]
       Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
       Rem  x y -> T $ M.rem  [lift (go x), lift (go y)]
 
       Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
       Abs  x   -> F $ M.abs  (lift (go x))
-      Not  x   -> F $ M.not  (lift (go x))    
+      Not  x   -> F $ M.not  (lift (go x))
+
+      -- todo ...
+      Dif  x y -> error "compilation of floating point division is not yet supported"
 
 --------------------------------------------------------------------------------
 -- * Evaluation of Expressions

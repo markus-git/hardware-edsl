@@ -17,7 +17,7 @@ import qualified Data.ByteString as B
 -- * Kludge - until I come up with a better solution
 --------------------------------------------------------------------------------
 
--- | Tag a value some (possibly) interesting information
+-- | Tag a value with some (possibly) interesting information
 newtype Tagged s b = Tag { unTag :: b }
 
 -- | A 'rep'resentable value.
@@ -93,14 +93,14 @@ convert = foldr1 (++) . fmap w2s . B.unpack . i2bs . toInteger
 -- | Go over an Integer and convert it into a bytestring containing its
 --   binary representation
 i2bs :: Integer -> B.ByteString
-i2bs x = B.reverse . B.unfoldr (fmap go) . Just $ sign x
+i2bs x = B.reverse . B.unfoldr (fmap chunk) . Just $ sign x
   where
     sign :: (Num a, Ord a) => a -> a
     sign | x < 0     = subtract 1 . negate
          | otherwise = id
 
-    go :: Integer -> (Word8, Maybe Integer)
-    go x = (b, i)
+    chunk :: Integer -> (Word8, Maybe Integer)
+    chunk x = (b, i)
       where
         b = sign (fromInteger x)
         i | x >= 128  = Just (x `shiftR` 8)
