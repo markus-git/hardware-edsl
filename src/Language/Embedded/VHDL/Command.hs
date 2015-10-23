@@ -303,10 +303,16 @@ data HeaderCMD exp (prog :: * -> *) a
       -> prog a
       -> HeaderCMD exp prog a
 
+    Record
+      :: String
+      -> [(String, Type)]
+      -> HeaderCMD exp prog a
+
 instance MapInstr (HeaderCMD exp)
   where
     imap _ (Declare d i k m e) = Declare d i k m e
     imap f (Architecture s p)  = Architecture s (f p)
+    imap _ (Record s es)       = Record s es
 
 type instance IExp (HeaderCMD e)       = e
 type instance IExp (HeaderCMD e :+: i) = e
@@ -374,5 +380,7 @@ compileHeader (Declare Generic i k m e) =
      return i
 compileHeader (Architecture name prg) =
   do M.inArchitecture name prg
+compileHeader (Record name es) =
+  do undefined
 
 --------------------------------------------------------------------------------
