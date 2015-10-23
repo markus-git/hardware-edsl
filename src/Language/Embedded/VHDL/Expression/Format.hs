@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Language.Embedded.VHDL.Expression.Format
   ( Tagged(..)
   , Rep(..)
@@ -81,6 +83,16 @@ instance Rep Word64 where
   width  = Tag 64
   typed  = Tag usigned64
   format = convert
+
+--------------------------------------------------------------------------------
+-- ** Records
+
+instance (Rep a, Rep b) => Rep (a, b) where
+  width  = undefined
+  typed  = undefined
+  format = undefined
+
+-- ...
 
 --------------------------------------------------------------------------------
 -- * Converting Integers to their Binrary representation
