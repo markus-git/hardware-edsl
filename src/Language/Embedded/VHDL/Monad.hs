@@ -97,13 +97,16 @@ data VHDLEnv = VHDLEnv
     -- ..
   , _parts         :: [VFile]
 
+    -- ...
+  , _types         :: Set V.TypeDeclaration
+  , _components    :: Set V.ComponentDeclaration
+
     -- headers
   , _ports         :: [V.InterfaceDeclaration]
   , _generics      :: [V.InterfaceDeclaration]
   , _architectures :: [V.ArchitectureBody]
     
     -- declarations
-  , _component     :: Set V.ComponentDeclaration
   , _global        :: [V.BlockDeclarativeItem]
   , _local         :: [V.BlockDeclarativeItem]
 
@@ -117,10 +120,11 @@ emptyVHDLEnv = VHDLEnv
   { _unique        = 0
   , _entity        = "invisible"
   , _parts         = []
+  , _types         = Set.empty
+  , _components    = Set.empty
   , _ports         = []
   , _generics      = []
   , _architectures = []
-  , _component     = Set.empty
   , _global        = []
   , _local         = []
   , _concurrent    = []
@@ -185,9 +189,13 @@ addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 --------------------------------------------------------------------------------
 -- ** Component declarations
 
+-- | ...
+addType :: MonadV m => V.TypeDeclaration -> m ()
+addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
+
 -- | Adds a component declaration to the architecture
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
-addComponent c = CMS.modify $ \s -> s { _component = Set.insert c (_component s) }
+addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
 
 --------------------------------------------------------------------------------
 -- ** Item declarations
@@ -292,21 +300,21 @@ addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures 
 inArchitecture :: MonadV m => String -> m a -> m a
 inArchitecture name m =
   do oldEntity     <- CMS.gets _entity
-     oldComponent  <- CMS.gets _component
+     oldComponent  <- CMS.gets _components
      oldGlobal     <- CMS.gets _global
      oldLocal      <- CMS.gets _local
      oldConcurrent <- CMS.gets _concurrent
-     CMS.modify $ \e -> e { _component  = Set.empty
+     CMS.modify $ \e -> e { _components = Set.empty
                           , _global     = []
                           , _local      = []
                           , _concurrent = []
                           }
      a <- m
-     newComponent  <-             CMS.gets _component
+     newComponent  <-             CMS.gets _components
      newGlobal     <- reverse <$> CMS.gets _global
      newLocal      <- reverse <$> CMS.gets _local
      newConcurrent <- reverse <$> CMS.gets _concurrent
-     CMS.modify $ \e -> e { _component  = oldComponent
+     CMS.modify $ \e -> e { _components = oldComponent
                           , _global     = oldGlobal
                           , _local      = oldLocal
                           , _concurrent = oldConcurrent
@@ -374,7 +382,8 @@ prettyVHDLT :: Monad m => VHDLT m a -> m Doc
 prettyVHDLT m = prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDLEnv
 
 prettyVEnv  :: VHDLEnv -> Doc
-prettyVEnv (VHDLEnv _ _ parts _ _ _ _ _ _ _ _) = stack (fmap prettyPart parts)
+prettyVEnv (VHDLEnv _ _ parts _ _ _ _ _ _ _ _ _) =
+    stack (fmap prettyPart parts)
   where
     stack :: [Doc] -> Doc
     stack = foldr1 ($+$)
@@ -397,6 +406,19 @@ interfaceSignal i m t e = V.InterfaceSignalDeclaration [i] (Just m) t False e
 
 interfaceVariable :: Identifier -> Mode -> Type -> Maybe Expression -> V.InterfaceDeclaration
 interfaceVariable i m t e = V.InterfaceVariableDeclaration [i] (Just m) t e
+
+--------------------------------------------------------------------------------
+-- ** Type/Component Declarations
+
+declRecord :: Identifier -> [(Identifier, Type)] -> V.TypeDeclaration
+declRecord name es = V.TDFull
+  (V.FullTypeDeclaration
+    (name)
+    (V.TDComposite (V.CTDRecord (V.RecordTypeDefinition
+      (fmap decl es)
+      (Just name)))))
+  where
+    decl (i, t) = V.ElementDeclaration [i] t
 
 --------------------------------------------------------------------------------
 -- ** Global/Local Declarations
@@ -498,6 +520,7 @@ instance Declarative V.ProcessDeclarativeItem
   where
     translate = catMaybes . fmap tryProcess
 
+-- | Try to transform the declarative item into a process item
 tryProcess :: V.BlockDeclarativeItem -> Maybe (V.ProcessDeclarativeItem)
 tryProcess (V.BDIConstant c) = Just $ V.PDIConstant c
 tryProcess (V.BDIShared   v) = Just $ V.PDIVariable v
@@ -510,9 +533,17 @@ tryProcess _                 = Nothing
 
 deriving instance Ord Identifier
 
-instance Ord V.ComponentDeclaration
-  where
-    compare l r = compare (V.comp_identifier l) (V.comp_identifier r)
+instance Ord V.TypeDeclaration where
+  compare (V.TDFull l)    (V.TDFull r)    = compare (V.ftd_identifier l) (V.ftd_identifier r)
+  compare (V.TDPartial l) (V.TDPartial r) = compare l r
+  -- ...
+  compare (V.TDFull l)    _               = GT
+  compare (V.TDPartial l) _               = LT
 
+instance Ord V.IncompleteTypeDeclaration where
+  compare (V.IncompleteTypeDeclaration l) (V.IncompleteTypeDeclaration r) = compare l r
+
+instance Ord V.ComponentDeclaration where
+  compare l r = compare (V.comp_identifier l) (V.comp_identifier r)
 
 --------------------------------------------------------------------------------
