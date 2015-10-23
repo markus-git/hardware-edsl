@@ -88,7 +88,7 @@ instance Rep Word64 where
 -- ** Records
 
 instance (Rep a, Rep b) => Rep (a, b) where
-  width  = undefined
+  width  = Tag (unTag (width :: Tagged a Int) + unTag (width :: Tagged b Int))
   typed  = undefined
   format = undefined
 
