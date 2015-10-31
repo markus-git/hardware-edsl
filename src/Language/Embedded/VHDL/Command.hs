@@ -21,9 +21,10 @@ import qualified Language.Embedded.VHDL.Expression.Hoist as H
 
 import Control.Arrow (second)
 import Control.Monad.Identity
-import Control.Monad.Operational.Compositional
+import Control.Monad.Operational.Higher
 import Control.Applicative
 import Data.Typeable
+import Data.ALaCarte
 
 --------------------------------------------------------------------------------
 -- *
@@ -42,7 +43,7 @@ instance CompileExp exp => Interp (HeaderCMD exp) VHDL
     interp = compileHeader
 
 -- | Compile an VHDL program into a pretty printed text
-compile :: (Interp instr VHDL, MapInstr instr) => Program instr a -> String
+compile :: (Interp instr VHDL, HFunctor instr) => Program instr a -> String
 compile = show . M.prettyVHDL . interpret
 
 --------------------------------------------------------------------------------
@@ -87,12 +88,12 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> Maybe (prog ())
       -> SequentialCMD exp prog ()
     
-instance MapInstr (SequentialCMD exp)
+instance HFunctor (SequentialCMD exp)
   where
-    imap _ (Local i k e)      = Local i k e
-    imap _ (Assignment i k e) = Assignment i k e
-    imap f (If (b, t) os e)   = If (b, f t) (map (second f) os) (f e)
-    imap f (Case e cs d)      = Case e (map (second f) cs) (fmap f d)
+    hfmap _ (Local i k e)      = Local i k e
+    hfmap _ (Assignment i k e) = Assignment i k e
+    hfmap f (If (b, t) os e)   = If (b, f t) (map (second f) os) (f e)
+    hfmap f (Case e cs d)      = Case e (map (second f) cs) (fmap f d)
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
@@ -232,11 +233,11 @@ data ConcurrentCMD exp (prog :: * -> *) a
       -> [Identifier]
       -> ConcurrentCMD exp prog ()
 
-instance MapInstr (ConcurrentCMD exp)
+instance HFunctor (ConcurrentCMD exp)
   where
-    imap _ (Global  i k e)  = Global  i k e
-    imap f (Process l is p) = Process l is (f p)
-    imap _ (PortMap n is)   = PortMap n is
+    hfmap _ (Global  i k e)  = Global  i k e
+    hfmap f (Process l is p) = Process l is (f p)
+    hfmap _ (PortMap n is)   = PortMap n is
 
 type instance IExp (ConcurrentCMD e)       = e
 type instance IExp (ConcurrentCMD e :+: i) = e
@@ -308,11 +309,11 @@ data HeaderCMD exp (prog :: * -> *) a
       -> [(String, Type)]
       -> HeaderCMD exp prog a
 
-instance MapInstr (HeaderCMD exp)
+instance HFunctor (HeaderCMD exp)
   where
-    imap _ (Declare d i k m e) = Declare d i k m e
-    imap f (Architecture s p)  = Architecture s (f p)
-    imap _ (Record s es)       = Record s es
+    hfmap _ (Declare d i k m e) = Declare d i k m e
+    hfmap f (Architecture s p)  = Architecture s (f p)
+    hfmap _ (Record s es)       = Record s es
 
 type instance IExp (HeaderCMD e)       = e
 type instance IExp (HeaderCMD e :+: i) = e

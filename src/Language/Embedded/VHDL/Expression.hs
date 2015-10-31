@@ -31,7 +31,6 @@ import Data.Bits           hiding (xor)
 import Data.Dynamic
 import Data.Maybe                 (fromJust)
 import Data.Typeable
-import Data.TypePredicates hiding (sub)
 
 import Prelude hiding (not, and, or, div, mod, rem, exp, abs, null)
 import qualified Prelude as P
