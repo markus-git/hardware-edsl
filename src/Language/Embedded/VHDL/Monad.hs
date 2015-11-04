@@ -29,6 +29,7 @@ module Language.Embedded.VHDL.Monad (
   , addGeneric
   , addType
   , addComponent
+  , addDeclaration
   , addGlobal
   , addLocal
 
@@ -89,7 +90,7 @@ import qualified Prelude as P
 --------------------------------------------------------------------------------
 
 -- | ...
-data VFile = VFile (V.EntityDeclaration) [V.ArchitectureBody]
+data Entity = Entity (V.EntityDeclaration) [V.ArchitectureBody]
 
 -- | Code generation state
 data VHDLEnv = VHDLEnv
@@ -97,7 +98,8 @@ data VHDLEnv = VHDLEnv
   , _entity        :: String
 
     -- ..
-  , _parts         :: [VFile]
+  , _parts         :: [Entity]
+  , _definitions   :: Set V.TypeDeclaration
 
     -- ...
   , _types         :: Set V.TypeDeclaration
@@ -122,6 +124,7 @@ emptyVHDLEnv = VHDLEnv
   { _unique        = 0
   , _entity        = "invisible"
   , _parts         = []
+  , _definitions   = Set.empty
   , _types         = Set.empty
   , _components    = Set.empty
   , _ports         = []
@@ -160,7 +163,7 @@ runVHDL  :: VHDL a -> VHDLEnv -> (a, VHDLEnv)
 runVHDL  m = CMI.runIdentity . CMS.runStateT (unVGenT m)
 
 --------------------------------------------------------------------------------
--- ** Unique generation
+-- ** Generating uniques
 
 -- | Generates a unique integer
 freshUnique :: MonadV m => m Integer
@@ -199,6 +202,10 @@ addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
 
+-- | ...
+addDeclaration :: MonadV m => V.TypeDeclaration -> m ()
+addDeclaration d = CMS.modify $ \s -> s { _definitions = Set.insert d (_definitions s) }
+
 --------------------------------------------------------------------------------
 -- ** Item declarations
 
@@ -212,6 +219,12 @@ addLocal l = CMS.modify $ \s -> s { _local = l : (_local s) }
 
 --------------------------------------------------------------------------------
 -- ** Concurrent statements
+
+addConcurrent :: MonadV m => V.ConcurrentStatement -> m ()
+addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
+
+--------------------------------------------------------------------------------
+-- *** Process-statements
 
 -- | Runs the given action inside a process
 -- ! Due to how translate works, some local declarations might dissapear.
@@ -240,14 +253,11 @@ inProcess l is m =
 --------------------------------------------------------------------------------
 -- ** Sequential statements
 
-addConcurrent :: MonadV m => V.ConcurrentStatement -> m ()
-addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
-
 addSequential :: MonadV m => V.SequentialStatement -> m ()
 addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 
 --------------------------------------------------------------------------------
--- **
+-- *** If-statements
 
 inConditional :: MonadV m => (V.Condition, m ()) -> [(V.Condition, m ())] -> m () -> m (V.IfStatement)
 inConditional (c, m) os e =
@@ -278,7 +288,7 @@ contain m =
     return $ new
 
 --------------------------------------------------------------------------------
--- **
+-- *** Case-statements
 
 inCase :: MonadV m => V.Expression -> [(V.Choices, m ())] -> m (V.CaseStatement)
 inCase e choices =
@@ -294,7 +304,7 @@ inCase e choices =
          (zipWith V.CaseStatementAlternative cs ns')
 
 --------------------------------------------------------------------------------
--- **
+-- ** Creating architectures
 
 addArchitecture :: MonadV m => V.ArchitectureBody -> m ()
 addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures s)}
@@ -330,10 +340,10 @@ inArchitecture name m =
      return a
 
 --------------------------------------------------------------------------------
--- **
+-- ** Creating sub-entities
 
-addPart  :: MonadV m => VFile -> m ()
-addPart v = CMS.modify $ \s -> s { _parts = v : (_parts s) }
+addEntity  :: MonadV m => Entity -> m ()
+addEntity v = CMS.modify $ \s -> s { _parts = v : (_parts s) }
 
 inEntity :: MonadV m => String -> m a -> m a
 inEntity name m =
@@ -358,7 +368,7 @@ inEntity name m =
                           , _generics      = oldGenerics
                           , _architectures = oldArchitectures
                           }
-     addPart $ VFile
+     addEntity $ Entity
        (V.EntityDeclaration
          (V.Ident name)
          (V.EntityHeader
@@ -384,20 +394,20 @@ prettyVHDLT :: Monad m => VHDLT m a -> m Doc
 prettyVHDLT m = prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDLEnv
 
 prettyVEnv  :: VHDLEnv -> Doc
-prettyVEnv (VHDLEnv _ _ parts types _ _ _ _ _ _ _ _) =
-    stack $ (genPackage "types" $ Set.toList types) : (fmap prettyPart parts)
+prettyVEnv env = stack $
+    (genPackage "types" $ Set.toList (_types env)) : (fmap pretty (_parts env))
   where
     stack :: [Doc] -> Doc
     stack = foldr1 ($+$)
     
-    prettyPart :: VFile -> Doc
-    prettyPart (VFile e as) = stack (V.pp e : fmap V.pp as)
+    pretty :: Entity -> Doc
+    pretty (Entity e as) = stack (V.pp e : fmap V.pp as)
 
 --------------------------------------------------------------------------------
 
 genPackage :: String -> [V.TypeDeclaration] -> Doc
 genPackage name = V.pp . V.PackageDeclaration (V.Ident name) . fmap V.PHDIType
-    
+
 --------------------------------------------------------------------------------
 -- * Common things
 --------------------------------------------------------------------------------
@@ -540,6 +550,8 @@ tryProcess _                 = Nothing
 
 deriving instance Ord Identifier
 
+--------------------------------------------------------------------------------
+
 instance Ord V.TypeDeclaration where
   compare (V.TDFull l)    (V.TDFull r)    = compare (V.ftd_identifier l) (V.ftd_identifier r)
   compare (V.TDPartial l) (V.TDPartial r) = compare l r
@@ -547,8 +559,7 @@ instance Ord V.TypeDeclaration where
   compare (V.TDFull l)    _               = GT
   compare (V.TDPartial l) _               = LT
 
-instance Ord V.IncompleteTypeDeclaration where
-  compare (V.IncompleteTypeDeclaration l) (V.IncompleteTypeDeclaration r) = compare l r
+deriving instance Ord V.IncompleteTypeDeclaration
 
 instance Ord V.ComponentDeclaration where
   compare l r = compare (V.comp_identifier l) (V.comp_identifier r)
