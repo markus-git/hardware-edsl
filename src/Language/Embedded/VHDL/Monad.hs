@@ -302,7 +302,7 @@ inCase e choices =
 addArchitecture :: MonadV m => V.ArchitectureBody -> m ()
 addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures s)}
 
-inArchitecture :: MonadV m => String -> m a -> m a
+inArchitecture :: MonadV m => Identifier -> m a -> m a
 inArchitecture name m =
   do oldEntity     <- CMS.gets _entity
      oldComponent  <- CMS.gets _components
@@ -325,8 +325,7 @@ inArchitecture name m =
                           , _concurrent = oldConcurrent
                           }
 
-     addArchitecture $ V.ArchitectureBody
-       (V.Ident name)
+     addArchitecture $ V.ArchitectureBody name
        (V.NSimple (V.Ident oldEntity))
        (merge $ newGlobal ++ newLocal)
        (newConcurrent)

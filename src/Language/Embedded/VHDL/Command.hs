@@ -288,6 +288,8 @@ compileConcurrent (PortMap n is) =
 
 data DeclKind = Port | Generic
 
+data Record a = Record String
+
 data HeaderCMD exp (prog :: * -> *) a
   where
     Declare
@@ -299,21 +301,20 @@ data HeaderCMD exp (prog :: * -> *) a
       -> Maybe (exp a)
       -> HeaderCMD exp prog Identifier
 
-    Architecture
-      :: String
-      -> prog a
-      -> HeaderCMD exp prog a
+    DeclareRecord
+      :: [(Identifier, Type)]
+      -> HeaderCMD exp prog (Record a)
 
-    Record
-      :: String
-      -> [(String, Type)]
+    Architecture
+      :: Identifier
+      -> prog a
       -> HeaderCMD exp prog a
 
 instance HFunctor (HeaderCMD exp)
   where
     hfmap _ (Declare d i k m e) = Declare d i k m e
+    hfmap _ (DeclareRecord ts)  = DeclareRecord ts
     hfmap f (Architecture s p)  = Architecture s (f p)
-    hfmap _ (Record s es)       = Record s es
 
 type instance IExp (HeaderCMD e)       = e
 type instance IExp (HeaderCMD e :+: i) = e
@@ -358,7 +359,7 @@ architecture
   => String
   -> ProgramT instr m a
   -> ProgramT instr m a
-architecture name = singleE . Architecture name
+architecture name = singleE . Architecture (Ident name)
 
 --------------------------------------------------------------------------------
 
@@ -379,9 +380,9 @@ compileHeader (Declare Generic i k m e) =
        T.Signal   -> M.interfaceSignal   i m t v
        T.Variable -> M.interfaceVariable i m t v
      return i
+compileHeader (DeclareRecord es) =
+  do undefined
 compileHeader (Architecture name prg) =
   do M.inArchitecture name prg
-compileHeader (Record name es) =
-  do undefined
 
 --------------------------------------------------------------------------------
