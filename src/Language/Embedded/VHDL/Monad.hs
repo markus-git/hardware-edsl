@@ -29,7 +29,6 @@ module Language.Embedded.VHDL.Monad (
   , addGeneric
   , addType
   , addComponent
-  , addDeclaration
   , addGlobal
   , addLocal
 
@@ -99,7 +98,6 @@ data VHDLEnv = VHDLEnv
 
     -- ..
   , _parts         :: [Entity]
-  , _definitions   :: Set V.TypeDeclaration
 
     -- ...
   , _types         :: Set V.TypeDeclaration
@@ -124,7 +122,6 @@ emptyVHDLEnv = VHDLEnv
   { _unique        = 0
   , _entity        = "invisible"
   , _parts         = []
-  , _definitions   = Set.empty
   , _types         = Set.empty
   , _components    = Set.empty
   , _ports         = []
@@ -201,10 +198,6 @@ addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
 -- | Adds a component declaration to the architecture
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
-
--- | ...
-addDeclaration :: MonadV m => V.TypeDeclaration -> m ()
-addDeclaration d = CMS.modify $ \s -> s { _definitions = Set.insert d (_definitions s) }
 
 --------------------------------------------------------------------------------
 -- ** Item declarations
