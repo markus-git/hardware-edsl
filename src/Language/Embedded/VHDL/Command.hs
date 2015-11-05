@@ -77,7 +77,7 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
 
     If
       :: (exp Bool, prog ())     -- if
-      -> [(exp Bool,  prog ())]  -- elseif*
+      -> [(exp Bool,  prog ())]  -- elseif
       -> prog ()                 -- else
       -> SequentialCMD exp prog ()
 
@@ -302,7 +302,8 @@ data HeaderCMD exp (prog :: * -> *) a
       -> HeaderCMD exp prog Identifier
 
     DeclareRecord
-      :: [(Identifier, Type)]
+      :: (Identifier, Type)
+      -> (Identifier, Type)
       -> HeaderCMD exp prog (Record a)
 
     Architecture
@@ -313,7 +314,7 @@ data HeaderCMD exp (prog :: * -> *) a
 instance HFunctor (HeaderCMD exp)
   where
     hfmap _ (Declare d i k m e) = Declare d i k m e
-    hfmap _ (DeclareRecord ts)  = DeclareRecord ts
+    hfmap _ (DeclareRecord f s) = DeclareRecord f s
     hfmap f (Architecture s p)  = Architecture s (f p)
 
 type instance IExp (HeaderCMD e)       = e
@@ -380,7 +381,7 @@ compileHeader (Declare Generic i k m e) =
        T.Signal   -> M.interfaceSignal   i m t v
        T.Variable -> M.interfaceVariable i m t v
      return i
-compileHeader (DeclareRecord es) =
+compileHeader (DeclareRecord f s) =
   do undefined
 compileHeader (Architecture name prg) =
   do M.inArchitecture name prg

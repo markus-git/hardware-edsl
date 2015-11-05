@@ -45,10 +45,13 @@ data Expr a
     Val :: Rep a => a          -> Expr a
     Var :: Rep a => Identifier -> Expr a
 
-    -- ^ ...
+    -- ^ VHDL Records
     Pair :: Expr a -> Expr b -> Expr (a, b)
     Fst  :: Expr (a, b) -> Expr a
     Snd  :: Expr (a, b) -> Expr b
+
+    -- ^ VHDL Arrays
+    -- ...
 
     -- ^ VHDL Expressions
     
@@ -120,10 +123,18 @@ instance (Syntactic a, Syntactic b) => Syntactic (a, b)
     sugar   (a, b) = Pair (sugar a) (sugar b)
     desugar p      = (desugar (Fst p), desugar (Snd p))
 
--- ...
-
 --------------------------------------------------------------------------------
 -- ** Useful Expr Instances
+
+instance (Rep a, Eq a) => Eq (Expr a)
+  where
+    (==) = error "equality checking not supported"
+
+instance (Rep a, Ord a) => Ord (Expr a)
+  where
+    compare = error "compare not supported"
+    max     = error "max not supported"
+    min     = error "min not supported"
 
 instance (Rep a, Bounded a) => Bounded (Expr a)
   where
@@ -135,6 +146,10 @@ instance (Rep a, Enum a) => Enum (Expr a) -- needed for integral
     toEnum   = error "toEnum not supported"
     fromEnum = error "fromEnum not supported"
 
+instance (Rep a, Real a) => Real (Expr a) -- needed for integral
+  where
+    toRational = error "toRational not supported"
+
 instance (Rep a, Num a) => Num (Expr a)
   where
     fromInteger  = Val . fromInteger
@@ -143,6 +158,22 @@ instance (Rep a, Num a) => Num (Expr a)
     (*)          = Mul
     abs          = Abs
     signum       = error "signum not implemented for Expr"
+
+instance (Rep a, Integral a) => Integral (Expr a)
+  where
+    quot      = error "quotient not supported"
+    rem       = Rem
+    div       = Div
+    mod       = Mod
+    quotRem a b = (quot a b, rem a b)
+    divMod  a b = (div  a b, mod a b)
+    toInteger = error "toInteger not supported"
+
+instance (Rep a, Fractional a) => Fractional (Expr a)
+  where
+    (/)   = Dif
+    recip = Dif (Val 1)
+    fromRational = error "fromRational not supported"
 
 --------------------------------------------------------------------------------
 -- * User interface
@@ -198,7 +229,7 @@ cat = Cat
 -- ** Multiplying operators
 
 mul           :: (Num a, Rep a) => Expr a -> Expr a -> Expr a
-div, mod, rem :: Integral a => Expr a -> Expr a -> Expr a
+div, mod, rem :: Integral a     => Expr a -> Expr a -> Expr a
 
 mod = Mod
 rem = Rem
