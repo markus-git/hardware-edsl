@@ -268,6 +268,12 @@ compileE = return . lift . go
       Var (Ident i) -> P $ M.name i
       Val v         -> P $ M.string $ format v
 
+      -- ^ Tuples
+      Pair l r -> P $ M.aggregate [(Nothing, lift (go l)), (Nothing, lift (go r))]
+      Fst  p   -> P $ M.selected undefined undefined
+      Snd  p   -> P $ M.selected undefined undefined
+
+      -- ^ VHDL constructs
       And  x y -> E $ M.and  [lift (go x),  lift (go y)]
       Or   x y -> E $ M.or   [lift (go x),  lift (go y)]
       Xor  x y -> E $ M.xor  [lift (go x),  lift (go y)]

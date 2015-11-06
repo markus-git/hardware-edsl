@@ -160,7 +160,7 @@ ifThen
   -> ProgramT instr m ()
   -> ProgramT instr m ()
 ifThen b th el = singleE $ If (b, th) [] el
-  
+
 --------------------------------------------------------------------------------
 
 compileSequential :: CompileExp exp => SequentialCMD exp VHDL a -> VHDL a
@@ -245,7 +245,7 @@ type instance IExp (ConcurrentCMD e :+: i) = e
 --------------------------------------------------------------------------------
 
 -- | Declare global constands/variables/files
-constantG, signalG, variableG, fileG 
+constantG, signalG, variableG, fileG
   :: (ConcurrentCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
   => Identifier
   -> Maybe (IExp instr a)

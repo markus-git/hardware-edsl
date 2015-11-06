@@ -597,11 +597,23 @@ deriving instance Ord V.Identifier
 instance Ord V.Name
   where
     compare (V.NSimple a) (V.NSimple x) = compare a x
+    compare (V.NSelect a) (V.NSelect x) = compare a x
     compare (V.NIndex  a) (V.NIndex  x) = compare a x
     compare (V.NSlice  a) (V.NSlice  x) = compare a x
     compare (V.NAttr   a) (V.NAttr   x) = compare a x
 
 deriving instance Ord V.StringLiteral
+
+deriving instance Ord V.SelectedName
+
+instance Ord V.Suffix
+  where
+    compare (V.SSimple a) (V.SSimple x) = compare a x
+    compare (V.SChar   a) (V.SChar   x) = compare a x
+    compare (V.SAll)      (V.SAll)      = EQ
+    compare _ _ = error "Ord not supported for operator symbols"
+
+deriving instance Ord V.CharacterLiteral
 
 deriving instance Ord V.IndexedName
 

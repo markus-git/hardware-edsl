@@ -87,7 +87,7 @@ not = FacNot
 --------------------------------------------------------------------------------
 -- ** Primaries
 --
--- ! These are a bit simplified..
+-- Meh..
 
 name, string, lit :: String -> Primary
 name   = PrimName . NSimple . Ident
@@ -96,5 +96,15 @@ lit    = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . I
 
 null :: Primary
 null = PrimLit LitNull
+
+--------------------------------------------------------------------------------
+-- * Record things
+--------------------------------------------------------------------------------
+
+aggregate :: [(Maybe Choices, Expression)] -> Primary
+aggregate es = PrimAgg $ Aggregate $ map (uncurry ElementAssociation) es
+
+selected  :: Identifier -> Identifier -> Primary
+selected p s = PrimName $ NSelect $ SelectedName (PName $ NSimple p) (SSimple s)
 
 --------------------------------------------------------------------------------
