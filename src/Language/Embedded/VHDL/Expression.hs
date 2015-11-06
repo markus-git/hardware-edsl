@@ -6,6 +6,7 @@
 
 module Language.Embedded.VHDL.Expression
   ( Expr
+  , pair, first, second
   , not, and, or, xor, xnor, nand, nor
   , eq, neq
   , lt, lte, gt, gte
@@ -21,16 +22,14 @@ module Language.Embedded.VHDL.Expression
 import Language.VHDL (Identifier(..), Expression)
 
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Monad             (VHDL)
+import Language.Embedded.VHDL.Monad             (VHDL, TypeRep(..))
 import Language.Embedded.VHDL.Expression.Hoist
 import Language.Embedded.VHDL.Expression.Format
 import Language.Embedded.VHDL.Expression.Type hiding (Kind)
 import qualified Language.Embedded.VHDL.Monad as M
 
-import Data.Bits           hiding (xor)
-import Data.Dynamic
-import Data.Maybe                 (fromJust)
-import Data.Typeable
+import Data.Bits      hiding (xor)
+import Data.Maybe     (fromJust)
 
 import Prelude hiding (not, and, or, div, mod, rem, exp, abs, null)
 import qualified Prelude as P
@@ -100,30 +99,6 @@ data Expr a
 type instance PredicateExp Expr = Rep
 
 --------------------------------------------------------------------------------
--- ** Sugared constructs
-
-class Rep (Internal a) => Syntactic a
-  where
-    type Internal a
-
-    sugar   :: a -> Expr (Internal a)
-    desugar :: Expr (Internal a) -> a
-
-instance Rep a => Syntactic (Expr a)
-  where
-    type Internal (Expr a) = a
-
-    sugar   = id
-    desugar = id
-
-instance (Syntactic a, Syntactic b) => Syntactic (a, b)
-  where
-    type Internal (a, b) = (Internal a, Internal b)
-
-    sugar   (a, b) = Pair (sugar a) (sugar b)
-    desugar p      = (desugar (Fst p), desugar (Snd p))
-
---------------------------------------------------------------------------------
 -- ** Useful Expr Instances
 
 instance (Rep a, Eq a) => Eq (Expr a)
@@ -178,6 +153,15 @@ instance (Rep a, Fractional a) => Fractional (Expr a)
 --------------------------------------------------------------------------------
 -- * User interface
 --------------------------------------------------------------------------------
+
+pair :: Expr a -> Expr b -> Expr (a, b)
+pair = Pair
+
+first :: Expr (a, b) -> Expr a
+first = Fst
+
+second :: Expr (a, b) -> Expr b
+second = Snd
 
 --------------------------------------------------------------------------------
 -- ** Logical operators
@@ -274,7 +258,7 @@ instance CompileExp Expr
     compE = compileE
 
 compileT :: forall a. Rep a => Expr a -> VHDL Type
-compileT _ = return $ unTag $ (typed :: Tagged a Type)
+compileT _ = M.addType $ unTag $ (typed :: Tagged a TypeRep)
 
 compileE :: Expr a -> VHDL Expression
 compileE = return . lift . go
@@ -312,6 +296,7 @@ compileE = return . lift . go
 
       Mul  x y -> P $ resize (unTag (width :: Tagged a Int))
                     $ M.mul  [lift (go x), lift (go y)]
+      Dif  x y -> error "compilation of floating point division is not yet supported"
       Div  x y -> T $ M.div  [lift (go x), lift (go y)]
       Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
       Rem  x y -> T $ M.rem  [lift (go x), lift (go y)]
@@ -319,9 +304,6 @@ compileE = return . lift . go
       Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
       Abs  x   -> F $ M.abs  (lift (go x))
       Not  x   -> F $ M.not  (lift (go x))
-
-      -- todo ...
-      Dif  x y -> error "compilation of floating point division is not yet supported"
 
 --------------------------------------------------------------------------------
 -- * Evaluation of Expressions
