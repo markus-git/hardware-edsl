@@ -10,7 +10,9 @@ module Language.Embedded.VHDL.Monad (
   , VHDLT
   , VHDLEnv
   , emptyVHDLEnv
-    
+
+  , TypeRep(..)
+
     -- ^ run
   , runVHDLT
   , runVHDL
@@ -31,6 +33,7 @@ module Language.Embedded.VHDL.Monad (
   , addComponent
   , addGlobal
   , addLocal
+  , containsType
 
     -- ^ statements
   , addConcurrent
@@ -78,6 +81,8 @@ import Data.Functor
 import Data.List        (groupBy)
 import Data.Set         (Set)
 import qualified Data.Set as Set
+import Data.Map         (Map)
+import qualified Data.Map as Map
 
 import Text.PrettyPrint (Doc, ($+$))
 
@@ -91,6 +96,12 @@ import qualified Prelude as P
 -- | ...
 data Entity = Entity (V.EntityDeclaration) [V.ArchitectureBody]
 
+-- | ...
+data TypeRep
+    = Prim       Type
+    | Composite [TypeRep]
+  deriving (Eq, Ord)
+
 -- | Code generation state
 data VHDLEnv = VHDLEnv
   { _unique        :: !Integer
@@ -100,7 +111,7 @@ data VHDLEnv = VHDLEnv
   , _parts         :: [Entity]
 
     -- ...
-  , _types         :: Set V.TypeDeclaration
+  , _types         :: Map TypeRep V.TypeDeclaration
   , _components    :: Set V.ComponentDeclaration
 
     -- headers
@@ -122,7 +133,7 @@ emptyVHDLEnv = VHDLEnv
   { _unique        = 0
   , _entity        = "invisible"
   , _parts         = []
-  , _types         = Set.empty
+  , _types         = Map.empty
   , _components    = Set.empty
   , _ports         = []
   , _generics      = []
@@ -189,11 +200,52 @@ addGeneric :: MonadV m => V.InterfaceDeclaration -> m ()
 addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 
 --------------------------------------------------------------------------------
--- ** Component declarations
+-- ** Type declarations
 
 -- | ...
-addType :: MonadV m => V.TypeDeclaration -> m ()
-addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
+addType :: MonadV m => TypeRep -> m Type
+addType   (Prim t)      = return t
+addType r@(Composite _) = do
+    exists <- containsType r
+    case exists of
+      Just i  ->
+        return $ fromName i
+      Nothing -> do
+        d <- define r
+        CMS.modify $ \s -> s { _types = Map.insert r d (_types s) }
+        return $ fromName $ nameOf d
+  where
+    -- As a composite type may consist of other composite types
+    -- we need to go through and define all of them.
+    define :: MonadV m => TypeRep -> m V.TypeDeclaration
+    define (Composite ts) = do
+      let members = map (Ident . ("member" ++) . show) [1 .. length ts]
+      types <- flatten ts
+      name  <- newLabel
+      return $ declRecord name (zip members types)
+
+    -- recursively call addType to declare sub-types
+    flatten :: MonadV m => [TypeRep] -> m [Type]
+    flatten = mapM addType
+
+-- | ...
+containsType :: MonadV m => TypeRep -> m (Maybe Identifier)
+containsType tr = fmap nameOf <$> CMS.gets (Map.lookup tr . _types)
+
+-- | ...
+nameOf :: V.TypeDeclaration -> Identifier
+nameOf (V.TDFull    (V.FullTypeDeclaration i _))     = i
+nameOf (V.TDPartial (V.IncompleteTypeDeclaration i)) = i
+
+-- | ...
+--
+-- *** I dont know what happens when you try to put a range on records, is it
+--     even possible?
+fromName :: Identifier -> Type
+fromName i = V.SubtypeIndication Nothing (V.TMType undefined) Nothing
+
+--------------------------------------------------------------------------------
+-- ** ...
 
 -- | Adds a component declaration to the architecture
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
@@ -387,7 +439,7 @@ prettyVHDLT m = prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDL
 
 prettyVEnv  :: VHDLEnv -> Doc
 prettyVEnv env = stack $
-    (genPackage "types" $ Set.toList (_types env)) : (fmap pretty (_parts env))
+    (genPackage "types" $ Map.elems (_types env)) : (fmap pretty (_parts env))
   where
     stack :: [Doc] -> Doc
     stack = foldr1 ($+$)
@@ -537,23 +589,112 @@ tryProcess (V.BDIFile     f) = Just $ V.PDIFile     f
 tryProcess _                 = Nothing
 
 --------------------------------------------------------------------------------
--- Ord instance for use in Set
+-- Ord instance for use in sets *** this is probably a really bad idea
 --------------------------------------------------------------------------------
 
-deriving instance Ord Identifier
+deriving instance Ord V.Identifier
+
+instance Ord V.Name
+  where
+    compare (V.NSimple a) (V.NSimple x) = compare a x
+    compare (V.NIndex  a) (V.NIndex  x) = compare a x
+    compare (V.NSlice  a) (V.NSlice  x) = compare a x
+    compare (V.NAttr   a) (V.NAttr   x) = compare a x
+
+deriving instance Ord V.StringLiteral
+
+deriving instance Ord V.IndexedName
+
+deriving instance Ord V.SliceName
+
+deriving instance Ord V.DiscreteRange
+
+instance Ord V.Prefix
+  where
+    compare (V.PName a) (V.PName x) = compare a x
+    compare _ _ = error "Ord not supported for function names"
+
+deriving instance Ord V.AttributeName
+
+deriving instance Ord V.Signature
 
 --------------------------------------------------------------------------------
 
-instance Ord V.TypeDeclaration where
-  compare (V.TDFull l)    (V.TDFull r)    = compare (V.ftd_identifier l) (V.ftd_identifier r)
-  compare (V.TDPartial l) (V.TDPartial r) = compare l r
-  -- ...
-  compare (V.TDFull l)    _               = GT
-  compare (V.TDPartial l) _               = LT
+instance Ord V.TypeDeclaration 
+  where
+    compare (V.TDFull l)    (V.TDFull r)    = compare (V.ftd_identifier l) (V.ftd_identifier r)
+    compare (V.TDPartial l) (V.TDPartial r) = compare l r
+    compare (V.TDFull l)    _               = GT
+    compare (V.TDPartial l) _               = LT
 
 deriving instance Ord V.IncompleteTypeDeclaration
 
-instance Ord V.ComponentDeclaration where
-  compare l r = compare (V.comp_identifier l) (V.comp_identifier r)
+instance Ord V.ComponentDeclaration
+  where
+    compare l r = compare (V.comp_identifier l) (V.comp_identifier r)
+
+--------------------------------------------------------------------------------
+
+deriving instance Ord V.SubtypeIndication
+
+deriving instance Ord V.TypeMark
+
+instance Ord V.Constraint
+  where
+    compare (V.CRange a) (V.CRange b) = compare a b
+    compare _ _ = error "Ord not supported for index constraints"
+
+deriving instance Ord V.RangeConstraint
+
+instance Ord V.Range
+  where
+    compare (V.RSimple a b c) (V.RSimple x y z) =
+      case compare a x of
+        GT -> GT
+        LT -> LT
+        EQ -> case compare b y of
+          GT -> GT
+          LT -> LT
+          EQ -> case compare c z of
+            GT -> GT
+            LT -> LT
+            EQ -> EQ
+    compare _ _ = error "Ord not supported for attribute ranges"
+
+deriving instance Ord V.Direction
+
+--------------------------------------------------------------------------------
+
+deriving instance Ord V.Expression
+
+deriving instance Ord V.Relation
+
+deriving instance Ord V.ShiftExpression
+
+deriving instance Ord V.SimpleExpression
+
+deriving instance Ord V.Term
+
+deriving instance Ord V.Factor
+
+instance Ord V.Primary
+  where
+    compare (V.PrimName a) (V.PrimName x) = compare a x
+
+--------------------------------------------------------------------------------
+
+deriving instance Ord V.LogicalOperator
+
+deriving instance Ord V.RelationalOperator
+
+deriving instance Ord V.ShiftOperator
+
+deriving instance Ord V.AddingOperator
+
+deriving instance Ord V.Sign
+
+deriving instance Ord V.MultiplyingOperator
+
+deriving instance Ord V.MiscellaneousOperator
 
 --------------------------------------------------------------------------------

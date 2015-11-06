@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 
 module Language.Embedded.VHDL.Expression.Format
   ( Tagged(..)
@@ -6,6 +7,7 @@ module Language.Embedded.VHDL.Expression.Format
   ) where
 
 import Language.Embedded.VHDL.Expression.Type
+import Language.Embedded.VHDL.Monad (TypeRep(..))
 
 import Data.Bits
 import Data.Char   (intToDigit)
@@ -26,7 +28,7 @@ newtype Tagged s b = Tag { unTag :: b }
 class Rep a
   where
     width  :: Tagged a Int
-    typed  :: Tagged a Type
+    typed  :: Tagged a TypeRep
     format :: a -> String
 
 --------------------------------------------------------------------------------
@@ -34,7 +36,7 @@ class Rep a
 
 instance Rep Bool where
   width        = Tag 1
-  typed        = Tag std_logic
+  typed        = Tag $ Prim std_logic
   format True  = "1"
   format False = "0"
 
@@ -43,22 +45,22 @@ instance Rep Bool where
 
 instance Rep Int8 where
   width  = Tag 8
-  typed  = Tag signed8
+  typed  = Tag $ Prim signed8
   format = convert
 
 instance Rep Int16 where
   width  = Tag 16
-  typed  = Tag signed16
+  typed  = Tag $ Prim signed16
   format = convert
 
 instance Rep Int32 where
   width  = Tag 32
-  typed  = Tag signed32
+  typed  = Tag $ Prim signed32
   format = convert
 
 instance Rep Int64 where
   width  = Tag 64
-  typed  = Tag signed64
+  typed  = Tag $ Prim signed64
   format = convert
 
 --------------------------------------------------------------------------------
@@ -66,31 +68,39 @@ instance Rep Int64 where
 
 instance Rep Word8 where
   width  = Tag 8
-  typed  = Tag usigned8
+  typed  = Tag $ Prim usigned8
   format = convert
 
 instance Rep Word16 where
   width  = Tag 16
-  typed  = Tag usigned16
+  typed  = Tag $ Prim usigned16
   format = convert
 
 instance Rep Word32 where
   width  = Tag 32
-  typed  = Tag usigned32
+  typed  = Tag $ Prim usigned32
   format = convert
 
 instance Rep Word64 where
   width  = Tag 64
-  typed  = Tag usigned64
+  typed  = Tag $ Prim usigned64
   format = convert
 
 --------------------------------------------------------------------------------
 -- ** Records
 
 instance (Rep a, Rep b) => Rep (a, b) where
-  width  = Tag (unTag (width :: Tagged a Int) + unTag (width :: Tagged b Int))
-  typed  = undefined
+  width  = Tag $ sum       [ unTag (width :: Tagged a Int), unTag (width :: Tagged b Int)]
+  typed  = Tag $ Composite [ unTag (typed :: Tagged a TypeRep), unTag (typed :: Tagged b TypeRep)]
   format = undefined
+
+instance (Rep a, Rep b, Rep c) => Rep (a, b, c) where
+  width  = Tag $ sum       [ unTag (width :: Tagged a Int), unTag (width :: Tagged b Int), unTag (width :: Tagged c Int)]
+  typed  = Tag $ Composite [ unTag (typed :: Tagged a TypeRep), unTag (typed :: Tagged b TypeRep) , unTag (typed :: Tagged c TypeRep)]
+  format = undefined
+
+--------------------------------------------------------------------------------
+-- ** Arrays
 
 -- ...
 

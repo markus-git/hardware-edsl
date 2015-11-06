@@ -44,7 +44,7 @@ arith typ range = SubtypeIndication Nothing
 signed, usigned :: Int -> Type
 signed  = arith "signed"
 usigned = arith "unsigned"
-  
+
 signed8, signed16, signed32, signed64 :: Type
 signed8  = signed 8
 signed16 = signed 16
