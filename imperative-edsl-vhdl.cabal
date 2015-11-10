@@ -42,6 +42,7 @@ library
                        bytestring,
                        constraints,
                        containers           >=0.1 && <1,
+                       syntactic            >=2.1,
                        operational-alacarte >=0.1.1,
                        language-vhdl        >=0.1.1.0,
                        pretty               >=1.0
