@@ -34,7 +34,8 @@ import Language.Embedded.VHDL.Expression.Hoist
 import Language.Embedded.VHDL.Expression.Format
 import qualified Language.Embedded.VHDL.Expression.Type as T
 
-import Data.Bits     ()
+import Data.Bits     (Bits)
+import qualified Data.Bits as Bits
 import Data.Maybe    (fromJust)
 import Data.Typeable (Typeable)
 import Data.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
@@ -97,6 +98,53 @@ instance EvalEnv Expression env
 
 --------------------------------------------------------------------------------
 -- ** ...
+
+data Relational sig
+  where
+    Eq   :: Type a => Relational (a :-> a :-> Full Bool)
+    Neq  :: Type a => Relational (a :-> a :-> Full Bool)
+    Lt   :: Type a => Relational (a :-> a :-> Full Bool)
+    Lte  :: Type a => Relational (a :-> a :-> Full Bool)
+    Gt   :: Type a => Relational (a :-> a :-> Full Bool)
+    Gte  :: Type a => Relational (a :-> a :-> Full Bool)
+
+interpretationInstances ''Relational
+
+instance Symbol Relational
+  where
+    symSig Eq  = signature
+    symSig Neq = signature
+    symSig Lt  = signature
+    symSig Lte = signature
+    symSig Gt  = signature
+    symSig Gte = signature
+
+instance Render Relational
+  where
+    renderSym Eq  = "(==)"
+    renderSym Neq = "(/=)"
+    renderSym Lt  = "(<)"
+    renderSym Lte = "(<=)"
+    renderSym Gt  = "(>)"
+    renderSym Gte = "(>=)"
+
+instance Eval Relational
+  where
+    evalSym Eq  = (==)
+    evalSym Neq = (/=)
+    evalSym Lt  = (<)
+    evalSym Lte = (<=)
+    evalSym Gt  = (>)
+    evalSym Gte = (>=)
+
+instance EvalEnv Relational env
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+
+--------------------------------------------------------------------------------
+
 
 {-
 data Expr a
