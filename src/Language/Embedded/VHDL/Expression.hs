@@ -264,46 +264,39 @@ instance Eval Term
 instance EvalEnv Term env
 
 --------------------------------------------------------------------------------
+-- ** ...
 
-{-
-data Expr a
+data Factor sig
   where
-    -- ^ ...
-    Val :: Rep a => a          -> Expr a
-    Var :: Rep a => Identifier -> Expr a
+    Exp :: (Type a, Num a, Type b, Integral b) => Factor (a :-> b :-> Full a)
+    Abs :: (Type a, Num a) => Factor (a :-> Full a)
+    Not :: Factor (Bool :-> Full Bool)
 
-    -- ^ VHDL Records
-    Pair :: Expr a -> Expr b -> Expr (a, b)
-    Fst  :: Expr (a, b) -> Expr a
-    Snd  :: Expr (a, b) -> Expr b
+interpretationInstances ''Factor
 
-    -- ^ VHDL Arrays
-    -- ...
+instance Symbol Factor
+  where
+    symSig Exp = signature
+    symSig Abs = signature
+    symSig Not = signature
 
-    -- ^ VHDL Expressions
-    
-    -- expression operators (plus Not)
-    Not  :: Expr Bool -> Expr Bool
+instance Render Factor
+  where
+    renderSym Exp = "(**)"
+    renderSym Abs = "abs"
+    renderSym Not = "not"
 
-    -- adding operators
-    Neg  :: Num a => Expr a -> Expr a
-    Add  :: Num a => Expr a -> Expr a -> Expr a
-    Sub  :: Num a => Expr a -> Expr a -> Expr a
-    Cat  :: Num a => Expr a -> Expr a -> Expr a
+instance Eval Factor
+  where
+    evalSym Exp = (^)
+    evalSym Abs = abs
+    evalSym Not = not
 
-    -- multiplying operators
-    Mul  :: (Rep a, Num a) => Expr a -> Expr a -> Expr a
-    Dif  :: Fractional a   => Expr a -> Expr a -> Expr a -- floating point division
-    Div  :: Integral a     => Expr a -> Expr a -> Expr a -- integer division
-    Mod  :: Integral a     => Expr a -> Expr a -> Expr a
-    Rem  :: Integral a     => Expr a -> Expr a -> Expr a
+instance EvalEnv Factor env
 
-    -- misc. operators (minus Not)
-    Exp  :: Floating a => Expr a -> Expr a -> Expr a
-    Abs  :: Num a      => Expr a -> Expr a
+--------------------------------------------------------------------------------
 
-type instance PredicateExp Expr = Rep
--}
+--type instance PredicateExp Expr = Rep
 
 --------------------------------------------------------------------------------
 -- ** Useful Expr Instances
