@@ -303,6 +303,7 @@ instance EvalEnv Factor env
 type VHDLDomain = Typed
   (   BindingT
   :+: Let
+  :+: Tuple
   :+: Expression
   :+: Relational
   :+: Shift
