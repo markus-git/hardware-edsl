@@ -1,10 +1,15 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TemplateHaskell       #-}
 
-module Language.Embedded.VHDL.Expression
+module Language.Embedded.VHDL.Expression where
+{-
   ( Expr
   , pair, first, second
   , not, and, or, xor, xnor, nand, nor
@@ -17,27 +22,83 @@ module Language.Embedded.VHDL.Expression
   , neg
   , exp, abs
   , name, lit
-  ) where
+  ) 
+-}
 
-import Language.VHDL (Identifier(..), Expression)
+import Language.VHDL (Identifier(..))
 
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Monad             (VHDL, TypeRep(..))
+import Language.Embedded.VHDL.Monad           (VHDL, TypeRep(..))
+import qualified Language.Embedded.VHDL.Monad as M
 import Language.Embedded.VHDL.Expression.Hoist
 import Language.Embedded.VHDL.Expression.Format
-import Language.Embedded.VHDL.Expression.Type hiding (Kind)
-import qualified Language.Embedded.VHDL.Monad as M
+import qualified Language.Embedded.VHDL.Expression.Type as T
 
-import Data.Bits      hiding (xor)
-import Data.Maybe     (fromJust)
+import Data.Bits     ()
+import Data.Maybe    (fromJust)
+import Data.Typeable (Typeable)
+import Data.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
+import qualified Data.Syntactic as Syntactic
+import Data.Syntactic.Functional
+import Data.Syntactic.Sugar.BindingT ()
 
-import Prelude hiding (not, and, or, div, mod, rem, exp, abs, null)
-import qualified Prelude as P
+import Prelude hiding (and, or)
+import qualified Prelude
 
 --------------------------------------------------------------------------------
--- * VHDL Expression Type - a union of VHDLs' types + variables
+-- * ...
 --------------------------------------------------------------------------------
 
+class    (Typeable a, Rep a, Eq a, Ord a) => Type a
+instance (Typeable a, Rep a, Eq a, Ord a) => Type a
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+data Expression sig
+  where
+    And  :: Expression (Bool :-> Bool :-> Full Bool)
+    Or   :: Expression (Bool :-> Bool :-> Full Bool)
+    Xor  :: Expression (Bool :-> Bool :-> Full Bool)
+    Xnor :: Expression (Bool :-> Bool :-> Full Bool)
+    Nand :: Expression (Bool :-> Bool :-> Full Bool)
+    Nor  :: Expression (Bool :-> Bool :-> Full Bool)
+
+interpretationInstances ''Expression
+
+instance Symbol Expression
+  where
+    symSig And  = signature
+    symSig Or   = signature
+    symSig Xor  = signature
+    symSig Xnor = signature
+    symSig Nand = signature
+    symSig Nor  = signature
+
+instance Render Expression
+  where
+    renderSym And  = "and"
+    renderSym Or   = "or"
+    renderSym Xor  = "xor"
+    renderSym Xnor = "xnor"
+    renderSym Nand = "nand"
+    renderSym Nor  = "nor"
+
+instance Eval Expression
+  where
+    evalSym And  = (&&)
+    evalSym Or   = (||)
+    evalSym Xor  = \x y -> (x && not y) || (not x && y)
+    evalSym Xnor = \x y -> (not x && not y) || (x && y)
+    evalSym Nand = \x y -> not (x && y)
+    evalSym Nor  = \x y -> not (x || y)
+
+instance EvalEnv Expression env
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+{-
 data Expr a
   where
     -- ^ ...
@@ -97,10 +158,11 @@ data Expr a
     Abs  :: Num a      => Expr a -> Expr a
 
 type instance PredicateExp Expr = Rep
+-}
 
 --------------------------------------------------------------------------------
 -- ** Useful Expr Instances
-
+{-
 instance (Rep a, Eq a) => Eq (Expr a)
   where
     (==) = error "equality checking not supported"
@@ -149,11 +211,11 @@ instance (Rep a, Fractional a) => Fractional (Expr a)
     (/)   = Dif
     recip = Dif (Val 1)
     fromRational = error "fromRational not supported"
-
+-}
 --------------------------------------------------------------------------------
 -- * User interface
 --------------------------------------------------------------------------------
-
+{-
 pair :: Expr a -> Expr b -> Expr (a, b)
 pair = Pair
 
@@ -162,10 +224,10 @@ first = Fst
 
 second :: Expr (a, b) -> Expr b
 second = Snd
-
+-}
 --------------------------------------------------------------------------------
 -- ** Logical operators
-
+{-
 and, or, xor, xnor, nand, nor :: Expr Bool -> Expr Bool -> Expr Bool
 
 and  = And
@@ -174,10 +236,10 @@ xor  = Xor
 xnor = Xnor
 nand = Nand
 nor  = Nor
-
+-}
 --------------------------------------------------------------------------------
 -- ** Relational operators
-
+{-
 eq, neq          :: Eq a  => Expr a -> Expr a -> Expr Bool
 lt, lte, gt, gte :: Ord a => Expr a -> Expr a -> Expr Bool
 
@@ -187,10 +249,10 @@ lt  = Lt
 lte = Lte
 gt  = Gt
 gte = Gte
-
+-}
 --------------------------------------------------------------------------------
 -- ** Shift operators
-
+{-
 sll, srl, sra, sla, rol, ror :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
 
 sll = Sll
@@ -199,19 +261,19 @@ sra = Sra
 sla = Sla
 rol = Rol
 ror = Ror
-
+-}
 --------------------------------------------------------------------------------
 -- ** Adding operators
-
+{-
 add, sub, cat :: Num a => Expr a -> Expr a -> Expr a
 
 add = Add
 sub = Sub
 cat = Cat
-
+-}
 --------------------------------------------------------------------------------
 -- ** Multiplying operators
-
+{-
 mul           :: (Num a, Rep a) => Expr a -> Expr a -> Expr a
 div, mod, rem :: Integral a     => Expr a -> Expr a -> Expr a
 
@@ -219,16 +281,16 @@ mod = Mod
 rem = Rem
 mul = Mul
 div = Div
-
+-}
 --------------------------------------------------------------------------------
 -- ** Sign operators
-
+{-
 neg :: Num a => Expr a -> Expr a
 neg = Neg
-
+-}
 --------------------------------------------------------------------------------
 -- ** Miscellaneous operators
-
+{-
 not :: Expr Bool -> Expr Bool
 not = Not
 
@@ -237,20 +299,20 @@ exp = Exp
 
 abs :: Num a => Expr a -> Expr a
 abs = Abs
-
+-}
 --------------------------------------------------------------------------------
 -- ** Naming operators
-
+{-
 name :: Rep a => Identifier -> Expr a
 name = Var
 
 lit :: Rep a => a -> Expr a
 lit = Val
-
+-}
 --------------------------------------------------------------------------------
 -- * Compilation of expressions
 --------------------------------------------------------------------------------
-
+{-
 instance CompileExp Expr
   where
     varE  = Var
@@ -310,11 +372,11 @@ compileE = return . lift . go
       Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
       Abs  x   -> F $ M.abs  (lift (go x))
       Not  x   -> F $ M.not  (lift (go x))
-
+-}
 --------------------------------------------------------------------------------
 -- * Evaluation of Expressions
 --------------------------------------------------------------------------------
-
+{-
 instance EvaluateExp Expr
   where
     litE  = Val
@@ -371,5 +433,5 @@ evaluate exp = case exp of
 
     msb :: Bits a => a -> Int
     msb = fromJust . bitSizeMaybe
-
+-}
 --------------------------------------------------------------------------------
