@@ -34,14 +34,18 @@ import Language.Embedded.VHDL.Expression.Hoist
 import Language.Embedded.VHDL.Expression.Format
 import qualified Language.Embedded.VHDL.Expression.Type as T
 
+import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
+import qualified Language.Syntactic as Syntactic
+import Language.Syntactic.Functional
+import Language.Syntactic.Functional.Sharing
+import Language.Syntactic.Functional.Tuple
+import Language.Syntactic.Sugar.BindingT ()
+import Language.Syntactic.Sugar.TupleT   ()
+
 import Data.Bits     (Bits)
 import qualified Data.Bits as Bits
 import Data.Maybe    (fromJust)
 import Data.Typeable (Typeable)
-import Data.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
-import qualified Data.Syntactic as Syntactic
-import Data.Syntactic.Functional
-import Data.Syntactic.Sugar.BindingT ()
 
 import Prelude hiding (and, or)
 import qualified Prelude
@@ -295,6 +299,7 @@ instance Eval Factor
 instance EvalEnv Factor env
 
 --------------------------------------------------------------------------------
+
 
 --type instance PredicateExp Expr = Rep
 
