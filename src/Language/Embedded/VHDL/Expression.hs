@@ -142,6 +142,57 @@ instance EvalEnv Relational env
 --------------------------------------------------------------------------------
 -- ** ...
 
+data Shift sig
+  where
+    Sll :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
+    Srl :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
+    Sla :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
+    Sra :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
+    Rol :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
+    Ror :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
+
+interpretationInstances ''Shift
+
+instance Symbol Shift
+  where
+    symSig Sll = signature
+    symSig Srl = signature
+    symSig Sla = signature
+    symSig Sra = signature
+    symSig Rol = signature
+    symSig Ror = signature
+
+instance Render Shift
+  where
+    renderSym Sll = "sll"
+    renderSym Srl = "srl"
+    renderSym Sla = "sla"
+    renderSym Sra = "sra"
+    renderSym Rol = "rol"
+    renderSym Ror = "ror"
+
+instance Eval Shift
+  where
+    evalSym Sll = \x i -> Bits.shiftL x (fromIntegral i)
+    evalSym Srl = \x i -> shiftLR     x (fromIntegral i)
+    evalSym Sla = \x i -> Bits.shiftL x (fromIntegral i)
+    evalSym Sra = \x i -> Bits.shiftR x (fromIntegral i)
+    evalSym Rol = \x i -> Bits.rotateL x (fromIntegral i)
+    evalSym Ror = \x i -> Bits.rotateR x (fromIntegral i)
+
+shiftLR :: Bits a => a -> Int -> a
+shiftLR x n =
+  let y = Bits.shiftR x n
+  in case Bits.bitSizeMaybe x of
+    Just i  -> foldr (flip Bits.clearBit) y [i - n `mod` i .. i]
+    Nothing -> y
+
+instance EvalEnv Shift env
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+
 
 --------------------------------------------------------------------------------
 
