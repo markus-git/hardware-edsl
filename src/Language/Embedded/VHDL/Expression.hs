@@ -202,7 +202,6 @@ data Simple sig
 
 interpretationInstances ''Simple
 
-
 instance Symbol Simple
   where
     symSig Neg = signature
@@ -230,7 +229,41 @@ instance Eval Simple
 instance EvalEnv Simple env
 
 --------------------------------------------------------------------------------
+-- ** ...
 
+data Term sig
+  where
+    Mul :: (Type a, Num a)      => Term (a :-> a :-> Full a)
+    Div :: (Type a, Integral a) => Term (a :-> a :-> Full a)
+    Mod :: (Type a, Integral a) => Term (a :-> a :-> Full a)
+    Rem :: (Type a, Integral a) => Term (a :-> a :-> Full a)
+
+interpretationInstances ''Term
+
+instance Symbol Term
+  where
+    symSig Mul = signature
+    symSig Div = signature
+    symSig Mod = signature
+    symSig Rem = signature
+
+instance Render Term
+  where
+    renderSym Mul = "(*)"
+    renderSym Div = "(/)"
+    renderSym Mod = "(%)"
+    renderSym Rem = "rem"
+
+instance Eval Term
+  where
+    evalSym Mul = (*)
+    evalSym Div = div
+    evalSym Mod = mod
+    evalSym Rem = rem
+
+instance EvalEnv Term env
+
+--------------------------------------------------------------------------------
 
 {-
 data Expr a
