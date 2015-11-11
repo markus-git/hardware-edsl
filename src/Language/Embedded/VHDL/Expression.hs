@@ -192,7 +192,42 @@ instance EvalEnv Shift env
 --------------------------------------------------------------------------------
 -- ** ...
 
+data Simple sig
+  where
+    Neg :: (Type a, Num a) => Simple (a :-> Full a)
+    Pos :: (Type a, Num a) => Simple (a :-> Full a)
+    Add :: (Type a, Num a) => Simple (a :-> a :-> Full a)
+    Sub :: (Type a, Num a) => Simple (a :-> a :-> Full a)
+    Cat :: (Type a, Num a, Show a, Read a) => Simple (a :-> a :-> Full a)
 
+interpretationInstances ''Simple
+
+
+instance Symbol Simple
+  where
+    symSig Neg = signature
+    symSig Pos = signature
+    symSig Add = signature
+    symSig Sub = signature
+    symSig Cat = signature
+
+instance Render Simple
+  where
+    renderSym Neg = "(-)"
+    renderSym Pos = "id"
+    renderSym Add = "(+)"
+    renderSym Sub = "(-)"
+    renderSym Cat = "(&)"
+
+instance Eval Simple
+  where
+    evalSym Neg = negate
+    evalSym Pos = id
+    evalSym Add = (+)
+    evalSym Sub = (-)
+    evalSym Cat = \x y -> read (show x ++ show y)
+
+instance EvalEnv Simple env
 
 --------------------------------------------------------------------------------
 
@@ -216,28 +251,6 @@ data Expr a
     
     -- expression operators (plus Not)
     Not  :: Expr Bool -> Expr Bool
-    And  :: Expr Bool -> Expr Bool -> Expr Bool
-    Or   :: Expr Bool -> Expr Bool -> Expr Bool
-    Xor  :: Expr Bool -> Expr Bool -> Expr Bool
-    Xnor :: Expr Bool -> Expr Bool -> Expr Bool
-    Nand :: Expr Bool -> Expr Bool -> Expr Bool
-    Nor  :: Expr Bool -> Expr Bool -> Expr Bool
-
-    -- relational operators
-    Eq   :: Eq a  => Expr a -> Expr a -> Expr Bool
-    Neq  :: Eq a  => Expr a -> Expr a -> Expr Bool
-    Lt   :: Ord a => Expr a -> Expr a -> Expr Bool
-    Lte  :: Ord a => Expr a -> Expr a -> Expr Bool
-    Gt   :: Ord a => Expr a -> Expr a -> Expr Bool
-    Gte  :: Ord a => Expr a -> Expr a -> Expr Bool
-
-    -- shift operators
-    Sll  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
-    Srl  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
-    Sla  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
-    Sra  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
-    Rol  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
-    Ror  :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
 
     -- adding operators
     Neg  :: Num a => Expr a -> Expr a
