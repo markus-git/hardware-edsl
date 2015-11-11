@@ -300,6 +300,29 @@ instance EvalEnv Factor env
 
 --------------------------------------------------------------------------------
 
+type VHDLDomain = Typed
+  (   BindingT
+  :+: Let
+  :+: Expression
+  :+: Relational
+  :+: Shift
+  :+: Simple
+  :+: Term
+  :+: Factor
+  )
+
+newtype Data a = Data { unData :: ASTF VHDLDomain a }
+
+instance Type a => Syntactic (Data a)
+  where
+    type Domain   (Data a) = VHDLDomain
+    type Internal (Data a) = a
+
+    desugar = unData
+    sugar   = Data
+
+class    (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
+instance (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
 
 --type instance PredicateExp Expr = Rep
 
