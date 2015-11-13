@@ -36,7 +36,7 @@ import qualified Language.Embedded.VHDL.Expression.Type as T
 
 import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
 import qualified Language.Syntactic as Syntactic
-import Language.Syntactic.Functional
+import Language.Syntactic.Functional hiding (Name)
 import Language.Syntactic.Functional.Sharing
 import Language.Syntactic.Functional.Tuple
 import Language.Syntactic.Sugar.BindingT ()
@@ -198,8 +198,8 @@ instance EvalEnv Shift env
 
 data Simple sig
   where
-    Neg :: (Type a, Num a) => Simple (a :-> Full a)
-    Pos :: (Type a, Num a) => Simple (a :-> Full a)
+    Neg :: (Type a, Num a) => Simple (a :->       Full a)
+    Pos :: (Type a, Num a) => Simple (a :->       Full a)
     Add :: (Type a, Num a) => Simple (a :-> a :-> Full a)
     Sub :: (Type a, Num a) => Simple (a :-> a :-> Full a)
     Cat :: (Type a, Num a, Show a, Read a) => Simple (a :-> a :-> Full a)
@@ -299,6 +299,27 @@ instance Eval Factor
 instance EvalEnv Factor env
 
 --------------------------------------------------------------------------------
+-- ** ...
+
+data Primary sig
+  where
+    Lit :: Type a => a -> Primary (Full a)
+
+interpretationInstances ''Primary
+
+instance Symbol Primary
+  where
+    symSig (Lit _) = signature
+
+instance Render Primary
+  where
+    renderSym (Lit _) = "lit"
+
+instance Eval Primary
+  where
+    evalSym (Lit i) = i
+
+--------------------------------------------------------------------------------
 
 type VHDLDomain = Typed
   (   BindingT
@@ -328,6 +349,8 @@ instance (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
 --type instance PredicateExp Expr = Rep
 
 --------------------------------------------------------------------------------
+-- Backend
+--------------------------------------------------------------------------------
 
 codeMotionInterface :: CodeMotionInterface VHDLDomain
 codeMotionInterface = defaultInterfaceT sharable (const True)
@@ -348,13 +371,24 @@ codeMotionInterface = defaultInterfaceT sharable (const True)
 showExpr :: (Syntactic a, Domain a ~ VHDLDomain) => a -> String
 showExpr = render . codeMotion codeMotionInterface . desugar
 
-showAST  :: (Syntactic a, Domain a ~ VHDLDomain) => a -> String
+showAST :: (Syntactic a, Domain a ~ VHDLDomain) => a -> String
 showAST = Syntactic.showAST . codeMotion codeMotionInterface . desugar
 
-eval     :: (Syntactic a, Domain a ~ VHDLDomain) => a -> Internal a
+eval :: (Syntactic a, Domain a ~ VHDLDomain) => a -> Internal a
 eval = evalClosed . desugar
 
 --------------------------------------------------------------------------------
+-- Frontend
+--------------------------------------------------------------------------------
+
+value :: Syntax a => Internal a -> a
+value = undefined --sugar . injT . Lit
+
+force :: Syntax a => a -> a
+force = resugar
+
+share :: (Syntax a, Syntax b) => a -> (a -> b) -> b
+share = sugarSymT Let
 
 --------------------------------------------------------------------------------
 -- ** Useful Expr Instances
