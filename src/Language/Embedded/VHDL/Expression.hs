@@ -47,7 +47,7 @@ import qualified Data.Bits as Bits
 import Data.Maybe    (fromJust)
 import Data.Typeable (Typeable)
 
-import Prelude hiding (and, or)
+import Prelude hiding (and, or, abs, rem, div, mod)
 import qualified Prelude
 
 --------------------------------------------------------------------------------
@@ -188,7 +188,7 @@ shiftLR :: Bits a => a -> Int -> a
 shiftLR x n =
   let y = Bits.shiftR x n
   in case Bits.bitSizeMaybe x of
-    Just i  -> foldr (flip Bits.clearBit) y [i - n `mod` i .. i]
+    Just i  -> foldr (flip Bits.clearBit) y [i - n `Prelude.mod` i .. i]
     Nothing -> y
 
 instance EvalEnv Shift env
@@ -202,7 +202,7 @@ data Simple sig
     Pos :: (Type a, Num a) => Simple (a :->       Full a)
     Add :: (Type a, Num a) => Simple (a :-> a :-> Full a)
     Sub :: (Type a, Num a) => Simple (a :-> a :-> Full a)
-    Cat :: (Type a, Num a, Show a, Read a) => Simple (a :-> a :-> Full a)
+    Cat :: (Type a, Show a, Read a) => Simple (a :-> a :-> Full a)
 
 interpretationInstances ''Simple
 
@@ -261,9 +261,9 @@ instance Render Term
 instance Eval Term
   where
     evalSym Mul = (*)
-    evalSym Div = div
-    evalSym Mod = mod
-    evalSym Rem = rem
+    evalSym Div = Prelude.div
+    evalSym Mod = Prelude.mod
+    evalSym Rem = Prelude.rem
 
 instance EvalEnv Term env
 
@@ -293,8 +293,8 @@ instance Render Factor
 instance Eval Factor
   where
     evalSym Exp = (^)
-    evalSym Abs = abs
-    evalSym Not = not
+    evalSym Abs = Prelude.abs
+    evalSym Not = Prelude.not
 
 instance EvalEnv Factor env
 
@@ -349,7 +349,7 @@ instance (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
 --type instance PredicateExp Expr = Rep
 
 --------------------------------------------------------------------------------
--- Backend
+-- * Backend
 --------------------------------------------------------------------------------
 
 codeMotionInterface :: CodeMotionInterface VHDLDomain
@@ -378,7 +378,7 @@ eval :: (Syntactic a, Domain a ~ VHDLDomain) => a -> Internal a
 eval = evalClosed . desugar
 
 --------------------------------------------------------------------------------
--- Frontend
+-- * Frontend
 --------------------------------------------------------------------------------
 
 value :: Syntax a => Internal a -> a
@@ -391,154 +391,116 @@ share :: (Syntax a, Syntax b) => a -> (a -> b) -> b
 share = sugarSymT Let
 
 --------------------------------------------------------------------------------
--- ** Useful Expr Instances
-{-
-instance (Rep a, Eq a) => Eq (Expr a)
+-- ** ...
+
+-- logical operators
+and, or, xor, xnor, nand, nor :: Data Bool -> Data Bool -> Data Bool
+and  = sugarSymT And
+or   = sugarSymT Or
+xor  = sugarSymT Xor
+xnor = sugarSymT Xnor
+nand = sugarSymT Nand
+nor  = sugarSymT Nor
+
+-- relational operators
+eq, neq :: (Type a, Eq a) => Data a -> Data a -> Data Bool
+eq  = sugarSymT Eq
+neq = sugarSymT Neq
+
+lt, lte, gt, gte :: (Type a, Ord a) => Data a -> Data a -> Data Bool
+lt  = sugarSymT Lt
+lte = sugarSymT Lte
+gt  = sugarSymT Gt
+gte = sugarSymT Gte
+
+-- shift operators
+sll, srl, sla, sra, rol, ror :: (Type a, Bits a, Type b, Integral b) => Data a -> Data b -> Data a
+sll = sugarSymT Sll
+srl = sugarSymT Srl
+sla = sugarSymT Sla
+sra = sugarSymT Sra
+rol = sugarSymT Rol
+ror = sugarSymT Ror
+
+-- adding operators
+add, sub :: (Type a, Num a) => Data a -> Data a -> Data a
+add = sugarSymT Add
+sub = sugarSymT Sub
+
+cat :: (Type a, Read a, Show a) => Data a -> Data a -> Data a
+cat = sugarSymT Cat
+
+-- multiplying operators
+mul :: (Type a, Num a) => Data a -> Data a -> Data a
+mul = sugarSymT Mul
+
+div, mod, rem :: (Type a, Integral a) => Data a -> Data a -> Data a
+div = sugarSymT Div
+mod = sugarSymT Mod
+rem = sugarSymT Rem
+
+-- miscellaneous operators
+exp :: (Type a, Num a, Type b, Integral b) => Data a -> Data b -> Data a
+exp = sugarSymT Exp
+
+abs :: (Type a, Num a) => Data a -> Data a
+abs = sugarSymT Abs
+
+not :: Data Bool -> Data Bool
+not = sugarSymT Not
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+instance (Type a, Eq a) => Eq (Data a)
   where
-    (==) = error "equality checking not supported"
+    (==) = error "VHDL: equality checking is not supported"
 
-instance (Rep a, Ord a) => Ord (Expr a)
+instance (Type a, Ord a) => Ord (Data a)
   where
-    compare = error "compare not supported"
-    max     = error "max not supported"
-    min     = error "min not supported"
+    compare = error "VHDL: compare is not supported"
+    max     = error "VHDL: max is not supported"
+    min     = error "VHDL: min is not supported"
 
-instance (Rep a, Bounded a) => Bounded (Expr a)
+instance (Type a, Bounded a) => Bounded (Data a)
   where
-    minBound = Val minBound
-    maxBound = Val maxBound
+    minBound = value minBound
+    maxBound = value maxBound
 
-instance (Rep a, Enum a) => Enum (Expr a) -- needed for integral
+instance (Type a, Enum a) => Enum (Data a)
   where
-    toEnum   = error "toEnum not supported"
-    fromEnum = error "fromEnum not supported"
+    toEnum   = error "VHDL: toEnum is not supported"
+    fromEnum = error "VHDL: fromEnum is not supported"
 
-instance (Rep a, Real a) => Real (Expr a) -- needed for integral
+instance (Type a, Real a) => Real (Data a)
   where
-    toRational = error "toRational not supported"
+    toRational = error "VHDL: toRational is not supported"
 
-instance (Rep a, Num a) => Num (Expr a)
+instance (Type a, Num a) => Num (Data a)
   where
-    fromInteger  = Val . fromInteger
-    (+)          = Add
-    (-)          = Sub
-    (*)          = Mul
-    abs          = Abs
-    signum       = error "signum not implemented for Expr"
+    fromInteger = value . fromInteger
+    (+) = add
+    (-) = sub
+    (*) = mul
+    abs = abs
+    signum = error "VHDL: signum is not supported"
 
-instance (Rep a, Integral a) => Integral (Expr a)
+instance (Type a, Integral a) => Integral (Data a)
   where
-    quot      = error "quotient not supported"
-    rem       = Rem
-    div       = Div
-    mod       = Mod
-    quotRem a b = (quot a b, rem a b)
-    divMod  a b = (div  a b, mod a b)
-    toInteger = error "toInteger not supported"
+    quot = error "VHDL: quotient is not supported"
+    rem  = rem
+    div  = div
+    mod  = mod
+    quotRem = undefined
+    divMod  = undefined
+    toInteger = error "VHDL: toInteger is not supported"
 
-instance (Rep a, Fractional a) => Fractional (Expr a)
+instance (Type a, Fractional a) => Fractional (Data a)
   where
-    (/)   = Dif
-    recip = Dif (Val 1)
-    fromRational = error "fromRational not supported"
--}
---------------------------------------------------------------------------------
--- * User interface
---------------------------------------------------------------------------------
-{-
-pair :: Expr a -> Expr b -> Expr (a, b)
-pair = Pair
+    (/)   = error "VHDL: floating point division is not yet supported"
+    recip = (/) (value 1)
+    fromRational = error "VHDL: fromRational is not supported"
 
-first :: Expr (a, b) -> Expr a
-first = Fst
-
-second :: Expr (a, b) -> Expr b
-second = Snd
--}
---------------------------------------------------------------------------------
--- ** Logical operators
-{-
-and, or, xor, xnor, nand, nor :: Expr Bool -> Expr Bool -> Expr Bool
-
-and  = And
-or   = Or
-xor  = Xor
-xnor = Xnor
-nand = Nand
-nor  = Nor
--}
---------------------------------------------------------------------------------
--- ** Relational operators
-{-
-eq, neq          :: Eq a  => Expr a -> Expr a -> Expr Bool
-lt, lte, gt, gte :: Ord a => Expr a -> Expr a -> Expr Bool
-
-eq  = Eq
-neq = Neq
-lt  = Lt
-lte = Lte
-gt  = Gt
-gte = Gte
--}
---------------------------------------------------------------------------------
--- ** Shift operators
-{-
-sll, srl, sra, sla, rol, ror :: (Bits a, Integral b) => Expr a -> Expr b -> Expr a
-
-sll = Sll
-srl = Srl
-sra = Sra
-sla = Sla
-rol = Rol
-ror = Ror
--}
---------------------------------------------------------------------------------
--- ** Adding operators
-{-
-add, sub, cat :: Num a => Expr a -> Expr a -> Expr a
-
-add = Add
-sub = Sub
-cat = Cat
--}
---------------------------------------------------------------------------------
--- ** Multiplying operators
-{-
-mul           :: (Num a, Rep a) => Expr a -> Expr a -> Expr a
-div, mod, rem :: Integral a     => Expr a -> Expr a -> Expr a
-
-mod = Mod
-rem = Rem
-mul = Mul
-div = Div
--}
---------------------------------------------------------------------------------
--- ** Sign operators
-{-
-neg :: Num a => Expr a -> Expr a
-neg = Neg
--}
---------------------------------------------------------------------------------
--- ** Miscellaneous operators
-{-
-not :: Expr Bool -> Expr Bool
-not = Not
-
-exp :: Floating a => Expr a -> Expr a -> Expr a
-exp = Exp
-
-abs :: Num a => Expr a -> Expr a
-abs = Abs
--}
---------------------------------------------------------------------------------
--- ** Naming operators
-{-
-name :: Rep a => Identifier -> Expr a
-name = Var
-
-lit :: Rep a => a -> Expr a
-lit = Val
--}
 --------------------------------------------------------------------------------
 -- * Compilation of expressions
 --------------------------------------------------------------------------------
