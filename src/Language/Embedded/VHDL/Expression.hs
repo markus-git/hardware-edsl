@@ -40,7 +40,7 @@ import Language.Syntactic.Functional
 import Language.Syntactic.Functional.Sharing
 import Language.Syntactic.Functional.Tuple
 import Language.Syntactic.Sugar.BindingT ()
-import Language.Syntactic.Sugar.TupleT   ()
+import Language.Syntactic.Sugar.TupleT ()
 
 import Data.Bits     (Bits)
 import qualified Data.Bits as Bits
@@ -326,6 +326,35 @@ class    (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
 instance (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
 
 --type instance PredicateExp Expr = Rep
+
+--------------------------------------------------------------------------------
+
+codeMotionInterface :: CodeMotionInterface VHDLDomain
+codeMotionInterface = defaultInterfaceT sharable (const True)
+  where
+    sharable :: ASTF VHDLDomain a -> ASTF VHDLDomain b -> Bool
+    sharable (Sym _) _ = False
+    sharable (lam :$ _) _
+      | Just _ <- prLam lam = False
+    sharable _ (lam :$ _)
+      | Just _ <- prLam lam = False
+    sharable (sel :$ _) _
+      | Just Sel1 <- prj sel = False
+      | Just Sel2 <- prj sel = False
+      | Just Sel3 <- prj sel = False
+      | Just Sel4 <- prj sel = False
+    sharable _ _ = True
+
+showExpr :: (Syntactic a, Domain a ~ VHDLDomain) => a -> String
+showExpr = render . codeMotion codeMotionInterface . desugar
+
+showAST  :: (Syntactic a, Domain a ~ VHDLDomain) => a -> String
+showAST = Syntactic.showAST . codeMotion codeMotionInterface . desugar
+
+eval     :: (Syntactic a, Domain a ~ VHDLDomain) => a -> Internal a
+eval = evalClosed . desugar
+
+--------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
 -- ** Useful Expr Instances
