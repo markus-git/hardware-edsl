@@ -23,7 +23,7 @@ class EvaluateExp exp
     litE  :: PredicateExp exp a => a -> exp a
 
     -- | Evaluation of (closed) expressions
-    evalE :: exp a -> a
+    evalE :: PredicateExp exp a => exp a -> a
 
 
 -- | General interface for compiling expressions
@@ -36,6 +36,6 @@ class CompileExp exp
     compT :: PredicateExp exp a => exp a -> VHDL Type
 
     -- | Compilation of expressions
-    compE :: exp a -> VHDL Expression
+    compE :: PredicateExp exp a => exp a -> VHDL Expression
 
 --------------------------------------------------------------------------------
