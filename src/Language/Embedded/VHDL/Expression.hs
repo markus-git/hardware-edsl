@@ -25,6 +25,7 @@ module Language.Embedded.VHDL.Expression where
 -}
 
 import Language.VHDL (Identifier(..))
+import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Monad           (VHDL, TypeRep(..))
@@ -35,7 +36,7 @@ import qualified Language.Embedded.VHDL.Expression.Type as T
 
 import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
 import qualified Language.Syntactic as Syntactic
-import Language.Syntactic.Functional hiding (Name)
+import Language.Syntactic.Functional
 import Language.Syntactic.Functional.Sharing
 import Language.Syntactic.Functional.Tuple
 import Language.Syntactic.Sugar.BindingT ()
@@ -528,6 +529,26 @@ instance CompileExp Data
     varE  = undefined
     compT = undefined
     compE = undefined
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+vars :: Name -> String
+vars v = 'v' : show v
+
+compileE :: ASTF VHDLDomain a -> VHDL Kind
+compileE var
+  | Just (Var v) <- prj var = return $ P $ M.name $ vars v
+compileE val
+  | Just (Lit v) <- prj val = return $ P $ M.string $ format v
+compileE (lets :$ a :$ (lam :$ body))
+  | Just (Let)    <- prj lets
+  , Just (LamT v) <- prj lam
+  = do let v' = Ident $ vars v
+       a' <- compileE a
+       M.addSequential $ M.assignVariable v' $ lift a'
+       compileE body
+
 
 --------------------------------------------------------------------------------
     
