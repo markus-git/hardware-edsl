@@ -47,15 +47,15 @@ import qualified Data.Bits as Bits
 import Data.Maybe    (fromJust)
 import Data.Typeable (Typeable)
 
-import Prelude hiding (and, or, abs, rem, div, mod)
+import Prelude hiding (not, and, or, abs, rem, div, mod)
 import qualified Prelude
 
 --------------------------------------------------------------------------------
 -- * ...
 --------------------------------------------------------------------------------
 
-class    (Typeable a, Rep a, Eq a, Ord a) => Type a
-instance (Typeable a, Rep a, Eq a, Ord a) => Type a
+class    (Typeable a, Rep a, Eq a) => Type a
+instance (Typeable a, Rep a, Eq a) => Type a
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -69,7 +69,8 @@ data Expression sig
     Nand :: Expression (Bool :-> Bool :-> Full Bool)
     Nor  :: Expression (Bool :-> Bool :-> Full Bool)
 
-interpretationInstances ''Expression
+instance Equality   Expression
+instance StringTree Expression
 
 instance Symbol Expression
   where
@@ -93,10 +94,10 @@ instance Eval Expression
   where
     evalSym And  = (&&)
     evalSym Or   = (||)
-    evalSym Xor  = \x y -> (x && not y) || (not x && y)
-    evalSym Xnor = \x y -> (not x && not y) || (x && y)
-    evalSym Nand = \x y -> not (x && y)
-    evalSym Nor  = \x y -> not (x || y)
+    evalSym Xor  = \x y -> (x && Prelude.not y) || (Prelude.not x && y)
+    evalSym Xnor = \x y -> (Prelude.not x && Prelude.not y) || (x && y)
+    evalSym Nand = \x y -> Prelude.not (x && y)
+    evalSym Nor  = \x y -> Prelude.not (x || y)
 
 instance EvalEnv Expression env
 
@@ -107,12 +108,13 @@ data Relational sig
   where
     Eq   :: Type a => Relational (a :-> a :-> Full Bool)
     Neq  :: Type a => Relational (a :-> a :-> Full Bool)
-    Lt   :: Type a => Relational (a :-> a :-> Full Bool)
-    Lte  :: Type a => Relational (a :-> a :-> Full Bool)
-    Gt   :: Type a => Relational (a :-> a :-> Full Bool)
-    Gte  :: Type a => Relational (a :-> a :-> Full Bool)
+    Lt   :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Lte  :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Gt   :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Gte  :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
 
-interpretationInstances ''Relational
+instance Equality   Relational
+instance StringTree Relational
 
 instance Symbol Relational
   where
@@ -155,7 +157,8 @@ data Shift sig
     Rol :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
     Ror :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
 
-interpretationInstances ''Shift
+instance Equality   Shift
+instance StringTree Shift
 
 instance Symbol Shift
   where
@@ -204,7 +207,8 @@ data Simple sig
     Sub :: (Type a, Num a) => Simple (a :-> a :-> Full a)
     Cat :: (Type a, Show a, Read a) => Simple (a :-> a :-> Full a)
 
-interpretationInstances ''Simple
+instance Equality   Simple
+instance StringTree Simple
 
 instance Symbol Simple
   where
@@ -242,7 +246,8 @@ data Term sig
     Mod :: (Type a, Integral a) => Term (a :-> a :-> Full a)
     Rem :: (Type a, Integral a) => Term (a :-> a :-> Full a)
 
-interpretationInstances ''Term
+instance Equality   Term
+instance StringTree Term
 
 instance Symbol Term
   where
@@ -276,7 +281,8 @@ data Factor sig
     Abs :: (Type a, Num a) => Factor (a :-> Full a)
     Not :: Factor (Bool :-> Full Bool)
 
-interpretationInstances ''Factor
+instance Equality   Factor
+instance StringTree Factor
 
 instance Symbol Factor
   where
@@ -305,7 +311,8 @@ data Primary sig
   where
     Lit :: Type a => a -> Primary (Full a)
 
-interpretationInstances ''Primary
+instance Equality   Primary
+instance StringTree Primary
 
 instance Symbol Primary
   where
@@ -319,6 +326,8 @@ instance Eval Primary
   where
     evalSym (Lit i) = i
 
+instance EvalEnv Primary env
+
 --------------------------------------------------------------------------------
 
 type VHDLDomain = Typed
@@ -331,6 +340,7 @@ type VHDLDomain = Typed
   :+: Simple
   :+: Term
   :+: Factor
+  :+: Primary
   )
 
 newtype Data a = Data { unData :: ASTF VHDLDomain a }
@@ -346,7 +356,7 @@ instance Type a => Syntactic (Data a)
 class    (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
 instance (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
 
---type instance PredicateExp Expr = Rep
+type instance PredicateExp Data = Type
 
 --------------------------------------------------------------------------------
 -- * Backend
@@ -382,7 +392,7 @@ eval = evalClosed . desugar
 --------------------------------------------------------------------------------
 
 value :: Syntax a => Internal a -> a
-value = undefined --sugar . injT . Lit
+value = sugar . injT . Lit
 
 force :: Syntax a => a -> a
 force = resugar
@@ -502,15 +512,27 @@ instance (Type a, Fractional a) => Fractional (Data a)
     fromRational = error "VHDL: fromRational is not supported"
 
 --------------------------------------------------------------------------------
+-- * Evaluation of Expressions
+--------------------------------------------------------------------------------
+
+instance EvaluateExp Data
+  where
+    litE  = value
+    evalE = eval
+
+--------------------------------------------------------------------------------
 -- * Compilation of expressions
 --------------------------------------------------------------------------------
-{-
-instance CompileExp Expr
-  where
-    varE  = Var
-    compT = compileT
-    compE = compileE
 
+instance CompileExp Data
+  where
+    varE  = undefined
+    compT = undefined
+    compE = undefined
+
+--------------------------------------------------------------------------------
+    
+{-
 compileT :: forall a. Rep a => Expr a -> VHDL Type
 compileT _ = M.addType $ unTag $ (typed :: Tagged a TypeRep)
 
@@ -564,66 +586,5 @@ compileE = return . lift . go
       Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
       Abs  x   -> F $ M.abs  (lift (go x))
       Not  x   -> F $ M.not  (lift (go x))
--}
---------------------------------------------------------------------------------
--- * Evaluation of Expressions
---------------------------------------------------------------------------------
-{-
-instance EvaluateExp Expr
-  where
-    litE  = Val
-    evalE = evaluate
-
-evaluate :: Expr a -> a
-evaluate exp = case exp of
-    Var  v -> error "eval: free variable"
-    Val  v -> v
-    
-    Not  x   -> un P.not x
-    And  x y -> bin (&&) x y
-    Or   x y -> bin (||) x y
-    Xor  x y -> bin xor  x y
-    Xnor x y -> P.not $ bin xor  x y
-    Nand x y -> P.not $ bin (&&) x y
-    Nor  x y -> P.not $ bin (||) x y
-
-    Eq   x y -> bin (==) x y
-    Neq  x y -> bin (/=) x y
-    Lt   x y -> bin (<)  x y
-    Lte  x y -> bin (<=) x y
-    Gt   x y -> bin (>)  x y
-    Gte  x y -> bin (>=) x y
-
-    Sll  x y -> bin (\a b -> shiftL a (fromIntegral b) `clearBit` msb a) x y
-    Srl  x y -> bin (\a b -> shiftR a (fromIntegral b) `clearBit` msb a) x y  
-    Sla  x y -> bin (\a -> shiftL a . fromIntegral) x y
-    Sra  x y -> bin (\a -> shiftR a . fromIntegral) x y
-    Rol  x y -> bin (\a -> rotateL a . fromIntegral) x y
-    Ror  x y -> bin (\a -> rotateR a . fromIntegral) x y
-
-    Neg  x   -> un negate x
-    Add  x y -> bin (+) x y
-    Sub  x y -> bin (-) x y
-    Cat  x y -> error "evaluation of bit concatenation not yet implemented" 
-
-    Mul  x y -> bin (*)   x y
-    Dif  x y -> bin (/)   x y
-    Div  x y -> bin P.div x y
-    Mod  x y -> bin P.mod x y
-    Rem  x y -> bin P.rem x y
-
-    Exp  x y -> bin (**) x y
-    Abs  x   -> un P.abs x
-  where
-    xor a b = (a || b) && P.not (a && b)
-    
-    un :: (a -> b) -> Expr a -> b
-    un  f x   = f (evaluate x)
-
-    bin :: (a -> b -> c) -> Expr a -> Expr b -> c
-    bin f x y = f (evaluate x) (evaluate y)
-
-    msb :: Bits a => a -> Int
-    msb = fromJust . bitSizeMaybe
 -}
 --------------------------------------------------------------------------------
