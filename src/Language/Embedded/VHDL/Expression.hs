@@ -612,6 +612,8 @@ compileE (factor :$ x)
   where
     go :: (V.Primary -> V.Factor) -> VHDL Kind
     go f = un (\a -> Hoist.F $ f (lift a)) x
+compileE (primary)
+  | Just (Lit i) <- prj primary = return $ Hoist.P $ M.lit $ format i
 
 -- ...
 un :: (Kind -> Kind) -> ASTF VHDLDomain a -> VHDL Kind
