@@ -508,7 +508,7 @@ instance (Type a, Integral a) => Integral (Data a)
 
 instance (Type a, Fractional a) => Fractional (Data a)
   where
-    (/)   = error "VHDL: floating point division is not yet supported"
+    (/)   = error "VHDL: floating point division is not _yet_ supported"
     recip = (/) (value 1)
     fromRational = error "VHDL: fromRational is not supported"
 
@@ -527,9 +527,15 @@ instance EvaluateExp Data
 
 instance CompileExp Data
   where
-    varE  = undefined
-    compT = undefined
-    compE = undefined
+    varE  i = undefined
+    compT t = undefined
+    compE e = undefined
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+compileT :: ASTF VHDLDomain a -> VHDL T.Type
+compileT _ = undefined
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -630,61 +636,4 @@ bin f x y = do
   y' <- compileE y
   return $ f x' y'
 
---------------------------------------------------------------------------------
-    
-{-
-compileT :: forall a. Rep a => Expr a -> VHDL Type
-compileT _ = M.addType $ unTag $ (typed :: Tagged a TypeRep)
-
-compileE :: Expr a -> VHDL Expression
-compileE = return . lift . go
-  where
-    go :: forall a. Expr a -> Kind
-    go exp = case exp of
-      Var (Ident i) -> P $ M.name i
-      Val v         -> P $ M.string $ format v
-
-      -- ^ Tuples
-      Pair l r -> P $ M.aggregate [(Nothing, lift (go l)), (Nothing, lift (go r))]
-      Fst  p   -> P $ M.selected undefined undefined
-      Snd  p   -> P $ M.selected undefined undefined
-
-      -- ^ VHDL constructs
-      And  x y -> E $ M.and  [lift (go x),  lift (go y)]
-      Or   x y -> E $ M.or   [lift (go x),  lift (go y)]
-      Xor  x y -> E $ M.xor  [lift (go x),  lift (go y)]
-      Xnor x y -> E $ M.xnor [lift (go x),  lift (go y)]
-      Nand x y -> E $ M.nand (lift (go x)) (lift (go y))
-      Nor  x y -> E $ M.nor  (lift (go x)) (lift (go y))
-
-      Eq   x y -> R $ M.eq   (lift (go x)) (lift (go y))
-      Neq  x y -> R $ M.neq  (lift (go x)) (lift (go y))
-      Lt   x y -> R $ M.lt   (lift (go x)) (lift (go y))
-      Lte  x y -> R $ M.lte  (lift (go x)) (lift (go y))
-      Gt   x y -> R $ M.gt   (lift (go x)) (lift (go y))
-      Gte  x y -> R $ M.gte  (lift (go x)) (lift (go y))
-
-      Sll  x y -> Sh $ M.sll (lift (go x)) (lift (go y))
-      Srl  x y -> Sh $ M.srl (lift (go x)) (lift (go y))
-      Sla  x y -> Sh $ M.sla (lift (go x)) (lift (go y))
-      Sra  x y -> Sh $ M.sra (lift (go x)) (lift (go y))
-      Rol  x y -> Sh $ M.rol (lift (go x)) (lift (go y))
-      Ror  x y -> Sh $ M.ror (lift (go x)) (lift (go y))
-
-      Neg  x   -> Si $ M.neg (lift (go x))
-      Add  x y -> Si $ M.add [lift (go x), lift (go y)]
-      Sub  x y -> Si $ M.sub [lift (go x), lift (go y)]
-      Cat  x y -> Si $ M.cat [lift (go x), lift (go y)]
-
-      Mul  x y -> P $ resize (unTag (width :: Tagged a Int))
-                    $ M.mul  [lift (go x), lift (go y)]
-      Dif  x y -> error "compilation of floating point division is not yet supported"
-      Div  x y -> T $ M.div  [lift (go x), lift (go y)]
-      Mod  x y -> T $ M.mod  [lift (go x), lift (go y)]
-      Rem  x y -> T $ M.rem  [lift (go x), lift (go y)]
-
-      Exp  x y -> F $ M.exp  (lift (go x)) (lift (go y))
-      Abs  x   -> F $ M.abs  (lift (go x))
-      Not  x   -> F $ M.not  (lift (go x))
--}
 --------------------------------------------------------------------------------

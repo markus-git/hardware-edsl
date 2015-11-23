@@ -87,24 +87,6 @@ instance Rep Word64 where
   format = convert
 
 --------------------------------------------------------------------------------
--- ** Records
-
-instance (Rep a, Rep b) => Rep (a, b) where
-  width  = Tag $ sum       [ unTag (width :: Tagged a Int), unTag (width :: Tagged b Int)]
-  typed  = Tag $ Composite [ unTag (typed :: Tagged a TypeRep), unTag (typed :: Tagged b TypeRep)]
-  format = undefined
-
-instance (Rep a, Rep b, Rep c) => Rep (a, b, c) where
-  width  = Tag $ sum       [ unTag (width :: Tagged a Int), unTag (width :: Tagged b Int), unTag (width :: Tagged c Int)]
-  typed  = Tag $ Composite [ unTag (typed :: Tagged a TypeRep), unTag (typed :: Tagged b TypeRep) , unTag (typed :: Tagged c TypeRep)]
-  format = undefined
-
---------------------------------------------------------------------------------
--- ** Arrays
-
--- ...
-
---------------------------------------------------------------------------------
 -- * Converting Integers to their Binrary representation
 --------------------------------------------------------------------------------
 
