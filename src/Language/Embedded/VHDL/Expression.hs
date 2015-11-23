@@ -601,6 +601,17 @@ compileE (term :$ x :$ y)
   where
     go :: (V.Factor -> V.Factor -> V.Term) -> VHDL Kind
     go f = bin (\a b -> Hoist.T $ f (lift a) (lift b)) x y
+compileE (factor :$ x :$ y)
+  | Just Exp <- prj factor = go $ M.exp
+  where
+    go :: (V.Primary -> V.Primary -> V.Factor) -> VHDL Kind
+    go f = bin (\a b -> Hoist.F $ f (lift a) (lift b)) x y
+compileE (factor :$ x)
+  | Just Abs <- prj factor = go $ M.abs
+  | Just Not <- prj factor = go $ M.not
+  where
+    go :: (V.Primary -> V.Factor) -> VHDL Kind
+    go f = un (\a -> Hoist.F $ f (lift a)) x
 
 -- ...
 un :: (Kind -> Kind) -> ASTF VHDLDomain a -> VHDL Kind
