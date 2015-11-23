@@ -570,6 +570,16 @@ compileE (relate :$ x :$ y)
   where
     go :: (V.ShiftExpression -> V.ShiftExpression -> V.Relation) -> VHDL Kind
     go f = bin (\a b -> Hoist.R $ f (lift a) (lift b)) x y
+compileE (shift :$ x :$ y)
+  | Just Sll <- prj shift = go $ M.sll
+  | Just Srl <- prj shift = go $ M.srl
+  | Just Sla <- prj shift = go $ M.sla
+  | Just Sra <- prj shift = go $ M.sra
+  | Just Rol <- prj shift = go $ M.rol
+  | Just Ror <- prj shift = go $ M.ror
+  where
+    go :: (V.SimpleExpression -> V.SimpleExpression -> V.ShiftExpression) -> VHDL Kind
+    go f = bin (\a b -> Hoist.Sh $ f (lift a) (lift b)) x y
 
 -- ...
 bin
