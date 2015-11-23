@@ -555,11 +555,21 @@ compileE (expr :$ x :$ y)
   | Just Or   <- prj expr = go $ \a b -> M.or   [a, b]
   | Just Xor  <- prj expr = go $ \a b -> M.xor  [a, b]
   | Just Xnor <- prj expr = go $ \a b -> M.xnor [a, b]
-  | Just Nand <- prj expr = go $ \a b -> M.nand  a  b
-  | Just Nor  <- prj expr = go $ \a b -> M.nor   a  b
+  | Just Nand <- prj expr = go $ M.nand
+  | Just Nor  <- prj expr = go $ M.nor
   where
     go :: (V.Relation -> V.Relation -> V.Expression) -> VHDL Kind
     go f = bin (\a b -> Hoist.E $ f (lift a) (lift b)) x y
+compileE (relate :$ x :$ y)
+  | Just Eq  <- prj relate = go $ M.eq
+  | Just Neq <- prj relate = go $ M.neq
+  | Just Lt  <- prj relate = go $ M.lt
+  | Just Lte <- prj relate = go $ M.lte
+  | Just Gt  <- prj relate = go $ M.gt
+  | Just Gte <- prj relate = go $ M.gte
+  where
+    go :: (V.ShiftExpression -> V.ShiftExpression -> V.Relation) -> VHDL Kind
+    go f = bin (\a b -> Hoist.R $ f (lift a) (lift b)) x y
 
 -- ...
 bin
