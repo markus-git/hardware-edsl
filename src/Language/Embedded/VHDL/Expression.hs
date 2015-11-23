@@ -546,20 +546,31 @@ compileE (lets :$ a :$ (lam :$ body))
   | Just (Let)    <- prj lets
   , Just (LamT v) <- prj lam
   = do let v' = Ident $ vars v
-       a' <- compileE a
-       M.addSequential $ M.assignVariable v' $ lift a'
+       a' <- lift <$> compileE a
+       M.addSequential $ M.assignVariable v' a'
        compileE body
      -- that we pick variable assignment might be a problem
 compileE (expr :$ x :$ y)
-  = do x' <- lift <$> compileE x :: VHDL V.Relation
-       y' <- lift <$> compileE y :: VHDL V.Relation
-       return $ Hoist.E $ case prj expr of
-        Just And  -> M.and  [x', y']
-        Just Or   -> M.or   [x', y']
-        Just Xor  -> M.xor  [x', y']
-        Just Xnor -> M.xnor [x', y']
-        Just Nand -> M.nand  x'  y'
-        Just Nor  -> M.nor   x'  y'
+  | Just And  <- prj expr = go $ \a b -> M.and  [a, b]
+  | Just Or   <- prj expr = go $ \a b -> M.or   [a, b]
+  | Just Xor  <- prj expr = go $ \a b -> M.xor  [a, b]
+  | Just Xnor <- prj expr = go $ \a b -> M.xnor [a, b]
+  | Just Nand <- prj expr = go $ \a b -> M.nand  a  b
+  | Just Nor  <- prj expr = go $ \a b -> M.nor   a  b
+  where
+    go :: (V.Relation -> V.Relation -> V.Expression) -> VHDL Kind
+    go f = bin (\a b -> Hoist.E $ f (lift a) (lift b)) x y
+
+-- ...
+bin
+  :: (Kind -> Kind -> Kind)
+  -> ASTF VHDLDomain a
+  -> ASTF VHDLDomain b
+  -> VHDL Kind
+bin f x y = do
+  x' <- compileE x
+  y' <- compileE y
+  return $ f x' y'
 
 --------------------------------------------------------------------------------
     
