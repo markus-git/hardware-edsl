@@ -593,6 +593,14 @@ compileE (simple :$ x :$ y)
   where
     go :: (V.Term -> V.Term -> V.SimpleExpression) -> VHDL Kind
     go f = bin (\a b -> Hoist.Si $ f (lift a) (lift b)) x y
+compileE (term :$ x :$ y)
+  | Just Mul <- prj term = go $ \a b -> M.mul [a, b]
+  | Just Div <- prj term = go $ \a b -> M.div [a, b]
+  | Just Mod <- prj term = go $ \a b -> M.mod [a, b]
+  | Just Rem <- prj term = go $ \a b -> M.rem [a, b]
+  where
+    go :: (V.Factor -> V.Factor -> V.Term) -> VHDL Kind
+    go f = bin (\a b -> Hoist.T $ f (lift a) (lift b)) x y
 
 -- ...
 un :: (Kind -> Kind) -> ASTF VHDLDomain a -> VHDL Kind
