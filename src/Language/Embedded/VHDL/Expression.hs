@@ -580,6 +580,23 @@ compileE (shift :$ x :$ y)
   where
     go :: (V.SimpleExpression -> V.SimpleExpression -> V.ShiftExpression) -> VHDL Kind
     go f = bin (\a b -> Hoist.Sh $ f (lift a) (lift b)) x y
+compileE (simple :$ x)
+  | Just Neg <- prj simple = go $ M.neg
+  | Just Pos <- prj simple = go $ lift
+  where
+    go :: (V.Term -> V.SimpleExpression) -> VHDL Kind
+    go f = un (\a -> Hoist.Si $ f (lift a)) x
+compileE (simple :$ x :$ y)
+  | Just Add <- prj simple = go $ \a b -> M.add [a, b]
+  | Just Sub <- prj simple = go $ \a b -> M.sub [a, b]
+  | Just Cat <- prj simple = go $ \a b -> M.cat [a, b]
+  where
+    go :: (V.Term -> V.Term -> V.SimpleExpression) -> VHDL Kind
+    go f = bin (\a b -> Hoist.Si $ f (lift a) (lift b)) x y
+
+-- ...
+un :: (Kind -> Kind) -> ASTF VHDLDomain a -> VHDL Kind
+un f x = compileE x >>= return . f
 
 -- ...
 bin
