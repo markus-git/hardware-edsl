@@ -31,6 +31,7 @@ import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Monad           (VHDL, TypeRep(..))
 import qualified Language.Embedded.VHDL.Monad as M
 import Language.Embedded.VHDL.Expression.Hoist
+import qualified Language.Embedded.VHDL.Expression.Hoist as Hoist
 import Language.Embedded.VHDL.Expression.Format
 import qualified Language.Embedded.VHDL.Expression.Type as T
 
@@ -548,7 +549,17 @@ compileE (lets :$ a :$ (lam :$ body))
        a' <- compileE a
        M.addSequential $ M.assignVariable v' $ lift a'
        compileE body
-
+     -- that we pick variable assignment might be a problem
+compileE (expr :$ x :$ y)
+  = do x' <- lift <$> compileE x :: VHDL V.Relation
+       y' <- lift <$> compileE y :: VHDL V.Relation
+       return $ Hoist.E $ case prj expr of
+        Just And  -> M.and  [x', y']
+        Just Or   -> M.or   [x', y']
+        Just Xor  -> M.xor  [x', y']
+        Just Xnor -> M.xnor [x', y']
+        Just Nand -> M.nand  x'  y'
+        Just Nor  -> M.nor   x'  y'
 
 --------------------------------------------------------------------------------
     
