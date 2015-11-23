@@ -99,7 +99,8 @@ data Entity = Entity (V.EntityDeclaration) [V.ArchitectureBody]
 -- | ...
 data TypeRep
     = Prim       Type
-    | Composite [TypeRep]
+    | Composite  TypeRep TypeRep
+    | Array      TypeRep
   deriving (Eq, Ord)
 
 -- | Code generation state
@@ -204,29 +205,41 @@ addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 
 -- | ...
 addType :: MonadV m => TypeRep -> m Type
-addType   (Prim t)      = return t
-addType r@(Composite _) = do
-    exists <- containsType r
-    case exists of
-      Just i  ->
-        return $ fromName i
-      Nothing -> do
-        d <- define r
-        CMS.modify $ \s -> s { _types = Map.insert r d (_types s) }
-        return $ fromName $ nameOf d
+addType p@(Prim t)        = return t
+addType a@(Array t)       = do
+  exists <- containsType a
+  case exists of
+    Just i  -> return (fromName i)
+    Nothing -> do
+      d <- define a
+      insertType a d
+      return $ fromName (nameOf d)
   where
-    -- As a composite type may consist of other composite types
-    -- we need to go through and define all of them.
     define :: MonadV m => TypeRep -> m V.TypeDeclaration
-    define (Composite ts) = do
-      let members = map (Ident . ("member" ++) . show) [1 .. length ts]
-      types <- flatten ts
-      name  <- newLabel
-      return $ declRecord name (zip members types)
+    define (Array t) = do
+      typ  <- addType t
+      name <- newLabel
+      return $ declArray name typ
+addType r@(Composite _ _) = do
+  exists <- containsType r
+  case exists of
+    Just i  -> return (fromName i)
+    Nothing -> do
+      d <- define r
+      insertType r d
+      return $ fromName (nameOf d)
+  where
+    define :: MonadV m => TypeRep -> m V.TypeDeclaration
+    define (Composite l r) = do
+      l'   <- addType l
+      r'   <- addType r
+      name <- newLabel
+      return $ declRecord name [
+        (Ident "member1", l'),
+        (Ident "member2", r')]
 
-    -- recursively call addType to declare sub-types
-    flatten :: MonadV m => [TypeRep] -> m [Type]
-    flatten = mapM addType
+insertType :: MonadV m => TypeRep -> V.TypeDeclaration -> m ()
+insertType r t = CMS.modify $ \s -> s { _types = Map.insert r t (_types s) }
 
 -- | ...
 containsType :: MonadV m => TypeRep -> m (Maybe Identifier)
@@ -238,11 +251,9 @@ nameOf (V.TDFull    (V.FullTypeDeclaration i _))     = i
 nameOf (V.TDPartial (V.IncompleteTypeDeclaration i)) = i
 
 -- | ...
---
--- *** I dont know what happens when you try to put a range on records, is it
---     even possible?
+-- *** I have no idea what happens when put a range constraint on records..
 fromName :: Identifier -> Type
-fromName i = V.SubtypeIndication Nothing (V.TMType undefined) Nothing
+fromName i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -480,6 +491,15 @@ declRecord name es = V.TDFull
       (Just name)))))
   where
     decl (i, t) = V.ElementDeclaration [i] t
+
+-- ... only unconstrained arrays without any index subtype definitions
+declArray :: Identifier -> Type -> V.TypeDeclaration
+declArray name typ = V.TDFull
+  (V.FullTypeDeclaration
+    (name)
+    (V.TDComposite (V.CTDArray (V.ArrU (V.UnconstrainedArrayDefinition
+      ([])
+      (typ))))))
 
 --------------------------------------------------------------------------------
 -- ** Global/Local Declarations
