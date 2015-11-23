@@ -211,32 +211,22 @@ addType a@(Array t)       = do
   case exists of
     Just i  -> return (fromName i)
     Nothing -> do
-      d <- define a
-      insertType a d
-      return $ fromName (nameOf d)
-  where
-    define :: MonadV m => TypeRep -> m V.TypeDeclaration
-    define (Array t) = do
       typ  <- addType t
       name <- newLabel
-      return $ declArray name typ
-addType r@(Composite _ _) = do
+      let def = declArray name typ
+      insertType a def
+      return $ fromName (nameOf def)
+addType r@(Composite f s) = do
   exists <- containsType r
   case exists of
     Just i  -> return (fromName i)
     Nothing -> do
-      d <- define r
-      insertType r d
-      return $ fromName (nameOf d)
-  where
-    define :: MonadV m => TypeRep -> m V.TypeDeclaration
-    define (Composite l r) = do
-      l'   <- addType l
-      r'   <- addType r
+      f'   <- addType f
+      s'   <- addType s
       name <- newLabel
-      return $ declRecord name [
-        (Ident "member1", l'),
-        (Ident "member2", r')]
+      let def = declRecord name [(Ident "member1", f'), (Ident "member2", s')]
+      insertType r def
+      return $ fromName (nameOf def)
 
 insertType :: MonadV m => TypeRep -> V.TypeDeclaration -> m ()
 insertType r t = CMS.modify $ \s -> s { _types = Map.insert r t (_types s) }
