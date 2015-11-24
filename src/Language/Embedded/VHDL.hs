@@ -11,6 +11,6 @@ import Language.VHDL (Mode(..))
 
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Expression
-import Language.Embedded.VHDL.Expression.Type
+import Language.Embedded.VHDL.Expression.Type hiding (Type)
 import Language.Embedded.VHDL.Expression.Format
 import Language.Embedded.VHDL.Command

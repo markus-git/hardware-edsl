@@ -7,10 +7,11 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
-module Language.Embedded.VHDL.Expression where
-{-
-  ( Expr
-  , pair, first, second
+module Language.Embedded.VHDL.Expression
+  ( VHDLDomain
+  , Data
+  , Type
+    
   , not, and, or, xor, xnor, nand, nor
   , eq, neq
   , lt, lte, gt, gte
@@ -18,11 +19,9 @@ module Language.Embedded.VHDL.Expression where
   , add, sub, cat
   , mul
   , div, mod, rem
-  , neg
   , exp, abs
-  , name, lit
-  ) 
--}
+  , value, force, share
+  ) where
 
 import Language.VHDL (Identifier(..))
 import qualified Language.VHDL as V
@@ -49,7 +48,7 @@ import Data.Maybe    (fromJust)
 import Data.Typeable (Typeable)
 import Data.Word     (Word8)
 
-import Prelude hiding (not, and, or, abs, rem, div, mod)
+import Prelude hiding (not, and, or, abs, rem, div, mod, exp)
 import qualified Prelude
 
 --------------------------------------------------------------------------------
