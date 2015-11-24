@@ -49,11 +49,21 @@ compile = show . M.prettyVHDL . interpret
 --------------------------------------------------------------------------------
 
 -- | Compile if 'exp' is set
-compEM :: CompileExp exp => Maybe (exp a) -> VHDL (Maybe Expression)
+compEM
+  :: forall exp a.
+     ( PredicateExp exp a
+     , CompileExp   exp)
+  => Maybe (exp a)
+  -> VHDL (Maybe Expression)
 compEM = maybe (return Nothing) (>>= return . Just) . fmap compE
 
 -- | Compile hidden type
-compTM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL Type
+compTM
+  :: forall exp a.
+     ( PredicateExp exp a
+     , CompileExp   exp)
+  => Maybe (exp a)
+  -> VHDL Type
 compTM _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
@@ -76,8 +86,9 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> SequentialCMD exp prog ()
 
     If
-      :: (exp Bool, prog ())     -- if
-      -> [(exp Bool,  prog ())]  -- elseif
+      :: PredicateExp exp Bool
+      => (exp Bool, prog ())     -- if
+      -> [(exp Bool,  prog ())]  -- else-ifs
       -> prog ()                 -- else
       -> SequentialCMD exp prog ()
 
@@ -126,8 +137,9 @@ fileL     i = singleE . Local i T.File
 
 -- | Conventional if statement
 iff
-  :: (SequentialCMD (IExp instr) :<: instr)
-  =>  (IExp instr Bool, ProgramT instr m ())
+  :: ( SequentialCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool)
+  => (IExp instr Bool, ProgramT instr m ())
   -> [(IExp instr Bool, ProgramT instr m ())]
   -> ProgramT instr m ()
   -> ProgramT instr m ()
@@ -146,7 +158,9 @@ switch e choices def = singleE $ Case e choices def
 
 -- | Guards a program by some predicate
 when
-  :: (SequentialCMD (IExp instr) :<: instr, Monad m)
+  :: ( SequentialCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool
+     , Monad m)
   => IExp instr Bool
   -> ProgramT instr m ()
   -> ProgramT instr m ()
@@ -154,7 +168,8 @@ when b prg = singleE $ If (b, prg) [] (return ())
 
 -- | Standard 'if .. then .. else ..' statement
 ifThen
-  :: (SequentialCMD (IExp instr) :<: instr)
+  :: ( SequentialCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool)
   => IExp instr Bool
   -> ProgramT instr m ()
   -> ProgramT instr m ()
