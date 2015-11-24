@@ -11,7 +11,8 @@ module Language.Embedded.VHDL.Expression
   ( VHDLDomain
   , Data
   , Type
-    
+
+  -- expressions
   , not, and, or, xor, xnor, nand, nor
   , eq, neq
   , lt, lte, gt, gte
@@ -21,6 +22,13 @@ module Language.Embedded.VHDL.Expression
   , div, mod, rem
   , exp, abs
   , value, force, share
+
+  -- types
+  , std_logic
+  , signed, usigned
+  , signed8, signed16, signed32, signed64
+  , usigned8, usigned16, usigned32, usigned64
+
   ) where
 
 import Language.VHDL (Identifier(..))
@@ -32,6 +40,13 @@ import qualified Language.Embedded.VHDL.Monad as M
 import Language.Embedded.VHDL.Expression.Hoist
 import qualified Language.Embedded.VHDL.Expression.Hoist as Hoist
 import Language.Embedded.VHDL.Expression.Format
+
+import Language.Embedded.VHDL.Expression.Type (
+    std_logic
+  , signed, usigned
+  , signed8, signed16, signed32, signed64
+  , usigned8, usigned16, usigned32, usigned64
+  )
 import qualified Language.Embedded.VHDL.Expression.Type as T
 
 import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
