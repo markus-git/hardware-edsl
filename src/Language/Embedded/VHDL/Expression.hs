@@ -57,6 +57,8 @@ import Language.Syntactic.Functional.Tuple
 import Language.Syntactic.Sugar.BindingT ()
 import Language.Syntactic.Sugar.TupleT ()
 
+import Control.Applicative (liftA)
+
 import Data.Bits     (Bits)
 import qualified Data.Bits as Bits
 import Data.Maybe    (fromJust)
@@ -346,7 +348,9 @@ instance EvalEnv Primary env
 
 --------------------------------------------------------------------------------
 
-type VHDLDomain = Typed (
+type VHDLDomain = Typed Dom
+
+type Dom = 
   -- Syntactic
       BindingT
   :+: Let
@@ -359,7 +363,7 @@ type VHDLDomain = Typed (
   :+: Simple
   :+: Term
   :+: Factor
-  :+: Primary)
+  :+: Primary
 
 newtype Data a = Data { unData :: ASTF VHDLDomain a }
 
@@ -519,8 +523,8 @@ instance (Type a, Integral a) => Integral (Data a)
     rem  = rem
     div  = div
     mod  = mod
-    quotRem = undefined
-    divMod  = undefined
+    quotRem   = error "VHDL: quotRem is not _yet_ supported"
+    divMod    = error "VHDL: divMod is not _yet_ supported"
     toInteger = error "VHDL: toInteger is not supported"
 
 instance (Type a, Fractional a) => Fractional (Data a)
@@ -609,9 +613,16 @@ instance EvaluateExp Data
 
 instance CompileExp Data
   where
-    varE  i = undefined
-    compT t = undefined
-    compE e = undefined
+    varE (Ident i) = lift $ M.name i
+    
+    compT = compileT
+          . desugar
+          
+    compE = liftA lift
+          . compileE
+          . mapAST (\(Typed s) -> s)
+          . codeMotion codeMotionInterface
+          . desugar
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -636,7 +647,7 @@ instance (Rep a, Rep b) => Rep (a, b) where
 vars :: Name -> String
 vars v = 'v' : show v
 
-compileE :: ASTF VHDLDomain a -> VHDL Kind
+compileE :: ASTF Dom a -> VHDL Kind
 compileE var
   | Just (Var v) <- prj var = return $ P $ M.name $ vars v
 compileE val
@@ -715,14 +726,14 @@ compileE (primary)
   | Just (Lit i) <- prj primary = return $ Hoist.P $ M.lit $ format i
 
 -- ...
-un :: (Kind -> Kind) -> ASTF VHDLDomain a -> VHDL Kind
+un :: (Kind -> Kind) -> ASTF Dom a -> VHDL Kind
 un f x = compileE x >>= return . f
 
 -- ...
 bin
   :: (Kind -> Kind -> Kind)
-  -> ASTF VHDLDomain a
-  -> ASTF VHDLDomain b
+  -> ASTF Dom a
+  -> ASTF Dom b
   -> VHDL Kind
 bin f x y = do
   x' <- compileE x
