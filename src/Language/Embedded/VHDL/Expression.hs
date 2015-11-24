@@ -47,6 +47,7 @@ import Data.Bits     (Bits)
 import qualified Data.Bits as Bits
 import Data.Maybe    (fromJust)
 import Data.Typeable (Typeable)
+import Data.Word     (Word8)
 
 import Prelude hiding (not, and, or, abs, rem, div, mod)
 import qualified Prelude
@@ -331,18 +332,20 @@ instance EvalEnv Primary env
 
 --------------------------------------------------------------------------------
 
-type VHDLDomain = Typed
-  (   BindingT
+type VHDLDomain = Typed (
+  -- Syntactic
+      BindingT
   :+: Let
   :+: Tuple
+  :+: Construct
+  -- VHDL constructs
   :+: Expression
   :+: Relational
   :+: Shift
   :+: Simple
   :+: Term
   :+: Factor
-  :+: Primary
-  )
+  :+: Primary)
 
 newtype Data a = Data { unData :: ASTF VHDLDomain a }
 
@@ -513,6 +516,71 @@ instance (Type a, Fractional a) => Fractional (Data a)
     fromRational = error "VHDL: fromRational is not supported"
 
 --------------------------------------------------------------------------------
+-- ** ...
+
+type Length = Word8
+type Index  = Word8
+
+-- ...
+data Vector a where
+  Indexed :: Data Length -> (Data Index -> a) -> Vector a
+
+-- ...
+type Matrix a = Vector (Vector (Data a))
+
+instance (Rep (Internal a), Syntax a) => Syntactic (Vector a)
+  where
+    type Domain (Vector a)   = VHDLDomain
+    type Internal (Vector a) = [Internal a]
+    desugar = desugar . freezeVector . mapVector resugar
+    sugar   = mapVector resugar . thawVector . sugar
+
+instance Rep a => Rep [a]
+  where
+    format = error "format not supported for vectors"
+    width  = error "width not supported for vectors yet"
+    typed  = error "typed not supported for vectors yet"
+
+infixl 9 !
+
+length :: Vector a -> Data Length
+length (Indexed len _) = len
+
+indexed :: Data Length -> (Data Index -> a) -> Vector a
+indexed = Indexed
+
+index :: Vector a -> Data Index -> a
+index (Indexed _ ixf) = ixf
+
+(!) :: Vector a -> Data Index -> a
+(!) (Indexed _ ixf) i = ixf i
+
+freezeVector :: Type a => Vector (Data a) -> Data [a]
+freezeVector vec = undefined
+
+thawVector :: Type a => Data [a] -> Vector (Data a)
+thawVector arr = undefined
+
+mapVector :: (a -> b) -> Vector a -> Vector b
+mapVector f (Indexed len ixf) = Indexed len (f . ixf)
+
+--------------------------------------------------------------------------------
+
+-- | Get the length of an array
+arrLength :: Type a => Data [a] -> Data Length
+arrLength = sugarSymT $ Construct "arrLength" eval
+  where
+    eval []     = 0
+    eval (a:as) = 1 + eval as
+
+-- | Index into an array
+arrIx :: (Type a, Rep a) => Data [a] -> Data Index -> Data a
+arrIx = sugarSymT $ Construct "arrIndex" eval
+  where
+    eval (a:as) 0 = a
+    eval (a:as) n = eval as (n - 1)
+    
+--------------------------------------------------------------------------------
 -- * Evaluation of Expressions
 --------------------------------------------------------------------------------
 
@@ -534,8 +602,19 @@ instance CompileExp Data
 --------------------------------------------------------------------------------
 -- ** ...
 
-compileT :: ASTF VHDLDomain a -> VHDL T.Type
-compileT _ = undefined
+compileT :: forall a. Rep a => ASTF VHDLDomain a -> VHDL T.Type
+compileT _ = M.addType (unTag (typed :: Tagged a TypeRep))
+
+instance (Rep a, Rep b) => Rep (a, b) where
+  format = error "format not supported for tuples"
+  width  =
+    let l = unTag (width :: Tagged a Int)
+        r = unTag (width :: Tagged b Int)
+     in Tag (l + r)
+  typed  =
+    let l = unTag (typed :: Tagged a TypeRep)
+        r = unTag (typed :: Tagged b TypeRep)
+     in Tag (Composite l r)
 
 --------------------------------------------------------------------------------
 -- ** ...
