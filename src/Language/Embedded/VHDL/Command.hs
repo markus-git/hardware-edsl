@@ -7,7 +7,30 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
-module Language.Embedded.VHDL.Command where
+module Language.Embedded.VHDL.Command
+  ( SequentialCMD
+  , ConcurrentCMD
+  , HeaderCMD
+  , compile
+
+    -- sequential statements
+  , constantL, variableL, fileL
+  , (<==), (==:)
+  , iff, switch, when, ifThen
+
+    -- concurrent statements
+  , constantG, signalG, variableG, fileG
+  , process
+
+    -- header statements
+  , constantPort, constantGeneric
+  , signalPort, signalGeneric
+  , variablePort, variableGeneric
+  , filePort, fileGeneric
+  , clock
+  , reset
+  , architecture
+  ) where
 
 import Language.VHDL (Identifier(..), Label, Expression, Mode(..))
 import qualified Language.VHDL as V
@@ -20,8 +43,8 @@ import qualified Language.Embedded.VHDL.Expression.Type  as T
 import qualified Language.Embedded.VHDL.Expression.Hoist as H
 
 import Control.Arrow (second)
-import Control.Monad.Identity
-import Control.Monad.Operational.Higher
+import Control.Monad.Identity           hiding (when)
+import Control.Monad.Operational.Higher hiding (when)
 import Control.Applicative
 import Data.Typeable
 import Data.ALaCarte
