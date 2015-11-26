@@ -23,7 +23,7 @@ module Language.Embedded.VHDL.Monad (
 
     -- ^ ...
   , freshUnique
-  , newVar
+  , newSym
   , newLabel
 
     -- ^ declarations
@@ -182,12 +182,12 @@ freshUnique =
      return u
 
 -- | Generates a fresh and unique identifier
-newVar :: MonadV m => m Integer
-newVar = freshUnique
+newSym :: MonadV m => m Identifier
+newSym = do i <- freshUnique; return (Ident $ 'v' : show i)
 
 -- | Generates a fresh and unique label
 newLabel :: MonadV m => m Label
-newLabel = freshUnique >>= return . Ident . ('l' :) . show
+newLabel = do i <- freshUnique; return (Ident $ 'l' : show i)
 
 --------------------------------------------------------------------------------
 -- ** Header declarations -- ignores port/generic maps for now
