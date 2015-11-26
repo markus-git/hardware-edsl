@@ -30,7 +30,7 @@ class EvaluateExp exp
 class CompileExp exp
   where
     -- | Variable expressions
-    varE  :: PredicateExp exp a => Identifier -> exp a
+    varE  :: PredicateExp exp a => Integer -> exp a
 
     -- | Compilation of type kind
     compT :: PredicateExp exp a => exp a -> VHDL Type
