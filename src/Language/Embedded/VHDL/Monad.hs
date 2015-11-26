@@ -182,8 +182,8 @@ freshUnique =
      return u
 
 -- | Generates a fresh and unique identifier
-newVar :: MonadV m => m Identifier
-newVar = freshUnique >>= return . Ident . ('u' :) . show
+newVar :: MonadV m => m Integer
+newVar = freshUnique
 
 -- | Generates a fresh and unique label
 newLabel :: MonadV m => m Label
