@@ -57,6 +57,7 @@ import Language.Syntactic.Functional.Tuple
 import Language.Syntactic.Sugar.BindingT ()
 import Language.Syntactic.Sugar.TupleT ()
 
+import Control.Arrow
 import Control.Applicative (liftA)
 
 import Data.Bits     (Bits)
@@ -613,11 +614,10 @@ instance EvaluateExp Data
 
 instance CompileExp Data
   where
-    varE (Ident i) = lift $ M.name i
+    varE (Ident i) = lift (M.name i)
     
-    compT = compileT
-          . desugar
-          
+    compT = compileT . desugar
+
     compE = liftA lift
           . compileE
           . mapAST (\(Typed s) -> s)
@@ -725,11 +725,11 @@ compileE (factor :$ x)
 compileE (primary)
   | Just (Lit i) <- prj primary = return $ Hoist.P $ M.lit $ format i
 
--- ...
+--------------------------------------------------------------------------------
+
 un :: (Kind -> Kind) -> ASTF Dom a -> VHDL Kind
 un f x = compileE x >>= return . f
 
--- ...
 bin
   :: (Kind -> Kind -> Kind)
   -> ASTF Dom a
