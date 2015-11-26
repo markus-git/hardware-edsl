@@ -614,7 +614,7 @@ instance EvaluateExp Data
 
 instance CompileExp Data
   where
-    varE (Ident i) = lift (M.name i)
+    varE i = sugarSymT ((VarT (Name i)))
     
     compT = compileT . desugar
 
