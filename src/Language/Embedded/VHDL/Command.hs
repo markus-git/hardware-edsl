@@ -309,7 +309,7 @@ compileConcurrent (Global k e) =
        T.Variable -> M.declVariable i t v
      return i
 compileConcurrent (Process l is p) =
-  do (a, process) <- M.inProcess' l is p
+  do (a, process) <- M.inProcess l is p
      M.addConcurrent (V.ConProcess process)
      return a
 compileConcurrent (PortMap is) =
