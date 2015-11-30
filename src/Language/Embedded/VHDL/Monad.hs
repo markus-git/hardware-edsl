@@ -43,6 +43,7 @@ module Language.Embedded.VHDL.Monad (
   , inEntity
   , inArchitecture
   , inProcess
+  , inProcess'
   , inConditional
   , inCase
 
@@ -85,6 +86,7 @@ import Data.Map         (Map)
 import qualified Data.Map as Map
 
 import Text.PrettyPrint (Doc, ($+$))
+import qualified Text.PrettyPrint as Text
 
 import Prelude hiding (null, not, abs, exp, rem, mod, div, and, or)
 import qualified Prelude as P
@@ -275,19 +277,24 @@ addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
 -- *** Process-statements
 
 -- | Runs the given action inside a process
--- ! Due to how translate works, some local declarations might dissapear.
 inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
 inProcess l is m =
   do oldLocals     <- CMS.gets _local
      oldSequential <- CMS.gets _sequential
      CMS.modify $ \e -> e { _local      = []
                           , _sequential = [] }
-     a <- m
-     newLocals     <- reverse <$> CMS.gets _local
-     newSequential <- reverse <$> CMS.gets _sequential
+     a <- inProcess' l is m
      CMS.modify $ \e -> e { _local      = oldLocals
                           , _sequential = oldSequential }
-     return ( a
+     return a
+
+-- | Runs the given action inside a process with old scope
+inProcess' :: MonadV m => Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
+inProcess' l is m =
+  do result        <- m
+     newLocals     <- reverse <$> CMS.gets _local
+     newSequential <- reverse <$> CMS.gets _sequential
+     return ( result
             , V.ProcessStatement
                 (Just l)                        -- label
                 (False)                         -- postponed
@@ -297,6 +304,7 @@ inProcess l is m =
   where
     sensitivity | P.null is = Nothing
                 | otherwise = Just $ V.SensitivityList $ fmap V.NSimple is
+      
 
 --------------------------------------------------------------------------------
 -- ** Sequential statements
@@ -357,35 +365,33 @@ inCase e choices =
 addArchitecture :: MonadV m => V.ArchitectureBody -> m ()
 addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures s)}
 
+-- | Runs the given program in an architecture
 inArchitecture :: MonadV m => Identifier -> m a -> m a
 inArchitecture name m =
-  do oldEntity     <- CMS.gets _entity
-     oldComponent  <- CMS.gets _components
-     oldGlobal     <- CMS.gets _global
-     oldLocal      <- CMS.gets _local
+  do oldGlobal     <- CMS.gets _global
      oldConcurrent <- CMS.gets _concurrent
-     CMS.modify $ \e -> e { _components = Set.empty
-                          , _global     = []
-                          , _local      = []
+     CMS.modify $ \e -> e { _global     = []
                           , _concurrent = []
                           }
-     a <- m
-     newComponent  <-             CMS.gets _components
-     newGlobal     <- reverse <$> CMS.gets _global
-     newLocal      <- reverse <$> CMS.gets _local
-     newConcurrent <- reverse <$> CMS.gets _concurrent
-     CMS.modify $ \e -> e { _components = oldComponent
-                          , _global     = oldGlobal
-                          , _local      = oldLocal
+     result <- inArchitecture' name m
+     CMS.modify $ \e -> e { _global     = oldGlobal
                           , _concurrent = oldConcurrent
                           }
+     return result
 
+-- | Runs the given program in an architecture with old scope
+inArchitecture' :: MonadV m => Identifier -> m a -> m a
+inArchitecture' name m =
+  do result        <- m
+     entity        <- CMS.gets _entity
+     newGlobal     <- reverse <$> CMS.gets _global
+     newConcurrent <- reverse <$> CMS.gets _concurrent
      addArchitecture $ V.ArchitectureBody name
-       (V.NSimple (V.Ident oldEntity))
-       (merge $ newGlobal ++ newLocal)
+       (V.NSimple (V.Ident entity))
+       (merge newGlobal)
        (newConcurrent)
-     return a
-
+     return result
+  
 --------------------------------------------------------------------------------
 -- ** Creating sub-entities
 
@@ -453,7 +459,8 @@ prettyVEnv env = stack $
 --------------------------------------------------------------------------------
 
 genPackage :: String -> [V.TypeDeclaration] -> Doc
-genPackage name = V.pp . V.PackageDeclaration (V.Ident name) . fmap V.PHDIType
+genPackage name [] = Text.empty
+genPackage name xs = V.pp $ V.PackageDeclaration (V.Ident name) $ fmap V.PHDIType xs
 
 --------------------------------------------------------------------------------
 -- * Common things
