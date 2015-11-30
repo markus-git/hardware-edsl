@@ -575,10 +575,10 @@ index (Indexed _ ixf) = ixf
 (!) (Indexed _ ixf) i = ixf i
 
 freezeVector :: Type a => Vector (Data a) -> Data [a]
-freezeVector vec = undefined
+freezeVector vec = error "!"
 
 thawVector :: Type a => Data [a] -> Vector (Data a)
-thawVector arr = undefined
+thawVector arr = error "!"
 
 mapVector :: (a -> b) -> Vector a -> Vector b
 mapVector f (Indexed len ixf) = Indexed len (f . ixf)
@@ -616,7 +616,7 @@ instance CompileExp Data
   where
     varE i = sugarSymT ((VarT (Name i)))
     
-    compT = compileT . desugar
+    compT = compileT
 
     compE = liftA lift
           . compileE
@@ -627,7 +627,7 @@ instance CompileExp Data
 --------------------------------------------------------------------------------
 -- ** ...
 
-compileT :: forall a. Rep a => ASTF VHDLDomain a -> VHDL T.Type
+compileT :: forall a. Rep a => Data a -> VHDL T.Type
 compileT _ = M.addType (unTag (typed :: Tagged a TypeRep))
 
 instance (Rep a, Rep b) => Rep (a, b) where
@@ -649,7 +649,8 @@ vars v = 'v' : show v
 
 compileE :: ASTF Dom a -> VHDL Kind
 compileE var
-  | Just (Var v) <- prj var = return $ P $ M.name $ vars v
+  | Just (Var  v) <- prj var = return $ P $ M.name $ vars v
+  | Just (VarT v) <- prj var = return $ P $ M.name $ vars v
 compileE val
   | Just (Lit v) <- prj val = return $ P $ M.string $ format v
 compileE (lets :$ a :$ (lam :$ body))
@@ -724,6 +725,8 @@ compileE (factor :$ x)
     go f = un (\a -> Hoist.F $ f (lift a)) x
 compileE (primary)
   | Just (Lit i) <- prj primary = return $ Hoist.P $ M.lit $ format i
+
+compileE x = error (Syntactic.showAST x)
 
 --------------------------------------------------------------------------------
 
