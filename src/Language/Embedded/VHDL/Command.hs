@@ -177,7 +177,7 @@ switch e choices def = singleE $ Case e choices def
 -- | Guards a program by some predicate
 when
   :: ( SequentialCMD (IExp instr) :<: instr
-     , PredicateExp (IExp instr) Bool
+     , PredicateExp  (IExp instr) Bool
      , Monad m)
   => IExp instr Bool
   -> ProgramT instr m ()
@@ -187,7 +187,7 @@ when b prg = singleE $ If (b, prg) [] (return ())
 -- | Standard 'if .. then .. else ..' statement
 ifThen
   :: ( SequentialCMD (IExp instr) :<: instr
-     , PredicateExp (IExp instr) Bool)
+     , PredicateExp  (IExp instr) Bool)
   => IExp instr Bool
   -> ProgramT instr m ()
   -> ProgramT instr m ()
@@ -278,7 +278,8 @@ type instance IExp (ConcurrentCMD e :+: i) = e
 
 -- | Declare global constands/variables/files
 constantG, signalG, variableG, fileG
-  :: (ConcurrentCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
+  :: ( ConcurrentCMD (IExp instr) :<: instr
+     , PredicateExp  (IExp instr) a)
   => Maybe (IExp instr a)
   -> ProgramT instr m Identifier
 constantG = singleE . Global T.Constant
