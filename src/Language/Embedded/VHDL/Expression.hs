@@ -512,26 +512,26 @@ instance (Type a, Real a) => Real (Data a)
 instance (Type a, Num a) => Num (Data a)
   where
     fromInteger = value . fromInteger
-    (+) = add
-    (-) = sub
-    (*) = mul
-    abs = abs
-    signum = error "VHDL: signum is not supported"
+    (+)         = add
+    (-)         = sub
+    (*)         = mul
+    abs         = abs
+    signum      = error "VHDL: signum is not supported"
 
 instance (Type a, Integral a) => Integral (Data a)
   where
-    quot = error "VHDL: quotient is not supported"
-    rem  = rem
-    div  = div
-    mod  = mod
-    quotRem   = error "VHDL: quotRem is not _yet_ supported"
-    divMod    = error "VHDL: divMod is not _yet_ supported"
-    toInteger = error "VHDL: toInteger is not supported"
+    quot         = error "VHDL: quotient is not supported"
+    rem          = rem
+    div          = div
+    mod          = mod
+    quotRem  a b = (quot a b, rem a b)
+    divMod   a b = (div  a b, mod a b)
+    toInteger    = error "VHDL: toInteger is not supported"
 
 instance (Type a, Fractional a) => Fractional (Data a)
   where
-    (/)   = error "VHDL: floating point division is not _yet_ supported"
-    recip = (/) (value 1)
+    (/)          = error "VHDL: floating point division is not _yet_ supported"
+    recip        = (/) (value 1)
     fromRational = error "VHDL: fromRational is not supported"
 
 --------------------------------------------------------------------------------
