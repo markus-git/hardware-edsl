@@ -155,7 +155,7 @@ fileL     = singleE . Local T.File
 (==:) i = singleE . Assignment i T.Variable
 
 -- | Conventional if statement
-iff
+iff 
   :: (SequentialCMD (IExp instr) :<: instr, PredicateExp (IExp instr) Bool)
   =>  (IExp instr Bool, ProgramT instr m ())
   -> [(IExp instr Bool, ProgramT instr m ())]
@@ -328,7 +328,7 @@ data Record a = Record String
 
 data HeaderCMD exp (prog :: * -> *) a
   where
-    Declare
+    DeclarePort
       :: PredicateExp exp a
       => DeclKind
       -> Kind
@@ -348,9 +348,9 @@ data HeaderCMD exp (prog :: * -> *) a
 
 instance HFunctor (HeaderCMD exp)
   where
-    hfmap _ (Declare d k m e)   = Declare d k m e
-    hfmap _ (DeclareRecord f s) = DeclareRecord f s
-    hfmap f (Architecture s p)  = Architecture s (f p)
+    hfmap _ (DeclarePort d k m e) = DeclarePort d k m e
+    hfmap _ (DeclareRecord f s)   = DeclareRecord f s
+    hfmap f (Architecture s p)    = Architecture s (f p)
 
 type instance IExp (HeaderCMD e)       = e
 type instance IExp (HeaderCMD e :+: i) = e
@@ -363,14 +363,14 @@ constantPort, constantGeneric, signalPort, signalGeneric, variablePort, variable
   => Mode
   -> Maybe (IExp instr a)
   -> ProgramT instr m Identifier
-constantPort    m = singleE . Declare Port    T.Constant m
-constantGeneric m = singleE . Declare Generic T.Constant m
-signalPort      m = singleE . Declare Port    T.Signal   m
-signalGeneric   m = singleE . Declare Generic T.Signal   m
-variablePort    m = singleE . Declare Port    T.Variable m
-variableGeneric m = singleE . Declare Generic T.Variable m
-filePort        m = singleE . Declare Port    T.File     m
-fileGeneric     m = singleE . Declare Generic T.File     m
+constantPort    m = singleE . DeclarePort Port    T.Constant m
+constantGeneric m = singleE . DeclarePort Generic T.Constant m
+signalPort      m = singleE . DeclarePort Port    T.Signal   m
+signalGeneric   m = singleE . DeclarePort Generic T.Signal   m
+variablePort    m = singleE . DeclarePort Port    T.Variable m
+variableGeneric m = singleE . DeclarePort Generic T.Variable m
+filePort        m = singleE . DeclarePort Port    T.File     m
+fileGeneric     m = singleE . DeclarePort Generic T.File     m
 
 -- | Declare an architecture
 architecture
@@ -383,7 +383,7 @@ architecture name = singleE . Architecture (Ident name)
 --------------------------------------------------------------------------------
 
 compileHeader :: CompileExp exp => HeaderCMD exp VHDL a -> VHDL a
-compileHeader (Declare Port k m e) =
+compileHeader (DeclarePort Port k m e) =
   do v <- compEM e
      t <- compTM e
      i <- M.newSym
@@ -392,7 +392,7 @@ compileHeader (Declare Port k m e) =
        T.Signal   -> M.interfaceSignal   i m t v
        T.Variable -> M.interfaceVariable i m t v
      return i
-compileHeader (Declare Generic k m e) =
+compileHeader (DeclarePort Generic k m e) =
   do v <- compEM e
      t <- compTM e
      i <- M.newSym
