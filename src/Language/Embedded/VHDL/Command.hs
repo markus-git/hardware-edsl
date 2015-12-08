@@ -326,6 +326,8 @@ data DeclKind = Port | Generic
 
 data Record a = Record String
 
+data Array  a = Array  String
+
 data HeaderCMD exp (prog :: * -> *) a
   where
     DeclarePort
@@ -341,6 +343,9 @@ data HeaderCMD exp (prog :: * -> *) a
       -> (Identifier, Type)
       -> HeaderCMD exp prog (Record a)
 
+    DeclareArray
+      :: HeaderCMD exp prog (Array a)
+
     Architecture
       :: Identifier
       -> prog a
@@ -350,6 +355,7 @@ instance HFunctor (HeaderCMD exp)
   where
     hfmap _ (DeclarePort d k m e) = DeclarePort d k m e
     hfmap _ (DeclareRecord f s)   = DeclareRecord f s
+    hfmap _ (DeclareArray)        = DeclareArray
     hfmap f (Architecture s p)    = Architecture s (f p)
 
 type instance IExp (HeaderCMD e)       = e
@@ -403,6 +409,8 @@ compileHeader (DeclarePort Generic k m e) =
      return i
 compileHeader (DeclareRecord f s) =
   do error "imperative-vhdl: records are not yet supported."
+compileHeader (DeclareArray) =
+  do error "imperative-vhdl: arrays are not yet supported."
 compileHeader (Architecture name prg) =
   do M.inArchitecture name prg
 
