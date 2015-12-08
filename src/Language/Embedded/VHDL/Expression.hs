@@ -568,9 +568,6 @@ compileT _ = M.addType (unTag (typed :: Tagged a TypeRep))
 --------------------------------------------------------------------------------
 -- ** ...
 
-vars :: Name -> String
-vars v = 'v' : show v
-
 compileE :: ASTF Dom a -> VHDL Kind
 compileE var
   | Just (Var  v) <- prj var = return $ P $ M.name $ vars v
@@ -649,19 +646,20 @@ compileE (factor :$ x)
     go f = un (\a -> Hoist.F $ f (lift a)) x
 compileE (primary)
   | Just (Lit i) <- prj primary = return $ Hoist.P $ M.lit $ format i
-
-compileE x = error (Syntactic.showAST x)
+compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
 
 --------------------------------------------------------------------------------
 
+-- | ...
+vars :: Name -> String
+vars v = 'v' : show v
+
+-- | ...
 un :: (Kind -> Kind) -> ASTF Dom a -> VHDL Kind
 un f x = compileE x >>= return . f
 
-bin
-  :: (Kind -> Kind -> Kind)
-  -> ASTF Dom a
-  -> ASTF Dom b
-  -> VHDL Kind
+-- | ...
+bin :: (Kind -> Kind -> Kind) -> ASTF Dom a -> ASTF Dom b -> VHDL Kind
 bin f x y = do
   x' <- compileE x
   y' <- compileE y
