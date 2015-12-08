@@ -99,10 +99,7 @@ import qualified Prelude as P
 data Entity = Entity (V.EntityDeclaration) [V.ArchitectureBody]
 
 -- | ...
-data TypeRep
-    = Prim       Type
-    | Composite  TypeRep TypeRep
-    | Array      TypeRep
+data TypeRep = Prim Type
   deriving (Eq, Ord)
 
 -- | Code generation state
@@ -207,31 +204,8 @@ addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 
 -- | ...
 addType :: MonadV m => TypeRep -> m Type
-addType p@(Prim t)        = return t
-addType _                 = error "!"
-{-
-addType a@(Array t)       = do
-  exists <- containsType a
-  case exists of
-    Just i  -> return (fromName i)
-    Nothing -> do
-      typ  <- addType t
-      name <- newLabel
-      let def = declArray name typ
-      insertType a def
-      return $ fromName (nameOf def)
-addType r@(Composite f s) = do
-  exists <- containsType r
-  case exists of
-    Just i  -> return (fromName i)
-    Nothing -> do
-      f'   <- addType f
-      s'   <- addType s
-      name <- newLabel
-      let def = declRecord name [(Ident "member1", f'), (Ident "member2", s')]
-      insertType r def
-      return $ fromName (nameOf def)
--}
+addType p@(Prim t) = return t
+
 insertType :: MonadV m => TypeRep -> V.TypeDeclaration -> m ()
 insertType r t = CMS.modify $ \s -> s { _types = Map.insert r t (_types s) }
 

@@ -565,17 +565,6 @@ instance CompileExp Data
 compileT :: forall a. Rep a => Data a -> VHDL T.Type
 compileT _ = M.addType (unTag (typed :: Tagged a TypeRep))
 
-instance (Rep a, Rep b) => Rep (a, b) where
-  format = error "format not supported for tuples"
-  width  =
-    let l = unTag (width :: Tagged a Int)
-        r = unTag (width :: Tagged b Int)
-     in Tag (l + r)
-  typed  =
-    let l = unTag (typed :: Tagged a TypeRep)
-        r = unTag (typed :: Tagged b TypeRep)
-     in Tag (Composite l r)
-
 --------------------------------------------------------------------------------
 -- ** ...
 
