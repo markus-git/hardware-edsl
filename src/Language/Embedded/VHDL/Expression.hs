@@ -28,7 +28,6 @@ module Language.Embedded.VHDL.Expression
   , signed, usigned
   , signed8, signed16, signed32, signed64
   , usigned8, usigned16, usigned32, usigned64
-
   ) where
 
 import Language.VHDL (Identifier(..))
@@ -54,8 +53,8 @@ import qualified Language.Syntactic as Syntactic
 import Language.Syntactic.Functional
 import Language.Syntactic.Functional.Sharing
 import Language.Syntactic.Functional.Tuple
-import Language.Syntactic.Sugar.BindingT ()
-import Language.Syntactic.Sugar.TupleT ()
+import Language.Syntactic.Sugar.BindingTyped ()
+import Language.Syntactic.Sugar.TupleTyped ()
 
 import Control.Arrow
 import Control.Applicative (liftA)
@@ -386,7 +385,7 @@ type instance PredicateExp Data = Type
 --------------------------------------------------------------------------------
 
 codeMotionInterface :: CodeMotionInterface VHDLDomain
-codeMotionInterface = defaultInterfaceT sharable (const True)
+codeMotionInterface = defaultInterface VarT LamT sharable (const True)
   where
     sharable :: ASTF VHDLDomain a -> ASTF VHDLDomain b -> Bool
     sharable (Sym _) _ = False
@@ -421,66 +420,66 @@ force :: Syntax a => a -> a
 force = resugar
 
 share :: (Syntax a, Syntax b) => a -> (a -> b) -> b
-share = sugarSymT Let
+share = sugarSymTyped Let
 
 --------------------------------------------------------------------------------
 -- ** ...
 
 -- logical operators
 and, or, xor, xnor, nand, nor :: Data Bool -> Data Bool -> Data Bool
-and  = sugarSymT And
-or   = sugarSymT Or
-xor  = sugarSymT Xor
-xnor = sugarSymT Xnor
-nand = sugarSymT Nand
-nor  = sugarSymT Nor
+and  = sugarSymTyped And
+or   = sugarSymTyped Or
+xor  = sugarSymTyped Xor
+xnor = sugarSymTyped Xnor
+nand = sugarSymTyped Nand
+nor  = sugarSymTyped Nor
 
 -- relational operators
 eq, neq :: (Type a, Eq a) => Data a -> Data a -> Data Bool
-eq  = sugarSymT Eq
-neq = sugarSymT Neq
+eq  = sugarSymTyped Eq
+neq = sugarSymTyped Neq
 
 lt, lte, gt, gte :: (Type a, Ord a) => Data a -> Data a -> Data Bool
-lt  = sugarSymT Lt
-lte = sugarSymT Lte
-gt  = sugarSymT Gt
-gte = sugarSymT Gte
+lt  = sugarSymTyped Lt
+lte = sugarSymTyped Lte
+gt  = sugarSymTyped Gt
+gte = sugarSymTyped Gte
 
 -- shift operators
 sll, srl, sla, sra, rol, ror :: (Type a, Bits a, Type b, Integral b) => Data a -> Data b -> Data a
-sll = sugarSymT Sll
-srl = sugarSymT Srl
-sla = sugarSymT Sla
-sra = sugarSymT Sra
-rol = sugarSymT Rol
-ror = sugarSymT Ror
+sll = sugarSymTyped Sll
+srl = sugarSymTyped Srl
+sla = sugarSymTyped Sla
+sra = sugarSymTyped Sra
+rol = sugarSymTyped Rol
+ror = sugarSymTyped Ror
 
 -- adding operators
 add, sub :: (Type a, Num a) => Data a -> Data a -> Data a
-add = sugarSymT Add
-sub = sugarSymT Sub
+add = sugarSymTyped Add
+sub = sugarSymTyped Sub
 
 cat :: (Type a, Read a, Show a) => Data a -> Data a -> Data a
-cat = sugarSymT Cat
+cat = sugarSymTyped Cat
 
 -- multiplying operators
 mul :: (Type a, Num a) => Data a -> Data a -> Data a
-mul = sugarSymT Mul
+mul = sugarSymTyped Mul
 
 div, mod, rem :: (Type a, Integral a) => Data a -> Data a -> Data a
-div = sugarSymT Div
-mod = sugarSymT Mod
-rem = sugarSymT Rem
+div = sugarSymTyped Div
+mod = sugarSymTyped Mod
+rem = sugarSymTyped Rem
 
 -- miscellaneous operators
 exp :: (Type a, Num a, Type b, Integral b) => Data a -> Data b -> Data a
-exp = sugarSymT Exp
+exp = sugarSymTyped Exp
 
 abs :: (Type a, Num a) => Data a -> Data a
-abs = sugarSymT Abs
+abs = sugarSymTyped Abs
 
 not :: Data Bool -> Data Bool
-not = sugarSymT Not
+not = sugarSymTyped Not
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -549,7 +548,7 @@ instance EvaluateExp Data
 
 instance CompileExp Data
   where
-    varE i = sugarSymT ((VarT (Name i)))
+    varE i = sugarSymTyped ((VarT (Name i)))
     
     compT = compileT
 
@@ -564,9 +563,6 @@ instance CompileExp Data
 
 compileT :: forall a. Rep a => Data a -> VHDL T.Type
 compileT _ = M.addType (unTag (typed :: Tagged a TypeRep))
-
---------------------------------------------------------------------------------
--- ** ...
 
 compileE :: ASTF Dom a -> VHDL Kind
 compileE var
