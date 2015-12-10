@@ -5,14 +5,12 @@
 -- used for the Ord/Eq inst. of XDeclaration etc.
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Language.Embedded.VHDL.Monad (    
+module Language.Embedded.VHDL.Monad {-(    
     VHDL
   , VHDLT
   , VHDLEnv
   , emptyVHDLEnv
-
-  , TypeRep(..)
-
+    
     -- ^ run
   , runVHDLT
   , runVHDL
@@ -29,11 +27,10 @@ module Language.Embedded.VHDL.Monad (
     -- ^ declarations
   , addPort
   , addGeneric
-  , addType
+--, addType
   , addComponent
   , addGlobal
   , addLocal
-  , containsType
 
     -- ^ statements
   , addConcurrent
@@ -43,7 +40,6 @@ module Language.Embedded.VHDL.Monad (
   , inEntity
   , inArchitecture
   , inProcess
-  , inProcess'
   , inConditional
   , inCase
 
@@ -60,7 +56,7 @@ module Language.Embedded.VHDL.Monad (
   , assignVariable
 
   , module Language.Embedded.VHDL.Monad.Expression
-  ) where
+  ) -}where
 
 import Language.VHDL (Identifier(..), Mode(..), Expression, Label)
 import qualified Language.VHDL as V
@@ -95,34 +91,22 @@ import qualified Prelude as P
 -- * ..
 --------------------------------------------------------------------------------
 
--- | ...
-data Entity = Entity (V.EntityDeclaration) [V.ArchitectureBody]
-
--- | ...
-data TypeRep = Prim Type
-  deriving (Eq, Ord)
-
 -- | Code generation state
 data VHDLEnv = VHDLEnv
   { _unique        :: !Integer
-  , _entity        :: String
-
     -- ..
-  , _parts         :: [Entity]
-
+  , _designs       :: [V.DesignUnit]
     -- ...
-  , _types         :: Map TypeRep V.TypeDeclaration
+  , _context       :: [V.ContextItem]
+    -- ...
+  , _types         :: Set V.TypeDeclaration
   , _components    :: Set V.ComponentDeclaration
-
     -- headers
   , _ports         :: [V.InterfaceDeclaration]
   , _generics      :: [V.InterfaceDeclaration]
-  , _architectures :: [V.ArchitectureBody]
-    
     -- declarations
   , _global        :: [V.BlockDeclarativeItem]
   , _local         :: [V.BlockDeclarativeItem]
-
     -- statements
   , _concurrent    :: [V.ConcurrentStatement]
   , _sequential    :: [V.SequentialStatement]
@@ -131,13 +115,12 @@ data VHDLEnv = VHDLEnv
 -- | Initial state during code generation
 emptyVHDLEnv = VHDLEnv
   { _unique        = 0
-  , _entity        = "invisible"
-  , _parts         = []
-  , _types         = Map.empty
+  , _designs       = []
+  , _context       = []
+  , _types         = Set.empty
   , _components    = Set.empty
   , _ports         = []
   , _generics      = []
-  , _architectures = []
   , _global        = []
   , _local         = []
   , _concurrent    = []
@@ -145,7 +128,7 @@ emptyVHDLEnv = VHDLEnv
   }
 
 --------------------------------------------------------------------------------
--- *
+-- * 
 
 -- | Type constraints for the VHDL monads
 type MonadV m = (Functor m, Applicative m, Monad m, MonadState VHDLEnv m)
@@ -189,6 +172,23 @@ newLabel :: MonadV m => m Label
 newLabel = do i <- freshUnique; return (Ident $ 'l' : show i)
 
 --------------------------------------------------------------------------------
+-- ** ...
+
+-- | Adds a new library import to the context
+newLibrary :: MonadV m => Identifier -> m ()
+newLibrary l = CMS.modify $ \s -> s { _context = item : (_context s) }
+  where
+    item :: V.ContextItem
+    item = V.ContextLibrary (V.LibraryClause (V.LogicalNameList [l]))
+
+-- | Adds a new library use clause to the context
+newImport :: MonadV m => Identifier -> m ()
+newImport i = CMS.modify $ \s -> s { _context = item : (_context s) }
+  where
+    item :: V.ContextItem
+    item = V.ContextUse (V.UseClause [V.SelectedName (V.PName (V.NSimple i)) (V.SAll)])
+
+--------------------------------------------------------------------------------
 -- ** Header declarations -- ignores port/generic maps for now
 
 -- | Adds a port declaration to the entity
@@ -201,30 +201,6 @@ addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 
 --------------------------------------------------------------------------------
 -- ** Type declarations
-
--- | ...
-addType :: MonadV m => TypeRep -> m Type
-addType p@(Prim t) = return t
-
-insertType :: MonadV m => TypeRep -> V.TypeDeclaration -> m ()
-insertType r t = CMS.modify $ \s -> s { _types = Map.insert r t (_types s) }
-
--- | ...
-containsType :: MonadV m => TypeRep -> m (Maybe Identifier)
-containsType tr = fmap nameOf <$> CMS.gets (Map.lookup tr . _types)
-
--- | ...
-nameOf :: V.TypeDeclaration -> Identifier
-nameOf (V.TDFull    (V.FullTypeDeclaration i _))     = i
-nameOf (V.TDPartial (V.IncompleteTypeDeclaration i)) = i
-
--- | ...
--- *** I have no idea what happens when put a range constraint on records..
-fromName :: Identifier -> Type
-fromName i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
-
---------------------------------------------------------------------------------
--- ** ...
 
 -- | Adds a component declaration to the architecture
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
@@ -242,13 +218,30 @@ addLocal :: MonadV m => V.BlockDeclarativeItem -> m ()
 addLocal l = CMS.modify $ \s -> s { _local = l : (_local s) }
 
 --------------------------------------------------------------------------------
--- ** Concurrent statements
+-- ** Statement declarations
 
+-- | Adds a concurrent statement
 addConcurrent :: MonadV m => V.ConcurrentStatement -> m ()
 addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
 
+-- | Adds a sequential statement
+addSequential :: MonadV m => V.SequentialStatement -> m ()
+addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
+
 --------------------------------------------------------------------------------
--- *** Process-statements
+-- * ...
+--------------------------------------------------------------------------------
+
+-- | ...
+contain :: MonadV m => m () -> m [V.SequentialStatement]
+contain m = do
+  m                                          -- do
+  new <- reverse <$> CMS.gets _sequential    -- get
+  CMS.modify $ \e -> e { _sequential = [] }  -- reset
+  return new                                 -- return
+
+--------------------------------------------------------------------------------
+-- ** Process-statements
 
 -- | Runs the given action inside a process
 inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
@@ -257,17 +250,11 @@ inProcess l is m =
      oldSequential <- CMS.gets _sequential
      CMS.modify $ \e -> e { _local      = []
                           , _sequential = [] }
-     a <- inProcess' l is m
-     CMS.modify $ \e -> e { _local      = oldLocals
-                          , _sequential = oldSequential }
-     return a
-
--- | Runs the given action inside a process with old scope
-inProcess' :: MonadV m => Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
-inProcess' l is m =
-  do result        <- m
+     result        <- m
      newLocals     <- reverse <$> CMS.gets _local
      newSequential <- reverse <$> CMS.gets _sequential
+     CMS.modify $ \e -> e { _local      = oldLocals
+                          , _sequential = oldSequential }
      return ( result
             , V.ProcessStatement
                 (Just l)                        -- label
@@ -279,16 +266,10 @@ inProcess' l is m =
     sensitivity | P.null is = Nothing
                 | otherwise = Just $ V.SensitivityList $ fmap V.NSimple is
       
-
 --------------------------------------------------------------------------------
--- ** Sequential statements
+-- ** If-statements
 
-addSequential :: MonadV m => V.SequentialStatement -> m ()
-addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
-
---------------------------------------------------------------------------------
--- *** If-statements
-
+-- | ...
 inConditional :: MonadV m => (V.Condition, m ()) -> [(V.Condition, m ())] -> m () -> m (V.IfStatement)
 inConditional (c, m) os e =
   do let (cs, ns) = unzip os
@@ -310,16 +291,10 @@ inConditional (c, m) os e =
       | P.null xs = Nothing
       | otherwise = Just xs
 
-contain :: MonadV m => m () -> m [V.SequentialStatement]
-contain m =
- do m                                          -- do
-    new <- reverse <$> CMS.gets _sequential    -- get
-    CMS.modify $ \e -> e { _sequential = [] }  -- reset
-    return $ new
-
 --------------------------------------------------------------------------------
--- *** Case-statements
+-- ** Case-statements
 
+-- | ...
 inCase :: MonadV m => V.Expression -> [(V.Choices, m ())] -> m (V.CaseStatement)
 inCase e choices =
   do let (cs, ns) = unzip choices
@@ -335,10 +310,11 @@ inCase e choices =
 
 --------------------------------------------------------------------------------
 -- ** Creating architectures
-
+{-
 addArchitecture :: MonadV m => V.ArchitectureBody -> m ()
 addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures s)}
-
+-}
+{-
 -- | Runs the given program in an architecture
 inArchitecture :: MonadV m => Identifier -> m a -> m a
 inArchitecture name m =
@@ -352,7 +328,8 @@ inArchitecture name m =
                           , _concurrent = oldConcurrent
                           }
      return result
-
+-}
+{-
 -- | Runs the given program in an architecture with old scope
 inArchitecture' :: MonadV m => Identifier -> m a -> m a
 inArchitecture' name m =
@@ -365,13 +342,14 @@ inArchitecture' name m =
        (merge newGlobal)
        (newConcurrent)
      return result
-  
+-}  
 --------------------------------------------------------------------------------
 -- ** Creating sub-entities
-
+{-
 addEntity  :: MonadV m => Entity -> m ()
 addEntity v = CMS.modify $ \s -> s { _parts = v : (_parts s) }
-
+-}
+{-
 inEntity :: MonadV m => String -> m a -> m a
 inEntity name m =
   do oldUnique        <- CMS.gets _unique
@@ -409,11 +387,11 @@ inEntity name m =
     maybeNull :: [V.InterfaceDeclaration] -> Maybe V.InterfaceList
     maybeNull [] = Nothing
     maybeNull xs = Just $ V.InterfaceList $ merge xs
-
+-}
 --------------------------------------------------------------------------------
 -- * Pretty
 --------------------------------------------------------------------------------
-
+{-
 prettyVHDL :: VHDL a -> Doc
 prettyVHDL = CMI.runIdentity . prettyVHDLT
 
@@ -422,20 +400,20 @@ prettyVHDLT m = prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDL
 
 prettyVEnv  :: VHDLEnv -> Doc
 prettyVEnv env = stack $
-    (genPackage "types" $ Map.elems (_types env)) : (fmap pretty (_parts env))
+    (genPackage "types" $ Set.elems (_types env)) : (fmap pretty (_parts env))
   where
     stack :: [Doc] -> Doc
     stack = foldr1 ($+$)
     
     pretty :: Entity -> Doc
     pretty (Entity e as) = stack (V.pp e : fmap V.pp as)
-
+-}
 --------------------------------------------------------------------------------
-
+{-
 genPackage :: String -> [V.TypeDeclaration] -> Doc
 genPackage name [] = Text.empty
 genPackage name xs = V.pp $ V.PackageDeclaration (V.Ident name) $ fmap V.PHDIType xs
-
+-}
 --------------------------------------------------------------------------------
 -- * Common things
 --------------------------------------------------------------------------------
@@ -582,8 +560,10 @@ tryProcess (V.BDIFile     f) = Just $ V.PDIFile     f
 tryProcess _                 = Nothing
 
 --------------------------------------------------------------------------------
--- Ord instance for use in sets *** this is probably a really bad idea
---------------------------------------------------------------------------------
+-- **  Ord instance for use in sets
+--
+-- *** These break the Ord rules but seems to be needed for Set.
+--     Should be replaced.
 
 deriving instance Ord V.Identifier
 

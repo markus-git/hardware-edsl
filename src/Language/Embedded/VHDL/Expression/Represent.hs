@@ -1,13 +1,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
 
-module Language.Embedded.VHDL.Expression.Format
+module Language.Embedded.VHDL.Expression.Represent
   ( Tagged(..)
   , Rep(..)
   ) where
 
+import Language.VHDL (TypeDeclaration(..), SubtypeIndication(..))
+import Language.Embedded.VHDL.Monad (VHDL)
 import Language.Embedded.VHDL.Expression.Type
-import Language.Embedded.VHDL.Monad (TypeRep(..))
+import qualified Language.VHDL as V
+import qualified Language.Embedded.VHDL.Monad as M
 
 import Data.Bits
 import Data.Char   (intToDigit)
@@ -27,22 +30,24 @@ newtype Tagged s b = Tag { unTag :: b }
 -- | A 'rep'resentable value.
 class Rep a
   where
-    width  :: Tagged a Int
-    typed  :: Tagged a TypeRep
-    format :: a -> String
+    width   :: Tagged a Int
+    typed   :: Tagged a Type
+    declare :: a -> VHDL ()
+    format  :: a -> String
 
 --------------------------------------------------------------------------------
 -- ** Boolean
 
 instance Rep Bool where
   width        = Tag 1
-  typed        = Tag $ Prim std_logic
+  typed        = Tag std_logic
+  declare _    = undefined
   format True  = "1"
   format False = "0"
 
 --------------------------------------------------------------------------------
 -- ** Signed
-
+{-
 instance Rep Int8 where
   width  = Tag 8
   typed  = Tag $ Prim signed8
@@ -62,10 +67,10 @@ instance Rep Int64 where
   width  = Tag 64
   typed  = Tag $ Prim signed64
   format = convert
-
+-}
 --------------------------------------------------------------------------------
 -- ** Unsigned
-
+{-
 instance Rep Word8 where
   width  = Tag 8
   typed  = Tag $ Prim usigned8
@@ -85,7 +90,7 @@ instance Rep Word64 where
   width  = Tag 64
   typed  = Tag $ Prim usigned64
   format = convert
-
+-}
 --------------------------------------------------------------------------------
 -- * Converting Integers to their Binrary representation
 --------------------------------------------------------------------------------

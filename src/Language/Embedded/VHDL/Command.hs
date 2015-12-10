@@ -324,9 +324,9 @@ compileConcurrent (PortMap is) =
 
 data DeclKind = Port | Generic
 
-data Record a = Record String
+data Record a = Record Identifier
 
-data Array  a = Array  String
+data Array  a = Array  Identifier
 
 data HeaderCMD exp (prog :: * -> *) a
   where
@@ -339,8 +339,7 @@ data HeaderCMD exp (prog :: * -> *) a
       -> HeaderCMD exp prog Identifier
 
     DeclareRecord
-      :: (Identifier, Type)
-      -> (Identifier, Type)
+      :: [(Identifier, Type)]
       -> HeaderCMD exp prog (Record a)
 
     DeclareArray
@@ -354,7 +353,7 @@ data HeaderCMD exp (prog :: * -> *) a
 instance HFunctor (HeaderCMD exp)
   where
     hfmap _ (DeclarePort d k m e) = DeclarePort d k m e
-    hfmap _ (DeclareRecord f s)   = DeclareRecord f s
+    hfmap _ (DeclareRecord rs)    = DeclareRecord rs
     hfmap _ (DeclareArray)        = DeclareArray
     hfmap f (Architecture s p)    = Architecture s (f p)
 
@@ -407,8 +406,10 @@ compileHeader (DeclarePort Generic k m e) =
        T.Signal   -> M.interfaceSignal   i m t v
        T.Variable -> M.interfaceVariable i m t v
      return i
-compileHeader (DeclareRecord f s) =
-  do error "imperative-vhdl: records are not yet supported."
+compileHeader (DeclareRecord rs) =
+  do i <- M.newSym
+     r <- return $ M.declRecord i rs
+     undefined
 compileHeader (DeclareArray) =
   do error "imperative-vhdl: arrays are not yet supported."
 compileHeader (Architecture name prg) =

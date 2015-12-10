@@ -34,11 +34,11 @@ import Language.VHDL (Identifier(..))
 import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Monad           (VHDL, TypeRep(..))
-import qualified Language.Embedded.VHDL.Monad as M
+import Language.Embedded.VHDL.Monad (VHDL)
 import Language.Embedded.VHDL.Expression.Hoist
+import Language.Embedded.VHDL.Expression.Represent
+import qualified Language.Embedded.VHDL.Monad            as M
 import qualified Language.Embedded.VHDL.Expression.Hoist as Hoist
-import Language.Embedded.VHDL.Expression.Format
 
 import Language.Embedded.VHDL.Expression.Type (
     std_logic
@@ -49,21 +49,21 @@ import Language.Embedded.VHDL.Expression.Type (
 import qualified Language.Embedded.VHDL.Expression.Type as T
 
 import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
-import qualified Language.Syntactic as Syntactic
 import Language.Syntactic.Functional
 import Language.Syntactic.Functional.Sharing
 import Language.Syntactic.Functional.Tuple
 import Language.Syntactic.Sugar.BindingTyped ()
 import Language.Syntactic.Sugar.TupleTyped ()
+import qualified Language.Syntactic as Syntactic
 
 import Control.Arrow
 import Control.Applicative (liftA)
 
 import Data.Bits     (Bits)
-import qualified Data.Bits as Bits
 import Data.Maybe    (fromJust)
 import Data.Typeable (Typeable)
 import Data.Word     (Word8)
+import qualified Data.Bits as Bits
 
 import Prelude hiding (not, and, or, abs, rem, div, mod, exp)
 import qualified Prelude
@@ -562,7 +562,7 @@ instance CompileExp Data
 -- ** ...
 
 compileT :: forall a. Rep a => Data a -> VHDL T.Type
-compileT _ = M.addType (unTag (typed :: Tagged a TypeRep))
+compileT _ = undefined --M.addType (unTag (typed :: Tagged a TypeRep))
 
 compileE :: ASTF Dom a -> VHDL Kind
 compileE var

@@ -2,7 +2,7 @@
 --  documentation, see http://haskell.org/cabal/users-guide/
 
 name:                imperative-edsl-vhdl
-version:             0.3
+version:             0.3.1
 synopsis:            Deep embedding of VHDL programs with code generation.
 description:         Deep embedding of VHDL programs with code generation.
 license:             BSD3
@@ -22,7 +22,7 @@ library
                        Language.Embedded.VHDL.Interface,
                        Language.Embedded.VHDL.Expression,
                        Language.Embedded.VHDL.Expression.Hoist,
-                       Language.Embedded.VHDL.Expression.Format,
+                       Language.Embedded.VHDL.Expression.Represent,
                        Language.Embedded.VHDL.Expression.Type,
                        Language.Embedded.VHDL.Command
 
@@ -44,7 +44,7 @@ library
                        containers           >=0.1 && <1,
                        syntactic            >=3.2,
                        operational-alacarte >=0.1.1,
-                       language-vhdl        >=0.1.1.0,
+                       language-vhdl        >=0.1.2.1,
                        pretty               >=1.0
   hs-source-dirs:      .,src
   default-language:    Haskell2010
