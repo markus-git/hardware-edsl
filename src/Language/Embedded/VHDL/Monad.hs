@@ -329,7 +329,8 @@ addDesign_ lib = CMS.modify $ \s -> s { _designs = (V.DesignUnit [] lib) : (_des
 -- ** Architectures
 
 -- | Wraps the given monadic action in an architecture, consuming all global
---   identifiers and concurrent statements it produces.
+--   identifiers and concurrent statements it produces. Strings are its entity
+--   and architecture names, respectively.
 architecture :: MonadV m => String -> String -> m a -> m a
 architecture entity name m =
   do oldGlobal     <- CMS.gets _global
@@ -352,72 +353,82 @@ architecture entity name m =
 --------------------------------------------------------------------------------
 -- ** Entities
 
--- | ...
-entity :: MonadV m => String -> m ()
-entity name =
-  do 
-     undefined
-     
-{-
-addEntity  :: MonadV m => Entity -> m ()
-addEntity v = CMS.modify $ \s -> s { _parts = v : (_parts s) }
--}
-{-
-inEntity :: MonadV m => String -> m a -> m a
-inEntity name m =
-  do oldUnique        <- CMS.gets _unique
-     oldEntity        <- CMS.gets _entity
-     oldPorts         <- CMS.gets _ports
-     oldGenerics      <- CMS.gets _generics
-     oldArchitectures <- CMS.gets _architectures
-     CMS.modify $ \e -> e { _unique        = 0
-                          , _entity        = name
-                          , _ports         = []
-                          , _generics      = []
-                          , _architectures = []
-                          }
-     a <- m
-     newPorts         <- reverse <$> CMS.gets _ports
-     newGenerics      <- reverse <$> CMS.gets _generics
-     newArchitectures <- reverse <$> CMS.gets _architectures
-     CMS.modify $ \e -> e { _unique        = oldUnique
-                          , _entity        = oldEntity
-                          , _ports         = oldPorts
-                          , _generics      = oldGenerics
-                          , _architectures = oldArchitectures
-                          }
-     addEntity $ Entity
-       (V.EntityDeclaration
-         (V.Ident name)
-         (V.EntityHeader
-           (V.GenericClause <$> maybeNull newGenerics)
-           (V.PortClause    <$> maybeNull newPorts))
-         ([])
-         (Nothing))
-       (newArchitectures)
-     return a
+-- | Declares an entity with the given name by consuming all port-level
+--   declaraions and context items produced by running the monadic action.
+entity :: MonadV m => String -> m a -> m a
+entity name m =
+  do oldPorts    <- CMS.gets _ports
+     oldGenerics <- CMS.gets _generics
+     CMS.modify $ \e -> e { _ports    = []
+                          , _generics = [] }
+     result      <- m
+     newPorts    <- CMS.gets _ports
+     newGenerics <- CMS.gets _generics
+     addDesign  $ V.LibraryPrimary $ V.PrimaryEntity $
+           V.EntityDeclaration
+             (V.Ident name)
+             (V.EntityHeader
+               (V.GenericClause <$> maybeNull newGenerics)
+               (V.PortClause    <$> maybeNull newPorts))
+             ([])
+             (Nothing)
+     CMS.modify $ \e -> e { _ports    = oldPorts
+                          , _generics = oldGenerics }
+     return result
   where
     maybeNull :: [V.InterfaceDeclaration] -> Maybe V.InterfaceList
     maybeNull [] = Nothing
     maybeNull xs = Just $ V.InterfaceList $ merge xs
--}
+
+--------------------------------------------------------------------------------
+-- ** Packages
+
+-- | Declares a package with the given name by consuming all type declarations
+--   produced by running the monadic action.
+--
+-- *** package body is always empty for now (until we support VHDL functions).
+package :: MonadV m => String -> m a -> m a
+package name m =
+  do oldTypes <- CMS.gets _types
+     CMS.modify $ \e -> e { _types = Set.empty }
+     result   <- m
+     newTypes <- CMS.gets _types
+     addDesign  $ V.LibraryPrimary $ V.PrimaryPackage $
+           V.PackageDeclaration
+             (V.Ident name)
+             (fmap V.PHDIType $ Set.toList newTypes)
+     addDesign_ $ V.LibrarySecondary $ V.SecondaryPackage $
+           V.PackageBody
+             (V.Ident name)
+             ([])
+     CMS.modify $ \e -> e { _types = oldTypes }
+     return result
+
 --------------------------------------------------------------------------------
 -- * Pretty
 --------------------------------------------------------------------------------
-{-
+
 prettyVHDL :: VHDL a -> Doc
 prettyVHDL = CMI.runIdentity . prettyVHDLT
 
 prettyVHDLT :: Monad m => VHDLT m a -> m Doc
-prettyVHDLT m = prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDLEnv
+prettyVHDLT m = undefined
+  -- prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDLEnv
 
-prettyVEnv  :: VHDLEnv -> Doc
-prettyVEnv env = stack $
-    (genPackage "types" $ Set.elems (_types env)) : (fmap pretty (_parts env))
-  where
-    stack :: [Doc] -> Doc
-    stack = foldr1 ($+$)
+--------------------------------------------------------------------------------
+
+prettyVEnv :: VHDLEnv -> Doc
+prettyVEnv env = undefined
+  -- stack $ (genPackage "types" $ Set.elems (_types env)) : (fmap pretty (_parts env))
+
+prettyVTypes :: Set V.TypeDeclaration -> Doc
+prettyVTypes set = undefined
+
+-- | Stacks a number of documents on top of one another
+stack :: [Doc] -> Doc
+stack = foldr1 ($+$)
     
+{-
     pretty :: Entity -> Doc
     pretty (Entity e as) = stack (V.pp e : fmap V.pp as)
 -}
