@@ -135,7 +135,7 @@ type MonadV m = (Functor m, Applicative m, Monad m, MonadState VHDLEnv m)
 -- | VHDL code generation monad
 type VHDL = VHDLT Identity
 
--- | VHDL code genreation monad transformer
+-- | VHDL code genreation monad transformer.
 newtype VHDLT m a = VHDLT { unVGenT :: StateT VHDLEnv m a }
   deriving ( Functor
            , Applicative
@@ -144,94 +144,105 @@ newtype VHDLT m a = VHDLT { unVGenT :: StateT VHDLEnv m a }
            , MonadIO
            )
 
--- | Run the VHDL code generation monad transformer
+-- | Run the VHDL code generation monad transformer.
 runVHDLT :: Monad m => VHDLT m a -> VHDLEnv -> m (a, VHDLEnv)
 runVHDLT m = CMS.runStateT (unVGenT m)
 
--- | Run the VHDL code generation monad
-runVHDL  :: VHDL a -> VHDLEnv -> (a, VHDLEnv)
-runVHDL  m = CMI.runIdentity . CMS.runStateT (unVGenT m)
+-- | -- | Executes the VHDL code generation monad transformer, returning only its final state.
+execVHDLT :: Monad m => VHDLT m a -> VHDLEnv -> m VHDLEnv
+execVHDLT m = CMS.execStateT (unVGenT m)
+
+-- | Run the VHDL code generation monad.
+runVHDL :: VHDL a -> VHDLEnv -> (a, VHDLEnv)
+runVHDL m = CMI.runIdentity . runVHDLT m
+
+-- | Executes the VHDL code generation monad, returning only its final state.
+execVHDL :: VHDL a -> VHDLEnv -> VHDLEnv
+execVHDL m = CMI.runIdentity . execVHDLT m
 
 --------------------------------------------------------------------------------
 -- ** Generating uniques
 
--- | Generates a unique integer
+-- | Generates a unique integer.
 freshUnique :: MonadV m => m Integer
 freshUnique =
   do u <- CMS.gets _unique
      CMS.modify (\e -> e { _unique = u + 1 })
      return u
 
--- | Generates a fresh and unique identifier
+-- | Generates a fresh and unique identifier.
 newSym :: MonadV m => m Identifier
 newSym = do i <- freshUnique; return (Ident $ 'v' : show i)
 
--- | Generates a fresh and unique label
+-- | Generates a fresh and unique label.
 newLabel :: MonadV m => m Label
 newLabel = do i <- freshUnique; return (Ident $ 'l' : show i)
 
 --------------------------------------------------------------------------------
 -- ** ...
 
--- | Adds a new library import to the context
-newLibrary :: MonadV m => Identifier -> m ()
+-- | Adds a new library import to the context.
+newLibrary :: MonadV m => String -> m ()
 newLibrary l = CMS.modify $ \s -> s { _context = item : (_context s) }
   where
     item :: V.ContextItem
-    item = V.ContextLibrary (V.LibraryClause (V.LogicalNameList [l]))
+    item = V.ContextLibrary (V.LibraryClause (V.LogicalNameList [V.Ident l]))
 
--- | Adds a new library use clause to the context
-newImport :: MonadV m => Identifier -> m ()
+-- | Adds a new library use clause to the context (with an .all suffix by default).
+newImport :: MonadV m => String -> m ()
 newImport i = CMS.modify $ \s -> s { _context = item : (_context s) }
   where
     item :: V.ContextItem
-    item = V.ContextUse (V.UseClause [V.SelectedName (V.PName (V.NSimple i)) (V.SAll)])
+    item = V.ContextUse (V.UseClause [V.SelectedName (V.PName (V.NSimple (V.Ident i))) (V.SAll)])
 
 --------------------------------------------------------------------------------
 -- ** Header declarations -- ignores port/generic maps for now
 
--- | Adds a port declaration to the entity
+-- | Adds a port declaration to the entity.
 addPort :: MonadV m => V.InterfaceDeclaration -> m ()
 addPort p = CMS.modify $ \s -> s { _ports = p : (_ports s) }
 
--- | Adds a generic declaration to the entity
+-- | Adds a generic declaration to the entity.
 addGeneric :: MonadV m => V.InterfaceDeclaration -> m ()
 addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 
 --------------------------------------------------------------------------------
 -- ** Type declarations
 
--- | Adds a component declaration to the architecture
+addType :: MonadV m => V.TypeDeclaration -> m ()
+addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
+
+-- | Adds a component declaration to the architecture.
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
 
 --------------------------------------------------------------------------------
 -- ** Item declarations
 
--- | Adds a global declaration
+-- | Adds a global declaration.
 addGlobal :: MonadV m => V.BlockDeclarativeItem -> m ()
 addGlobal g = CMS.modify $ \s -> s { _global = g : (_global s) }
 
--- | Adds a local declaration
+-- | Adds a local declaration.
 addLocal :: MonadV m => V.BlockDeclarativeItem -> m ()
 addLocal l = CMS.modify $ \s -> s { _local = l : (_local s) }
 
 --------------------------------------------------------------------------------
 -- ** Statement declarations
 
--- | Adds a concurrent statement
+-- | Adds a concurrent statement.
 addConcurrent :: MonadV m => V.ConcurrentStatement -> m ()
 addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
 
--- | Adds a sequential statement
+-- | Adds a sequential statement.
 addSequential :: MonadV m => V.SequentialStatement -> m ()
 addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 
 --------------------------------------------------------------------------------
--- * ...
+-- * Concurrent and sequential statements
 --------------------------------------------------------------------------------
 
--- | ...
+-- | ... helper ...
 contain :: MonadV m => m () -> m [V.SequentialStatement]
 contain m = do
   m                                          -- do
@@ -242,7 +253,7 @@ contain m = do
 --------------------------------------------------------------------------------
 -- ** Process-statements
 
--- | Runs the given action inside a process
+-- | Runs the given action inside a process.
 inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
 inProcess l is m =
   do oldLocals     <- CMS.gets _local
@@ -408,36 +419,46 @@ package name m =
 -- * Pretty
 --------------------------------------------------------------------------------
 
+-- | Runs the VHDL monad and pretty prints its resulting VHDL program.
 prettyVHDL :: VHDL a -> Doc
 prettyVHDL = CMI.runIdentity . prettyVHDLT
 
+-- | Runs the VHDL monad transformer and pretty prints its resulting VHDL program.
 prettyVHDLT :: Monad m => VHDLT m a -> m Doc
-prettyVHDLT m = undefined
-  -- prettyVEnv . snd <$> runVHDLT (inEntity "anonymous" m) emptyVHDLEnv
+prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
 
 --------------------------------------------------------------------------------
 
+-- | Pretty print a VHDL environment.
 prettyVEnv :: VHDLEnv -> Doc
-prettyVEnv env = undefined
-  -- stack $ (genPackage "types" $ Set.elems (_types env)) : (fmap pretty (_parts env))
+prettyVEnv env = types $+$ desig
+  where
+    types :: Doc
+    types = prettyVTypes (_types env)
 
+    desig :: Doc
+    desig = stack (_designs env)
+
+-- | ...
+--
+-- *** Scan type declarations for necessary imports instead.
+-- *** Types are added in an ugly manner.
 prettyVTypes :: Set V.TypeDeclaration -> Doc
-prettyVTypes set = undefined
+prettyVTypes set =
+    stack . _designs . snd $ runVHDL pack emptyVHDLEnv
+  where
+    pack :: MonadV m => m ()
+    pack = package "types" $ do
+      newLibrary "IEEE"
+      newImport  "IEEE.STD_LOGIC_1164"
+      newImport  "IEEE.STD_LOGIC_UNSIGNED"
+      newImport  "IEEE.NUMERIC_STD"
+      CMS.modify $ \e -> e { _types = set }
 
 -- | Stacks a number of documents on top of one another
-stack :: [Doc] -> Doc
-stack = foldr1 ($+$)
-    
-{-
-    pretty :: Entity -> Doc
-    pretty (Entity e as) = stack (V.pp e : fmap V.pp as)
--}
---------------------------------------------------------------------------------
-{-
-genPackage :: String -> [V.TypeDeclaration] -> Doc
-genPackage name [] = Text.empty
-genPackage name xs = V.pp $ V.PackageDeclaration (V.Ident name) $ fmap V.PHDIType xs
--}
+stack :: V.Pretty a => [a] -> Doc
+stack = foldr1 ($+$) . fmap V.pp
+
 --------------------------------------------------------------------------------
 -- * Common things
 --------------------------------------------------------------------------------
