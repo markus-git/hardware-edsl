@@ -98,12 +98,11 @@ data VHDLEnv = VHDLEnv
   , _designs       :: [V.DesignUnit]
     -- ...
   , _context       :: [V.ContextItem]
-    -- ...
   , _types         :: Set V.TypeDeclaration
-  , _components    :: Set V.ComponentDeclaration
     -- headers
   , _ports         :: [V.InterfaceDeclaration]
   , _generics      :: [V.InterfaceDeclaration]
+  , _components    :: Set V.ComponentDeclaration
     -- declarations
   , _global        :: [V.BlockDeclarativeItem]
   , _local         :: [V.BlockDeclarativeItem]
@@ -309,42 +308,56 @@ inCase e choices =
          (zipWith V.CaseStatementAlternative cs ns')
 
 --------------------------------------------------------------------------------
--- ** Creating architectures
-{-
-addArchitecture :: MonadV m => V.ArchitectureBody -> m ()
-addArchitecture a = CMS.modify $ \s -> s { _architectures = a : (_architectures s)}
--}
-{-
--- | Runs the given program in an architecture
-inArchitecture :: MonadV m => Identifier -> m a -> m a
-inArchitecture name m =
+-- * Design units
+--------------------------------------------------------------------------------
+
+-- | ... design unit with context
+addDesign :: MonadV m => V.LibraryUnit -> m ()
+addDesign lib =
+  do ctxt <- CMS.gets _context
+     dsig <- CMS.gets _designs
+     let item = V.DesignUnit ctxt lib
+     CMS.modify $ \s -> s { _designs = item : dsig
+                          , _context = []
+                          }
+
+-- | .. design unit ignoring context
+addDesign_ :: MonadV m => V.LibraryUnit -> m ()
+addDesign_ lib = CMS.modify $ \s -> s { _designs = (V.DesignUnit [] lib) : (_designs s)}
+
+--------------------------------------------------------------------------------
+-- ** Architectures
+
+-- | Wraps the given monadic action in an architecture, consuming all global
+--   identifiers and concurrent statements it produces.
+architecture :: MonadV m => String -> String -> m a -> m a
+architecture entity name m =
   do oldGlobal     <- CMS.gets _global
      oldConcurrent <- CMS.gets _concurrent
      CMS.modify $ \e -> e { _global     = []
-                          , _concurrent = []
-                          }
-     result <- inArchitecture' name m
+                          , _concurrent = [] }
+     result        <- m
+     newGlobal     <- CMS.gets _global
+     newConcurrent <- CMS.gets _concurrent
+     addDesign_ $ V.LibrarySecondary $ V.SecondaryArchitecture $
+           V.ArchitectureBody
+             (V.Ident name)
+             (V.NSimple (V.Ident entity))
+             (merge newGlobal)
+             (newConcurrent)
      CMS.modify $ \e -> e { _global     = oldGlobal
-                          , _concurrent = oldConcurrent
-                          }
+                          , _concurrent = oldConcurrent }
      return result
--}
-{-
--- | Runs the given program in an architecture with old scope
-inArchitecture' :: MonadV m => Identifier -> m a -> m a
-inArchitecture' name m =
-  do result        <- m
-     entity        <- CMS.gets _entity
-     newGlobal     <- reverse <$> CMS.gets _global
-     newConcurrent <- reverse <$> CMS.gets _concurrent
-     addArchitecture $ V.ArchitectureBody name
-       (V.NSimple (V.Ident entity))
-       (merge newGlobal)
-       (newConcurrent)
-     return result
--}  
+
 --------------------------------------------------------------------------------
--- ** Creating sub-entities
+-- ** Entities
+
+-- | ...
+entity :: MonadV m => String -> m ()
+entity name =
+  do 
+     undefined
+     
 {-
 addEntity  :: MonadV m => Entity -> m ()
 addEntity v = CMS.modify $ \s -> s { _parts = v : (_parts s) }
