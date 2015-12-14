@@ -26,6 +26,9 @@ module Language.Embedded.VHDL.Monad (
   , newSym
   , newLabel
 
+    -- ^ ...
+  , newLibrary,    newImport
+
     -- ^ declarations
   , addPort,       addGeneric
   , addGlobal,     addLocal
@@ -56,8 +59,8 @@ module Language.Embedded.VHDL.Monad (
 import Language.VHDL (Identifier(..), Mode(..), Expression, Label)
 import qualified Language.VHDL as V
 
-import Language.Embedded.VHDL.Expression.Type
 import Language.Embedded.VHDL.Monad.Expression
+import Language.Embedded.VHDL.Monad.Type
 
 import Control.Arrow          (first, second)
 import Control.Applicative
@@ -92,7 +95,7 @@ data VHDLEnv = VHDLEnv
     -- ..
   , _designs       :: [V.DesignUnit]
     -- ...
-  , _context       :: [V.ContextItem]
+  , _context       :: Set V.ContextItem
   , _types         :: Set V.TypeDeclaration
     -- headers
   , _ports         :: [V.InterfaceDeclaration]
@@ -110,7 +113,7 @@ data VHDLEnv = VHDLEnv
 emptyVHDLEnv = VHDLEnv
   { _unique        = 0
   , _designs       = []
-  , _context       = []
+  , _context       = Set.empty
   , _types         = Set.empty
   , _components    = Set.empty
   , _ports         = []
@@ -178,14 +181,14 @@ newLabel = do i <- freshUnique; return (Ident $ 'l' : show i)
 
 -- | Adds a new library import to the context.
 newLibrary :: MonadV m => String -> m ()
-newLibrary l = CMS.modify $ \s -> s { _context = item : (_context s) }
+newLibrary l = CMS.modify $ \s -> s { _context = Set.insert item (_context s) }
   where
     item :: V.ContextItem
     item = V.ContextLibrary (V.LibraryClause (V.LogicalNameList [V.Ident l]))
 
--- | Adds a new library use clause to the context (with an .all suffix by default).
+-- | Adds a new library use clause to the context (with an .ALL suffix by default).
 newImport :: MonadV m => String -> m ()
-newImport i = CMS.modify $ \s -> s { _context = item : (_context s) }
+newImport i = CMS.modify $ \s -> s { _context = Set.insert item (_context s) }
   where
     item :: V.ContextItem
     item = V.ContextUse (V.UseClause [V.SelectedName (V.PName (V.NSimple (V.Ident i))) (V.SAll)])
@@ -204,10 +207,11 @@ addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 --------------------------------------------------------------------------------
 -- ** Type declarations
 
+-- | Adds a type declaration.
 addType :: MonadV m => V.TypeDeclaration -> m ()
 addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
 
--- | Adds a component declaration to the architecture.
+-- | Adds a component declaration.
 addComponent :: MonadV m => V.ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
 
@@ -322,9 +326,9 @@ addDesign :: MonadV m => V.LibraryUnit -> m ()
 addDesign lib =
   do ctxt <- CMS.gets _context
      dsig <- CMS.gets _designs
-     let item = V.DesignUnit ctxt lib
+     let item = V.DesignUnit (Set.toList ctxt) lib
      CMS.modify $ \s -> s { _designs = item : dsig
-                          , _context = []
+                          , _context = Set.empty
                           }
 
 -- | .. design unit ignoring context
@@ -605,43 +609,13 @@ tryProcess _                 = Nothing
 -- *** These break the Ord rules but seems to be needed for Set.
 --     Should be replaced.
 
-deriving instance Ord V.Identifier
+deriving instance Ord V.ContextItem
 
-instance Ord V.Name
-  where
-    compare (V.NSimple a) (V.NSimple x) = compare a x
-    compare (V.NSelect a) (V.NSelect x) = compare a x
-    compare (V.NIndex  a) (V.NIndex  x) = compare a x
-    compare (V.NSlice  a) (V.NSlice  x) = compare a x
-    compare (V.NAttr   a) (V.NAttr   x) = compare a x
+deriving instance Ord V.LibraryClause
 
-deriving instance Ord V.StringLiteral
+deriving instance Ord V.LogicalNameList
 
-deriving instance Ord V.SelectedName
-
-instance Ord V.Suffix
-  where
-    compare (V.SSimple a) (V.SSimple x) = compare a x
-    compare (V.SChar   a) (V.SChar   x) = compare a x
-    compare (V.SAll)      (V.SAll)      = EQ
-    compare _ _ = error "Ord not supported for operator symbols"
-
-deriving instance Ord V.CharacterLiteral
-
-deriving instance Ord V.IndexedName
-
-deriving instance Ord V.SliceName
-
-deriving instance Ord V.DiscreteRange
-
-instance Ord V.Prefix
-  where
-    compare (V.PName a) (V.PName x) = compare a x
-    compare _ _ = error "Ord not supported for function names"
-
-deriving instance Ord V.AttributeName
-
-deriving instance Ord V.Signature
+deriving instance Ord V.UseClause
 
 --------------------------------------------------------------------------------
 
@@ -721,5 +695,45 @@ deriving instance Ord V.Sign
 deriving instance Ord V.MultiplyingOperator
 
 deriving instance Ord V.MiscellaneousOperator
+
+--------------------------------------------------------------------------------
+
+deriving instance Ord V.Identifier
+
+instance Ord V.Name
+  where
+    compare (V.NSimple a) (V.NSimple x) = compare a x
+    compare (V.NSelect a) (V.NSelect x) = compare a x
+    compare (V.NIndex  a) (V.NIndex  x) = compare a x
+    compare (V.NSlice  a) (V.NSlice  x) = compare a x
+    compare (V.NAttr   a) (V.NAttr   x) = compare a x
+
+deriving instance Ord V.StringLiteral
+
+deriving instance Ord V.SelectedName
+
+instance Ord V.Suffix
+  where
+    compare (V.SSimple a) (V.SSimple x) = compare a x
+    compare (V.SChar   a) (V.SChar   x) = compare a x
+    compare (V.SAll)      (V.SAll)      = EQ
+    compare _ _ = error "Ord not supported for operator symbols"
+
+deriving instance Ord V.CharacterLiteral
+
+deriving instance Ord V.IndexedName
+
+deriving instance Ord V.SliceName
+
+deriving instance Ord V.DiscreteRange
+
+instance Ord V.Prefix
+  where
+    compare (V.PName a) (V.PName x) = compare a x
+    compare _ _ = error "Ord not supported for function names"
+
+deriving instance Ord V.AttributeName
+
+deriving instance Ord V.Signature
 
 --------------------------------------------------------------------------------

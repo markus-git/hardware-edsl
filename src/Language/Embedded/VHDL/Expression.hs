@@ -40,13 +40,13 @@ import Language.Embedded.VHDL.Expression.Represent
 import qualified Language.Embedded.VHDL.Monad            as M
 import qualified Language.Embedded.VHDL.Expression.Hoist as Hoist
 
-import Language.Embedded.VHDL.Expression.Type (
+import Language.Embedded.VHDL.Monad.Type (
     std_logic
   , signed, usigned
   , signed8, signed16, signed32, signed64
   , usigned8, usigned16, usigned32, usigned64
   )
-import qualified Language.Embedded.VHDL.Expression.Type as T
+import qualified Language.Embedded.VHDL.Monad.Type as T
 
 import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
 import Language.Syntactic.Functional
@@ -562,7 +562,10 @@ instance CompileExp Data
 -- ** ...
 
 compileT :: forall a. Rep a => Data a -> VHDL T.Type
-compileT _ = undefined --M.addType (unTag (typed :: Tagged a TypeRep))
+compileT _ =
+  do let t = unTag (typed :: Tagged a T.Type)
+     declare (undefined :: a)
+     return t
 
 compileE :: ASTF Dom a -> VHDL Kind
 compileE var

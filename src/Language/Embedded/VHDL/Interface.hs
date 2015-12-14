@@ -3,9 +3,9 @@
 
 module Language.Embedded.VHDL.Interface where
 
-import Language.VHDL                          (Expression, Identifier(..))
-import Language.Embedded.VHDL.Monad           (VHDL)
-import Language.Embedded.VHDL.Expression.Type (Type)
+import Language.VHDL                     (Expression, Identifier(..))
+import Language.Embedded.VHDL.Monad      (VHDL)
+import Language.Embedded.VHDL.Monad.Type (Type)
 
 import Data.Constraint
 import Data.Typeable   (Typeable)

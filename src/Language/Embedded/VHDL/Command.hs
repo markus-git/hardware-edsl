@@ -33,11 +33,11 @@ module Language.Embedded.VHDL.Command
 import Language.VHDL (Identifier(..), Label, Expression, Mode(..))
 import qualified Language.VHDL as V
 
-import Language.Embedded.VHDL.Monad           (VHDLT, VHDL)
+import Language.Embedded.VHDL.Monad      (VHDLT, VHDL)
+import Language.Embedded.VHDL.Monad.Type (Type, Kind)
 import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Expression.Type (Type, Kind)
-import qualified Language.Embedded.VHDL.Monad            as M
-import qualified Language.Embedded.VHDL.Expression.Type  as T
+import qualified Language.Embedded.VHDL.Monad       as M
+import qualified Language.Embedded.VHDL.Monad.Type  as T
 import qualified Language.Embedded.VHDL.Expression.Hoist as H
 
 import Control.Arrow (second)

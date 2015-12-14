@@ -8,7 +8,7 @@ module Language.Embedded.VHDL.Expression.Represent
 
 import Language.VHDL (TypeDeclaration(..), SubtypeIndication(..))
 import Language.Embedded.VHDL.Monad (VHDL)
-import Language.Embedded.VHDL.Expression.Type
+import Language.Embedded.VHDL.Monad.Type
 import qualified Language.VHDL as V
 import qualified Language.Embedded.VHDL.Monad as M
 
@@ -35,62 +35,81 @@ class Rep a
     declare :: a -> VHDL ()
     format  :: a -> String
 
+declareBoolean :: VHDL ()
+declareBoolean =
+  do M.newLibrary "IEEE"
+     M.newImport  "IEEE.std_logic_1164"
+
+declareNumeric :: VHDL ()
+declareNumeric =
+  do M.newLibrary "IEEE"
+     M.newImport  "IEEE.std_logic_1164"
+     M.newImport  "IEEE.numeric_std"
+
 --------------------------------------------------------------------------------
 -- ** Boolean
 
 instance Rep Bool where
   width        = Tag 1
   typed        = Tag std_logic
-  declare _    = undefined
+  declare _    = declareBoolean
   format True  = "1"
   format False = "0"
 
 --------------------------------------------------------------------------------
 -- ** Signed
-{-
+
 instance Rep Int8 where
-  width  = Tag 8
-  typed  = Tag $ Prim signed8
-  format = convert
+  width     = Tag 8
+  typed     = Tag signed8
+  declare _ = declareNumeric
+  format    = convert
 
 instance Rep Int16 where
-  width  = Tag 16
-  typed  = Tag $ Prim signed16
-  format = convert
+  width     = Tag 16
+  typed     = Tag signed16
+  declare _ = declareNumeric
+  format    = convert
 
 instance Rep Int32 where
-  width  = Tag 32
-  typed  = Tag $ Prim signed32
-  format = convert
+  width     = Tag 32
+  typed     = Tag signed32
+  declare _ = declareNumeric
+  format    = convert
 
 instance Rep Int64 where
-  width  = Tag 64
-  typed  = Tag $ Prim signed64
-  format = convert
--}
+  width     = Tag 64
+  typed     = Tag signed64
+  declare _ = declareNumeric
+  format    = convert
+
 --------------------------------------------------------------------------------
 -- ** Unsigned
-{-
+
 instance Rep Word8 where
-  width  = Tag 8
-  typed  = Tag $ Prim usigned8
-  format = convert
+  width     = Tag 8
+  typed     = Tag usigned8
+  declare _ = declareNumeric
+  format    = convert
 
 instance Rep Word16 where
-  width  = Tag 16
-  typed  = Tag $ Prim usigned16
-  format = convert
+  width     = Tag 16
+  typed     = Tag usigned16
+  declare _ = declareNumeric
+  format    = convert
 
 instance Rep Word32 where
-  width  = Tag 32
-  typed  = Tag $ Prim usigned32
-  format = convert
+  width     = Tag 32
+  typed     = Tag usigned32
+  declare _ = declareNumeric
+  format    = convert
 
 instance Rep Word64 where
-  width  = Tag 64
-  typed  = Tag $ Prim usigned64
-  format = convert
--}
+  width     = Tag 64
+  typed     = Tag usigned64
+  declare _ = declareNumeric
+  format    = convert
+
 --------------------------------------------------------------------------------
 -- * Converting Integers to their Binrary representation
 --------------------------------------------------------------------------------

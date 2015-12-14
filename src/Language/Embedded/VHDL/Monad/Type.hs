@@ -1,4 +1,4 @@
-module Language.Embedded.VHDL.Expression.Type
+module Language.Embedded.VHDL.Monad.Type
   ( Type
   , Kind(..)
   , std_logic
