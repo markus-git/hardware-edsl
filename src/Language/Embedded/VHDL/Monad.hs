@@ -456,7 +456,7 @@ prettyVTypes set =
 
 -- | Stacks a number of documents on top of one another
 stack :: V.Pretty a => [a] -> Doc
-stack = foldr1 ($+$) . fmap V.pp
+stack = Text.hsep . fmap V.pp
 
 --------------------------------------------------------------------------------
 -- * Common things
