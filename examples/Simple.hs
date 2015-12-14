@@ -27,30 +27,24 @@ false = litE False
 simple :: Data Bool
 simple = true `and` false
 
-tuple  :: (Data Bool, Data Bool)
-tuple = (true, false)
-
 --------------------------------------------------------------------------------
 
 type CMD = SequentialCMD Data :+: ConcurrentCMD Data :+: HeaderCMD Data
 
 simpleWrap :: Type a => Data a -> Program CMD ()
-simpleWrap var = architecture "simple" $
-  process "main" [] $
-    (Ident "x") <== var
-
-tupleWrap :: (Type a, Type b) => (Data a, Data b) -> Program CMD ()
-tupleWrap var = architecture "tuple" $
-  process "main" [] $
-    undefined
+simpleWrap var = do
+  i <- entity "entity" $ do
+    library "IEEE"
+    imports "IEEE.STD_LOGIC"
+    signalPort Out (Nothing :: Maybe (IExp CMD Bool))
+  architecture "simple" "entity" $ do
+    process "main" [] $
+      i <== var
 
 --------------------------------------------------------------------------------
 -- ** ...
 
 simpleTest :: IO ()
 simpleTest = putStrLn $ compile $ simpleWrap simple
-
-tupleTest :: IO ()
-tupleTest = putStrLn $ compile $ tupleWrap tuple
 
 --------------------------------------------------------------------------------

@@ -326,14 +326,14 @@ addDesign :: MonadV m => V.LibraryUnit -> m ()
 addDesign lib =
   do ctxt <- CMS.gets _context
      dsig <- CMS.gets _designs
-     let item = V.DesignUnit (Set.toList ctxt) lib
+     let item = V.DesignUnit (V.ContextClause (Set.toList ctxt)) lib
      CMS.modify $ \s -> s { _designs = item : dsig
                           , _context = Set.empty
                           }
 
 -- | .. design unit ignoring context
 addDesign_ :: MonadV m => V.LibraryUnit -> m ()
-addDesign_ lib = CMS.modify $ \s -> s { _designs = (V.DesignUnit [] lib) : (_designs s)}
+addDesign_ lib = CMS.modify $ \s -> s { _designs = (V.DesignUnit (V.ContextClause []) lib) : (_designs s)}
 
 --------------------------------------------------------------------------------
 -- ** Architectures
@@ -429,22 +429,21 @@ prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
 --------------------------------------------------------------------------------
 
 -- | Pretty print a VHDL environment.
+--
+-- *** Shouldn't use revers to fix ordering issues! Pair architectures/bodies
+--     with their respective entities.
 prettyVEnv :: VHDLEnv -> Doc
-prettyVEnv env = types $+$ desig
+prettyVEnv env = V.pp (V.DesignFile $ types ++ archi)
   where
-    types :: Doc
-    types = prettyVTypes (_types env)
-
-    desig :: Doc
-    desig = stack (_designs env)
+    archi = reverse $ _designs env
+    types = reverse $ designTypes (_types env)
 
 -- | ...
 --
 -- *** Scan type declarations for necessary imports instead.
 -- *** Types are added in an ugly manner.
-prettyVTypes :: Set V.TypeDeclaration -> Doc
-prettyVTypes set =
-    stack . _designs . snd $ runVHDL pack emptyVHDLEnv
+designTypes :: Set V.TypeDeclaration -> [V.DesignUnit]
+designTypes set = _designs . snd $ runVHDL pack emptyVHDLEnv
   where
     pack :: MonadV m => m ()
     pack = package "types" $ do
@@ -453,10 +452,6 @@ prettyVTypes set =
       newImport  "IEEE.STD_LOGIC_UNSIGNED"
       newImport  "IEEE.NUMERIC_STD"
       CMS.modify $ \e -> e { _types = set }
-
--- | Stacks a number of documents on top of one another
-stack :: V.Pretty a => [a] -> Doc
-stack = Text.hsep . fmap V.pp
 
 --------------------------------------------------------------------------------
 -- * Common things

@@ -29,6 +29,8 @@ module Language.Embedded.VHDL.Command
   , filePort, fileGeneric
   , entity
   , architecture
+  , library
+  , imports
   ) where
 
 import Language.VHDL (Identifier(..), Label, Expression, Mode(..))
@@ -338,24 +340,29 @@ data HeaderCMD exp (prog :: * -> *) a
       -> Mode
       -> Maybe (exp a)
       -> HeaderCMD exp prog Identifier
-
+      
     DeclareRecord
       :: [(Identifier, Type)]
       -> HeaderCMD exp prog (Record a)
-
+         
     DeclareArray
       :: HeaderCMD exp prog (Array a)
 
+    -- ^ ...
     Entity
       :: Identifier
       -> prog a
       -> HeaderCMD exp prog a
 
+    -- ^ ...
     Architecture
       :: Identifier -- architecture's name
       -> Identifier -- entity's name
       -> prog a
       -> HeaderCMD exp prog a
+
+    Library :: String -> HeaderCMD exp prog ()
+    Import  :: String -> HeaderCMD exp prog ()
 
 instance HFunctor (HeaderCMD exp)
   where
@@ -364,6 +371,8 @@ instance HFunctor (HeaderCMD exp)
     hfmap _ (DeclareArray)        = DeclareArray
     hfmap f (Entity e p)          = Entity e (f p)
     hfmap f (Architecture a e p)  = Architecture a e (f p)
+    hfmap _ (Library s)           = Library s
+    hfmap _ (Import s)            = Import s
 
 type instance IExp (HeaderCMD e)       = e
 type instance IExp (HeaderCMD e :+: i) = e
@@ -402,6 +411,14 @@ architecture
   -> ProgramT instr m a
 architecture name entity = singleE . Architecture (Ident name) (Ident entity)
 
+-- | Imports a library.
+library :: (HeaderCMD (IExp instr) :<: instr) => String -> ProgramT instr m ()
+library = singleE . Library
+
+-- | Imports a library module.
+imports :: (HeaderCMD (IExp instr) :<: instr) => String -> ProgramT instr m ()
+imports = singleE . Import
+
 --------------------------------------------------------------------------------
 
 compileHeader :: CompileExp exp => HeaderCMD exp VHDL a -> VHDL a
@@ -429,9 +446,9 @@ compileHeader (DeclareRecord rs) =
      undefined
 compileHeader (DeclareArray) =
   do error "imperative-vhdl: arrays are not yet supported."
-compileHeader (Entity name prg) =
-  do M.entity name prg
-compileHeader (Architecture name entity prg) =
-  do M.architecture name entity prg
+compileHeader (Entity       name        prg) = M.entity name prg
+compileHeader (Architecture name entity prg) = M.architecture name entity prg
+compileHeader (Library s)                    = M.newLibrary s
+compileHeader (Import s)                     = M.newImport s
 
 --------------------------------------------------------------------------------
