@@ -5,7 +5,7 @@
 -- used for the Ord/Eq inst. of XDeclaration etc.
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Language.Embedded.VHDL.Monad {-(    
+module Language.Embedded.VHDL.Monad (
     VHDL
   , VHDLT
   , VHDLEnv
@@ -14,6 +14,8 @@ module Language.Embedded.VHDL.Monad {-(
     -- ^ run
   , runVHDLT
   , runVHDL
+  , execVHDLT
+  , execVHDL
 
     -- ^ pretty
   , prettyVHDL
@@ -25,38 +27,31 @@ module Language.Embedded.VHDL.Monad {-(
   , newLabel
 
     -- ^ declarations
-  , addPort
-  , addGeneric
---, addType
+  , addPort,       addGeneric
+  , addGlobal,     addLocal
+  , addConcurrent, addSequential
   , addComponent
-  , addGlobal
-  , addLocal
 
     -- ^ statements
-  , addConcurrent
-  , addSequential
-
-    -- ^ key statements
-  , inEntity
-  , inArchitecture
   , inProcess
   , inConditional
   , inCase
 
+    -- ^ ...
+  , entity
+  , architecture
+  , package
+
     -- ^ common
-  , interfaceConstant
-  , interfaceSignal
-  , interfaceVariable
-  , declRecord
-  , declConstant
-  , declSignal
-  , declVariable
+  , interfaceConstant, interfaceSignal, interfaceVariable
+  , declRecord, declConstant, declSignal, declVariable
+                                          
   , portMap
   , assignSignal
   , assignVariable
 
   , module Language.Embedded.VHDL.Monad.Expression
-  ) -}where
+  ) where
 
 import Language.VHDL (Identifier(..), Mode(..), Expression, Label)
 import qualified Language.VHDL as V
