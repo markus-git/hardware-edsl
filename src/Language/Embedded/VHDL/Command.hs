@@ -345,6 +345,11 @@ data HeaderCMD exp (prog :: * -> *) a
     DeclareArray
       :: HeaderCMD exp prog (Array a)
 
+    Entity
+      :: Identifier
+      -> prog ()
+      -> HeaderCMD exp prog ()
+
     Architecture
       :: Identifier -- architecture's name
       -> Identifier -- entity's name
@@ -356,6 +361,7 @@ instance HFunctor (HeaderCMD exp)
     hfmap _ (DeclarePort d k m e) = DeclarePort d k m e
     hfmap _ (DeclareRecord rs)    = DeclareRecord rs
     hfmap _ (DeclareArray)        = DeclareArray
+    hfmap f (Entity e p)          = Entity e (f p)
     hfmap f (Architecture a e p)  = Architecture a e (f p)
 
 type instance IExp (HeaderCMD e)       = e
@@ -363,7 +369,7 @@ type instance IExp (HeaderCMD e :+: i) = e
 
 --------------------------------------------------------------------------------
 
--- | Declare constands/signal/variables/files ports and generics
+-- | Declare constands/signal/variables/files ports and generics.
 constantPort, constantGeneric, signalPort, signalGeneric, variablePort, variableGeneric, filePort, fileGeneric
   :: (HeaderCMD (IExp instr) :<: instr, PredicateExp (IExp instr) a)
   => Mode
@@ -378,7 +384,15 @@ variableGeneric m = singleE . DeclarePort Generic T.Variable m
 filePort        m = singleE . DeclarePort Port    T.File     m
 fileGeneric     m = singleE . DeclarePort Generic T.File     m
 
--- | Declare an architecture
+-- | Declare an entity.
+entity
+  :: (HeaderCMD (IExp instr) :<: instr)
+  => String
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+entity name = singleE . Entity (Ident name)
+
+-- | Declare an architecture.
 architecture
   :: (HeaderCMD (IExp instr) :<: instr)
   => String
@@ -414,6 +428,8 @@ compileHeader (DeclareRecord rs) =
      undefined
 compileHeader (DeclareArray) =
   do error "imperative-vhdl: arrays are not yet supported."
+compileHeader (Entity name prg) =
+  do M.entity name prg
 compileHeader (Architecture name entity prg) =
   do M.architecture name entity prg
 

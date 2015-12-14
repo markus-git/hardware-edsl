@@ -365,7 +365,7 @@ architecture entity name m =
 
 -- | Declares an entity with the given name by consuming all port-level
 --   declaraions and context items produced by running the monadic action.
-entity :: MonadV m => String -> m a -> m a
+entity :: MonadV m => Identifier -> m a -> m a
 entity name m =
   do oldPorts    <- CMS.gets _ports
      oldGenerics <- CMS.gets _generics
@@ -376,7 +376,7 @@ entity name m =
      newGenerics <- CMS.gets _generics
      addDesign  $ V.LibraryPrimary $ V.PrimaryEntity $
            V.EntityDeclaration
-             (V.Ident name)
+             (name)
              (V.EntityHeader
                (V.GenericClause <$> maybeNull newGenerics)
                (V.PortClause    <$> maybeNull newPorts))
