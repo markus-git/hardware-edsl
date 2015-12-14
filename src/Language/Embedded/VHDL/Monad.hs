@@ -341,7 +341,7 @@ addDesign_ lib = CMS.modify $ \s -> s { _designs = (V.DesignUnit [] lib) : (_des
 -- | Wraps the given monadic action in an architecture, consuming all global
 --   identifiers and concurrent statements it produces. Strings are its entity
 --   and architecture names, respectively.
-architecture :: MonadV m => String -> String -> m a -> m a
+architecture :: MonadV m => Identifier -> Identifier -> m a -> m a
 architecture entity name m =
   do oldGlobal     <- CMS.gets _global
      oldConcurrent <- CMS.gets _concurrent
@@ -352,8 +352,8 @@ architecture entity name m =
      newConcurrent <- CMS.gets _concurrent
      addDesign_ $ V.LibrarySecondary $ V.SecondaryArchitecture $
            V.ArchitectureBody
-             (V.Ident name)
-             (V.NSimple (V.Ident entity))
+             (name)
+             (V.NSimple entity)
              (merge newGlobal)
              (newConcurrent)
      CMS.modify $ \e -> e { _global     = oldGlobal
