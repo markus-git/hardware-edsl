@@ -348,8 +348,8 @@ data HeaderCMD exp (prog :: * -> *) a
 
     Entity
       :: Identifier
-      -> prog ()
-      -> HeaderCMD exp prog ()
+      -> prog a
+      -> HeaderCMD exp prog a
 
     Architecture
       :: Identifier -- architecture's name
@@ -389,8 +389,8 @@ fileGeneric     m = singleE . DeclarePort Generic T.File     m
 entity
   :: (HeaderCMD (IExp instr) :<: instr)
   => String
-  -> ProgramT instr m ()
-  -> ProgramT instr m ()
+  -> ProgramT instr m a
+  -> ProgramT instr m a
 entity name = singleE . Entity (Ident name)
 
 -- | Declare an architecture.
