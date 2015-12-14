@@ -27,6 +27,7 @@ module Language.Embedded.VHDL.Command
   , signalPort, signalGeneric
   , variablePort, variableGeneric
   , filePort, fileGeneric
+  , entity
   , architecture
   ) where
 
