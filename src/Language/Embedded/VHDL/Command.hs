@@ -49,6 +49,7 @@ import Control.Monad.Operational.Higher hiding (when)
 import Control.Applicative
 import Data.Typeable
 import Data.ALaCarte
+import Data.Ix
 
 --------------------------------------------------------------------------------
 -- *
@@ -93,6 +94,9 @@ compTM _ = compT (undefined :: exp a)
 --------------------------------------------------------------------------------
 -- ** Sequential commands offered by VHDL
 
+-- | ...
+--
+-- *** Array operations are concurrent first?
 data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
   where
     Local
@@ -121,6 +125,23 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> [(exp a, prog ())]
       -> Maybe (prog ())
       -> SequentialCMD exp prog ()
+
+    GetArray
+      :: ( PredicateExp exp a, PredicateExp exp n
+         , Integral n
+         , Ix n )
+      => exp n
+      -> Array n a
+      -> SequentialCMD exp prog (exp a)
+
+    SetArray
+      :: ( PredicateExp exp a, PredicateExp exp n
+         , Integral n
+         , Ix n )
+      => exp n
+      -> exp a
+      -> Array n a
+      -> SequentialCMD exp prog ()
     
 instance HFunctor (SequentialCMD exp)
   where
@@ -128,6 +149,8 @@ instance HFunctor (SequentialCMD exp)
     hfmap _ (Assignment i k e) = Assignment i k e
     hfmap f (If (b, t) os e)   = If (b, f t) (map (second f) os) (f e)
     hfmap f (Case e cs d)      = Case e (map (second f) cs) (fmap f d)
+    hfmap _ (GetArray i a)     = GetArray i a
+    hfmap _ (SetArray i v a)   = SetArray i v a
 
 type instance IExp (SequentialCMD e)       = e
 type instance IExp (SequentialCMD e :+: i) = e
@@ -174,6 +197,33 @@ switch
   -> Maybe (ProgramT instr m ())
   -> ProgramT instr m ()
 switch e choices def = singleE $ Case e choices def
+
+--------------------------------------------------------------------------------
+
+-- | ...
+getArray
+  :: ( SequentialCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) n
+     , Integral n
+     , Ix n )
+  => IExp instr n
+  -> Array n a
+  -> ProgramT instr m (IExp instr a)
+getArray i = singleE . GetArray i
+
+-- | ...
+setArray
+  :: ( SequentialCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) n
+     , Integral n
+     , Ix n )
+  => IExp instr n
+  -> IExp instr a
+  -> Array n a
+  -> ProgramT instr m ()
+setArray i v = singleE . SetArray i v
 
 --------------------------------------------------------------------------------
 
@@ -247,6 +297,10 @@ compileSequential (Case e choices def) =
     others :: Maybe x -> [(V.Choices, x)] -> [(V.Choices, x)]
     others (Nothing) cs = cs
     others (Just d)  cs = cs ++ [(V.Choices [V.ChoiceOthers], d)]
+compileSequential (GetArray i a) =
+  do undefined
+compileSequential (SetArray i v a) =
+  do undefined
 
 --------------------------------------------------------------------------------
 -- ** Concurrent commands offered by VHDL
@@ -325,12 +379,15 @@ compileConcurrent (PortMap is) =
 --------------------------------------------------------------------------------
 -- ** Entity declaration related commands offered by VHDL
 
-data DeclKind = Port | Generic
+data DeclKind  = Port | Generic
 
-data Record a = Record Identifier
+data Record  a = Record Identifier
 
-data Array  a = Array  Identifier
+data Array n a = Array Identifier
 
+-- | ...
+--
+-- *** Swap DeclareRecord/Array for Declare(Composite)Type?..
 data HeaderCMD exp (prog :: * -> *) a
   where
     DeclarePort
@@ -346,7 +403,12 @@ data HeaderCMD exp (prog :: * -> *) a
       -> HeaderCMD exp prog (Record a)
          
     DeclareArray
-      :: HeaderCMD exp prog (Array a)
+      :: ( PredicateExp exp a
+         , PredicateExp exp n
+         , Integral n
+         , Ix n )
+      => exp n
+      -> HeaderCMD exp prog (Array n a)
 
     -- ^ ...
     Entity
@@ -368,7 +430,7 @@ instance HFunctor (HeaderCMD exp)
   where
     hfmap _ (DeclarePort d k m e) = DeclarePort d k m e
     hfmap _ (DeclareRecord rs)    = DeclareRecord rs
-    hfmap _ (DeclareArray)        = DeclareArray
+    hfmap _ (DeclareArray i)      = DeclareArray i
     hfmap f (Entity e p)          = Entity e (f p)
     hfmap f (Architecture a e p)  = Architecture a e (f p)
     hfmap _ (Library s)           = Library s
@@ -444,7 +506,7 @@ compileHeader (DeclareRecord rs) =
   do i <- M.newSym
      r <- return $ M.declRecord i rs
      undefined
-compileHeader (DeclareArray) =
+compileHeader (DeclareArray {}) =
   do error "imperative-vhdl: arrays are not yet supported."
 compileHeader (Entity       name        prg) = M.entity name prg
 compileHeader (Architecture name entity prg) = M.architecture name entity prg
