@@ -348,8 +348,8 @@ architecture entity name m =
      CMS.modify $ \e -> e { _global     = []
                           , _concurrent = [] }
      result        <- m
-     newGlobal     <- CMS.gets _global
-     newConcurrent <- CMS.gets _concurrent
+     newGlobal     <- reverse <$> CMS.gets _global
+     newConcurrent <- reverse <$> CMS.gets _concurrent
      addDesign_ $ V.LibrarySecondary $ V.SecondaryArchitecture $
            V.ArchitectureBody
              (name)
@@ -372,8 +372,8 @@ entity name m =
      CMS.modify $ \e -> e { _ports    = []
                           , _generics = [] }
      result      <- m
-     newPorts    <- CMS.gets _ports
-     newGenerics <- CMS.gets _generics
+     newPorts    <- reverse <$> CMS.gets _ports
+     newGenerics <- reverse <$> CMS.gets _generics
      addDesign  $ V.LibraryPrimary $ V.PrimaryEntity $
            V.EntityDeclaration
              (name)
