@@ -443,7 +443,9 @@ prettyVEnv env = V.pp (V.DesignFile $ types ++ archi)
 -- *** Scan type declarations for necessary imports instead.
 -- *** Types are added in an ugly manner.
 designTypes :: Set V.TypeDeclaration -> [V.DesignUnit]
-designTypes set = _designs . snd $ runVHDL pack emptyVHDLEnv
+designTypes set
+  | Set.null set = []
+  | otherwise    = _designs . snd $ runVHDL pack emptyVHDLEnv
   where
     pack :: MonadV m => m ()
     pack = package "types" $ do
