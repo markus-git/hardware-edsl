@@ -39,8 +39,9 @@ import qualified Language.VHDL as V
 import Language.Embedded.VHDL.Monad      (VHDLT, VHDL)
 import Language.Embedded.VHDL.Monad.Type (Type, Kind)
 import Language.Embedded.VHDL.Interface
-import qualified Language.Embedded.VHDL.Monad       as M
-import qualified Language.Embedded.VHDL.Monad.Type  as T
+import qualified Language.Embedded.VHDL.Monad            as M
+import qualified Language.Embedded.VHDL.Monad.Type       as T
+import qualified Language.Embedded.VHDL.Monad.Expression as M
 import qualified Language.Embedded.VHDL.Expression.Hoist as H
 
 import Control.Arrow (second)
@@ -407,7 +408,7 @@ data HeaderCMD exp (prog :: * -> *) a
          , PredicateExp exp n
          , Integral n
          , Ix n )
-      => exp n
+      => Maybe (exp n)
       -> HeaderCMD exp prog (Array n a)
 
     -- ^ ...
@@ -456,6 +457,27 @@ variableGeneric m = singleE . DeclarePort Generic T.Variable m
 filePort        m = singleE . DeclarePort Port    T.File     m
 fileGeneric     m = singleE . DeclarePort Generic T.File     m
 
+-- | Declare a constrained array.
+newArray
+  :: ( HeaderCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) n
+     , Integral n
+     , Ix n )
+  => IExp instr n
+  -> ProgramT instr m (Array n a)
+newArray i = singleE $ DeclareArray (Just i)
+
+-- | Declare an unconstrained array.
+newArray_
+  :: ( HeaderCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) n
+     , Integral n
+     , Ix n )
+  => ProgramT instr m (Array n a)
+newArray_ = singleE $ DeclareArray Nothing
+
 -- | Declare an entity.
 entity
   :: (HeaderCMD (IExp instr) :<: instr)
@@ -483,7 +505,7 @@ imports = singleE . Import
 
 --------------------------------------------------------------------------------
 
-compileHeader :: CompileExp exp => HeaderCMD exp VHDL a -> VHDL a
+compileHeader :: forall exp a. CompileExp exp => HeaderCMD exp VHDL a -> VHDL a
 compileHeader (DeclarePort Port k m e) =
   do v <- compEM e
      t <- compTM e
@@ -506,11 +528,28 @@ compileHeader (DeclareRecord rs) =
   do i <- M.newSym
      r <- return $ M.declRecord i rs
      undefined
-compileHeader (DeclareArray {}) =
-  do error "imperative-vhdl: arrays are not yet supported."
+compileHeader (DeclareArray size) =
+  do i <- M.newSym
+     v <- compEM size
+     t <- compAT size (undefined :: a)
+     M.addType $ case v of
+       Just range -> M.constrainedArray   i t (range `M.downto` (H.lift (M.lit "0"))) -- Meh...
+       Nothing    -> M.unconstrainedArray i t
+     return (Array i)
 compileHeader (Entity       name        prg) = M.entity name prg
 compileHeader (Architecture name entity prg) = M.architecture name entity prg
 compileHeader (Library s)                    = M.newLibrary s
 compileHeader (Import s)                     = M.newImport s
+
+-- | ...
+compAT
+  :: forall exp n a.
+     ( CompileExp exp
+     , PredicateExp exp n
+     , PredicateExp exp a )
+  => Maybe (exp n)
+  -> Array n a
+  -> VHDL Type
+compAT _ _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
