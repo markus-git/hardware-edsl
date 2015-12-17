@@ -101,6 +101,9 @@ null = PrimLit LitNull
 -- * Array things
 --------------------------------------------------------------------------------
 
+downto :: Expression -> Expression -> Range
+downto f t = RSimple (lift f) DownTo (lift t)
+
 slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
 slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
 
