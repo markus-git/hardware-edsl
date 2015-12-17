@@ -27,6 +27,7 @@ module Language.Embedded.VHDL.Command
   , signalPort, signalGeneric
   , variablePort, variableGeneric
   , filePort, fileGeneric
+  , newArray, newArray_
   , entity
   , architecture
   , library
@@ -299,7 +300,8 @@ compileSequential (Case e choices def) =
     others (Nothing) cs = cs
     others (Just d)  cs = cs ++ [(V.Choices [V.ChoiceOthers], d)]
 compileSequential (GetArray i a) =
-  do undefined
+  do 
+     undefined
 compileSequential (SetArray i v a) =
   do undefined
 

@@ -112,10 +112,10 @@ index i l = PrimName $ NIndex $ IndexedName (PName $ NSimple i) [lift lit]
   where
     lit :: Primary
     lit = PrimLit $ LitNum $ NLitAbstract $ ALitDecimal $ DecimalLiteral (toInteger l) Nothing Nothing
-{-
-assignArray :: Identifier -> Expression -> Expression -> Primary
-assignArray = undefined
--}
+
+update :: Integral i => Identifier -> i -> Expression -> Primary
+update i l e = undefined
+
 --------------------------------------------------------------------------------
 -- * Record things
 --------------------------------------------------------------------------------

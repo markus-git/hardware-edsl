@@ -31,20 +31,20 @@ simple = true `and` false
 
 type CMD = SequentialCMD Data :+: ConcurrentCMD Data :+: HeaderCMD Data
 
-simpleWrap :: Type a => Data a -> Program CMD ()
-simpleWrap var = do
+wrapper :: Type a => Data a -> Program CMD ()
+wrapper var = do
   i <- entity "entity" $ do
     library "IEEE"
     imports "IEEE.STD_LOGIC"
     signalPort Out (Nothing :: Maybe (IExp CMD Bool))
+  a <- newArray
   architecture "simple" "entity" $ do
     process "main" [] $
       i <== var
 
 --------------------------------------------------------------------------------
--- ** ...
 
-simpleTest :: IO ()
-simpleTest = putStrLn $ compile $ simpleWrap simple
+test :: IO ()
+test = putStrLn $ compile $ simpleWrap simple
 
 --------------------------------------------------------------------------------
