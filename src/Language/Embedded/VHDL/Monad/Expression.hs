@@ -98,6 +98,22 @@ null :: Primary
 null = PrimLit LitNull
 
 --------------------------------------------------------------------------------
+-- * Array things
+--------------------------------------------------------------------------------
+
+slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
+slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
+
+index :: Integral i => Identifier -> i -> Primary
+index i l = PrimName $ NIndex $ IndexedName (PName $ NSimple i) [lift lit]
+  where
+    lit :: Primary
+    lit = PrimLit $ LitNum $ NLitAbstract $ ALitDecimal $ DecimalLiteral (toInteger l) Nothing Nothing
+{-
+assignArray :: Identifier -> Expression -> Expression -> Primary
+assignArray = undefined
+-}
+--------------------------------------------------------------------------------
 -- * Record things
 --------------------------------------------------------------------------------
 
