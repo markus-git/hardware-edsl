@@ -33,7 +33,7 @@ module Language.Embedded.VHDL.Monad (
   , addPort,       addGeneric
   , addGlobal,     addLocal
   , addConcurrent, addSequential
-  , addComponent
+  , addType,       addComponent
 
     -- ^ statements
   , inProcess
@@ -48,7 +48,8 @@ module Language.Embedded.VHDL.Monad (
     -- ^ common
   , interfaceConstant, interfaceSignal, interfaceVariable
   , declRecord, declConstant, declSignal, declVariable
-                                          
+  , unconstrainedArray
+  , constrainedArray
   , portMap
   , assignSignal
   , assignVariable
@@ -474,24 +475,25 @@ interfaceVariable i m t e = V.InterfaceVariableDeclaration [i] (Just m) t e
 --------------------------------------------------------------------------------
 -- ** Type/Component Declarations
 
+compositeTypeDeclaration :: Identifier -> V.CompositeTypeDefinition -> V.TypeDeclaration
+compositeTypeDeclaration name t = V.TDFull (V.FullTypeDeclaration name (V.TDComposite t))
+
 declRecord :: Identifier -> [(Identifier, Type)] -> V.TypeDeclaration
-declRecord name es = V.TDFull
-  (V.FullTypeDeclaration
-    (name)
-    (V.TDComposite (V.CTDRecord (V.RecordTypeDefinition
-      (fmap decl es)
-      (Just name)))))
+declRecord name es = compositeTypeDeclaration name $
+    V.CTDRecord (V.RecordTypeDefinition (fmap decl es) (Just name))
   where
     decl (i, t) = V.ElementDeclaration [i] t
 
--- ... only unconstrained arrays without any index subtype definitions
-declArray :: Identifier -> Type -> V.TypeDeclaration
-declArray name typ = V.TDFull
-  (V.FullTypeDeclaration
-    (name)
-    (V.TDComposite (V.CTDArray (V.ArrU (V.UnconstrainedArrayDefinition
-      ([])
-      (typ))))))
+-- | ...
+unconstrainedArray :: Identifier -> Type -> V.TypeDeclaration
+unconstrainedArray name typ = compositeTypeDeclaration name $
+  V.CTDArray (V.ArrU (V.UnconstrainedArrayDefinition [] typ))
+
+-- | ...
+constrainedArray :: Identifier -> Type -> V.Range -> V.TypeDeclaration
+constrainedArray name typ range = compositeTypeDeclaration name $
+  V.CTDArray (V.ArrC (V.ConstrainedArrayDefinition
+    (V.IndexConstraint [V.DRRange range]) typ))
 
 --------------------------------------------------------------------------------
 -- ** Global/Local Declarations
