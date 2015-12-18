@@ -49,12 +49,13 @@ import Language.Embedded.VHDL.Monad.Type (
 import qualified Language.Embedded.VHDL.Monad.Type as T
 
 import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
-import Language.Syntactic.Functional
+import Language.Syntactic.Functional hiding (Literal, Name)
 import Language.Syntactic.Functional.Sharing
 import Language.Syntactic.Functional.Tuple
 import Language.Syntactic.Sugar.BindingTyped ()
 import Language.Syntactic.Sugar.TupleTyped ()
-import qualified Language.Syntactic as Syntactic
+import qualified Language.Syntactic            as Syntactic
+import qualified Language.Syntactic.Functional as Syntactic
 
 import Control.Arrow
 import Control.Applicative (liftA)
@@ -327,22 +328,46 @@ instance EvalEnv Factor env
 
 data Primary sig
   where
-    Lit :: Type a => a -> Primary (Full a)
+    Name       :: Type a => V.Name -> Primary (Full a)
+    Literal    :: Type a => a      -> Primary (Full a)
+    Aggregate  :: Primary (Full a)
+    Function   :: Primary (Full a)
+    Qualified  :: Primary (Full a)
+    Conversion :: Primary (Full a)
+    Allocator  :: Primary (Full a)
 
 instance Equality   Primary
 instance StringTree Primary
 
 instance Symbol Primary
   where
-    symSig (Lit _) = signature
+    symSig (Name _)     = signature
+    symSig (Literal _)  = signature
+    symSig (Aggregate)  = signature
+    symSig (Function)   = signature
+    symSig (Qualified)  = signature
+    symSig (Conversion) = signature
+    symSig (Allocator)  = signature
 
 instance Render Primary
   where
-    renderSym (Lit _) = "lit"
+    renderSym (Name _)     = "name"
+    renderSym (Literal _)  = "lit"
+    renderSym (Aggregate)  = "agg"
+    renderSym (Function)   = "fun"
+    renderSym (Qualified)  = "qual"
+    renderSym (Conversion) = "conv"
+    renderSym (Allocator)  = "alloc"
 
 instance Eval Primary
   where
-    evalSym (Lit i) = i
+    evalSym (Name _)     = error "VHDL: cannot eval open name!"
+    evalSym (Literal i)  = i
+    evalSym (Aggregate)  = undefined
+    evalSym (Function)   = undefined
+    evalSym (Qualified)  = undefined
+    evalSym (Conversion) = undefined
+    evalSym (Allocator)  = undefined
 
 instance EvalEnv Primary env
 
@@ -414,7 +439,7 @@ eval = evalClosed . desugar
 --------------------------------------------------------------------------------
 
 value :: Syntax a => Internal a -> a
-value = sugar . injT . Lit
+value = sugar . injT . Literal
 
 force :: Syntax a => a -> a
 force = resugar
@@ -548,7 +573,7 @@ instance EvaluateExp Data
 
 instance CompileExp Data
   where
-    varE i = sugarSymTyped ((VarT (Name i)))
+    varE i = sugarSymTyped ((VarT (Syntactic.Name i)))
     
     compT = compileT
 
@@ -572,7 +597,7 @@ compileE var
   | Just (Var  v) <- prj var = return $ P $ M.name $ vars v
   | Just (VarT v) <- prj var = return $ P $ M.name $ vars v
 compileE val
-  | Just (Lit v) <- prj val = return $ P $ M.string $ format v
+  | Just (Literal v) <- prj val = return $ P $ M.string $ format v
 compileE (lets :$ a :$ (lam :$ body))
   | Just (Let)    <- prj lets
   , Just (LamT v) <- prj lam
@@ -644,13 +669,20 @@ compileE (factor :$ x)
     go :: (V.Primary -> V.Factor) -> VHDL Kind
     go f = un (\a -> Hoist.F $ f (lift a)) x
 compileE (primary)
-  | Just (Lit i) <- prj primary = return $ Hoist.P $ M.lit $ format i
+  | Just (Name  n) <- prj primary = case n of
+      (V.NSimple i) -> undefined
+      (V.NOp     o) -> undefined
+      (V.NSelect s) -> undefined
+      (V.NIndex  i) -> undefined
+      (V.NSlice  s) -> undefined
+      (V.NAttr   a) -> undefined
+  | Just (Literal i) <- prj primary = return $ Hoist.P $ M.lit $ format i
 compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
 
 --------------------------------------------------------------------------------
 
 -- | ...
-vars :: Name -> String
+vars :: Syntactic.Name -> String
 vars v = 'v' : show v
 
 -- | ...
