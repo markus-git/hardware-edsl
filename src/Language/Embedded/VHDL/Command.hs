@@ -129,7 +129,8 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> SequentialCMD exp prog ()
 
     GetArray
-      :: ( PredicateExp exp a, PredicateExp exp n
+      :: ( PredicateExp exp a
+         , PredicateExp exp n
          , Integral n
          , Ix n )
       => exp n
@@ -137,7 +138,8 @@ data SequentialCMD (exp :: * -> *) (prog :: * -> *) a
       -> SequentialCMD exp prog (exp a)
 
     SetArray
-      :: ( PredicateExp exp a, PredicateExp exp n
+      :: ( PredicateExp exp a
+         , PredicateExp exp n
          , Integral n
          , Ix n )
       => exp n
@@ -251,7 +253,7 @@ ifThen b th el = singleE $ If (b, th) [] el
 
 --------------------------------------------------------------------------------
 
-compileSequential :: CompileExp exp => SequentialCMD exp VHDL a -> VHDL a
+compileSequential :: forall exp a. CompileExp exp => SequentialCMD exp VHDL a -> VHDL a
 compileSequential (Local k e) =
   do v <- compEM e
      t <- compTM e
@@ -299,11 +301,16 @@ compileSequential (Case e choices def) =
     others :: Maybe x -> [(V.Choices, x)] -> [(V.Choices, x)]
     others (Nothing) cs = cs
     others (Just d)  cs = cs ++ [(V.Choices [V.ChoiceOthers], d)]
-compileSequential (GetArray i a) =
-  do 
+compileSequential (GetArray index (Array a :: Array n b)) =
+  do i <- compE  index
+     t <- compAT index (undefined :: Array n b)
+     
      undefined
-compileSequential (SetArray i v a) =
-  do undefined
+compileSequential (SetArray index v (Array a :: Array n b)) =
+  do i <- compE  index
+     t <- compAT index (undefined :: Array n b)
+     
+     undefined
 
 --------------------------------------------------------------------------------
 -- ** Concurrent commands offered by VHDL
@@ -532,8 +539,8 @@ compileHeader (DeclareRecord rs) =
      undefined
 compileHeader (DeclareArray size) =
   do i <- M.newSym
-     v <- compEM size
-     t <- compAT size (undefined :: a)
+     v <- compEM  size
+     t <- compATM size (undefined :: a)
      M.addType $ case v of
        Just range -> M.constrainedArray   i t (range `M.downto` (H.lift (M.lit "0"))) -- Meh...
        Nothing    -> M.unconstrainedArray i t
@@ -543,8 +550,20 @@ compileHeader (Architecture name entity prg) = M.architecture name entity prg
 compileHeader (Library s)                    = M.newLibrary s
 compileHeader (Import s)                     = M.newImport s
 
--- | ...
+--------------------------------------------------------------------------------
+
 compAT
+  :: forall exp n a.
+     ( CompileExp exp
+     , PredicateExp exp n
+     , PredicateExp exp a )
+  => exp n
+  -> Array n a
+  -> VHDL Type
+compAT i a = compATM (Just i) a
+
+-- | ...
+compATM
   :: forall exp n a.
      ( CompileExp exp
      , PredicateExp exp n
@@ -552,6 +571,6 @@ compAT
   => Maybe (exp n)
   -> Array n a
   -> VHDL Type
-compAT _ _ = compT (undefined :: exp a)
+compATM _ _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
