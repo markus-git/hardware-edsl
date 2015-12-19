@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 
 module Language.Embedded.VHDL.Command
-  ( SequentialCMD
+{-  ( SequentialCMD
   , ConcurrentCMD
   , HeaderCMD
   , compile
@@ -32,9 +32,9 @@ module Language.Embedded.VHDL.Command
   , architecture
   , library
   , imports
-  ) where
+  )-} where
 
-import Language.VHDL (Identifier(..), Label, Expression, Mode(..))
+import Language.VHDL (Identifier(..), Mode(..), Expression)
 import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Monad      (VHDLT, VHDL)
@@ -53,6 +53,79 @@ import Data.Typeable
 import Data.ALaCarte
 import Data.Ix
 
+--------------------------------------------------------------------------------
+-- * ...
+--------------------------------------------------------------------------------
+
+data Clause   = Port    | Generic
+
+data Scope    = Process | Architecture | Entity
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe Expression)
+compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
+
+compTM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL Type
+compTM _ = compT (undefined :: exp a)
+
+--------------------------------------------------------------------------------
+-- * Signals
+--------------------------------------------------------------------------------
+
+-- | ...
+data Signal a = Signal Identifier
+
+-- | ...
+data SignalCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    NewSignal
+      :: PredicateExp exp a
+      => Clause
+      -> Scope
+      -> Mode
+      -> Maybe (exp a)
+      -> SignalCMD exp prog (Signal a)
+
+    SetSignal
+      :: PredicateExp exp a
+      => Signal a
+      -> exp a
+      -> SignalCMD exp prog ()
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+instance CompileExp exp => Interp (SignalCMD exp) VHDL
+  where
+    interp = compileSignal
+
+-- | ...
+compileSignal :: CompileExp exp => SignalCMD exp VHDL a -> VHDL a
+compileSignal (NewSignal clause scope mode exp) =
+  do v <- compEM exp
+     t <- compTM exp
+     i <- M.newSym
+     let block     = M.declSignal      i      t v
+         interface = M.interfaceSignal i mode t v
+     case scope of
+       Process      -> M.addLocal  block
+       Architecture -> M.addGlobal block
+       Entity    -> case clause of
+         Port    -> M.addPort    interface
+         Generic -> M.addGeneric interface
+     return (Signal i)
+compileSignal (SetSignal (Signal s) exp) =
+  do v <- compE exp
+     t <- compT exp
+     M.addConcurrent $ undefined
+
+--------------------------------------------------------------------------------
+-- ** ..
+
+
+{-
 --------------------------------------------------------------------------------
 -- *
 --------------------------------------------------------------------------------
@@ -574,3 +647,4 @@ compATM
 compATM _ _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
+-}
