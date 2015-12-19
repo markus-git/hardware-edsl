@@ -330,11 +330,11 @@ data Primary sig
   where
     Name       :: Type a => V.Name -> Primary (Full a)
     Literal    :: Type a => a      -> Primary (Full a)
-    Aggregate  :: Primary (Full a)
-    Function   :: Primary (Full a)
-    Qualified  :: Primary (Full a)
-    Conversion :: Primary (Full a)
-    Allocator  :: Primary (Full a)
+    Aggregate  :: Type a => Primary (Full a)
+    Function   :: Type a => Primary (Full a)
+    Qualified  :: Type a => Primary (Full a)
+    Conversion :: Type a => Primary (Full a)
+    Allocator  :: Type a => Primary (Full a)
 
 instance Equality   Primary
 instance StringTree Primary
