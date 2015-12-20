@@ -141,7 +141,7 @@ compileSignal (NewSignal clause scope mode exp) =
 compileSignal (GetSignal (Signal s)) =
   do undefined -- Don't know what to put here, something like '... (varE s)' but that loses the 's'..
 compileSignal (SetSignal s exp) =
-  do M.addSequential =<< M.assignSignal (toIdent s) <$> compE exp
+  do M.addConcurrent =<< M.assignSignal (toIdent s) <$> compE exp
 
 --------------------------------------------------------------------------------
 -- ** ..
@@ -159,6 +159,61 @@ port, generic :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> 
 port    m = singleE $ NewSignal Port    Entity m Nothing
 generic m = singleE $ NewSignal Generic Entity m Nothing
 
+--------------------------------------------------------------------------------
+-- * ... Variables
+--------------------------------------------------------------------------------
+
+data Variable a = Variable Integer
+
+instance ToIdent (Variable a)
+  where
+    toIdent (Variable i) = Ident $ 'v' : show i
+
+data VariableCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    NewVariable
+      :: PredicateExp exp a
+      => Maybe (exp a)
+      -> VariableCMD exp prog (Variable a)
+
+    GetVariable
+      :: PredicateExp exp a
+      => Variable a
+      -> VariableCMD exp prog (exp a)
+
+    SetVariable
+      :: PredicateExp exp a
+      => Variable a
+      -> exp a
+      -> VariableCMD exp prog ()
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+type instance IExp (VariableCMD e)       = e
+type instance IExp (VariableCMD e :+: i) = e
+
+instance HFunctor (VariableCMD exp)
+  where
+    hfmap _ (NewVariable e)   = NewVariable e
+    hfmap _ (GetVariable s)   = GetVariable s
+    hfmap _ (SetVariable s e) = SetVariable s e
+
+instance CompileExp exp => Interp (VariableCMD exp) VHDL
+  where
+    interp = compileVariable
+
+compileVariable :: forall exp a. CompileExp exp => VariableCMD exp VHDL a -> VHDL a
+compileVariable (NewVariable exp) =
+  do v <- compEM exp
+     t <- compTM exp
+     i <- Variable <$> M.freshUnique
+     M.addLocal $ M.declVariable (toIdent i) t v
+     return i
+compileVariable (GetVariable v) =
+  do undefined -- ... same as for signals
+compileVariable (SetVariable v exp) =
+  do M.addConcurrent =<< M.assignSignal (toIdent v) <$> compE exp
 {-
 --------------------------------------------------------------------------------
 -- *
