@@ -61,6 +61,10 @@ data Clause   = Port    | Generic
 
 data Scope    = Process | Architecture | Entity
 
+class ToIdent a
+  where
+    toIdent :: a -> V.Identifier
+
 --------------------------------------------------------------------------------
 -- ** ...
 
@@ -71,11 +75,15 @@ compTM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) ->
 compTM _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
--- * Signals
+-- * ... Signals
 --------------------------------------------------------------------------------
 
 -- | ...
-data Signal a = Signal Identifier
+data Signal a = Signal Integer
+
+instance ToIdent (Signal a)
+  where
+    toIdent (Signal i) = Ident $ 's' : show i
 
 -- | ...
 data SignalCMD (exp :: * -> *) (prog :: * -> *) a
@@ -88,6 +96,11 @@ data SignalCMD (exp :: * -> *) (prog :: * -> *) a
       -> Maybe (exp a)
       -> SignalCMD exp prog (Signal a)
 
+    GetSignal
+      :: PredicateExp exp a
+      => Signal a
+      -> SignalCMD exp prog (exp a)
+
     SetSignal
       :: PredicateExp exp a
       => Signal a
@@ -97,33 +110,54 @@ data SignalCMD (exp :: * -> *) (prog :: * -> *) a
 --------------------------------------------------------------------------------
 -- ** ...
 
+type instance IExp (SignalCMD e)       = e
+type instance IExp (SignalCMD e :+: i) = e
+
+instance HFunctor (SignalCMD exp)
+  where
+    hfmap _ (NewSignal c s m e) = NewSignal c s m e
+    hfmap _ (GetSignal s)       = GetSignal s
+    hfmap _ (SetSignal s e)     = SetSignal s e
+
 instance CompileExp exp => Interp (SignalCMD exp) VHDL
   where
     interp = compileSignal
 
 -- | ...
-compileSignal :: CompileExp exp => SignalCMD exp VHDL a -> VHDL a
+compileSignal :: forall exp a. CompileExp exp => SignalCMD exp VHDL a -> VHDL a
 compileSignal (NewSignal clause scope mode exp) =
   do v <- compEM exp
      t <- compTM exp
-     i <- M.newSym
-     let block     = M.declSignal      i      t v
-         interface = M.interfaceSignal i mode t v
+     i <- Signal <$> M.freshUnique
+     let block     = M.declSignal      (toIdent i)      t v
+         interface = M.interfaceSignal (toIdent i) mode t v
      case scope of
        Process      -> M.addLocal  block
        Architecture -> M.addGlobal block
        Entity    -> case clause of
          Port    -> M.addPort    interface
          Generic -> M.addGeneric interface
-     return (Signal i)
-compileSignal (SetSignal (Signal s) exp) =
-  do v <- compE exp
-     t <- compT exp
-     M.addConcurrent $ undefined
+     return i
+compileSignal (GetSignal (Signal s)) =
+  do undefined -- Don't know what to put here, something like '... (varE s)' but that loses the 's'..
+compileSignal (SetSignal s exp) =
+  do M.addSequential =<< M.assignSignal (toIdent s) <$> compE exp
 
 --------------------------------------------------------------------------------
 -- ** ..
 
+-- | Declare a signal.
+signal  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Signal a)
+signal  = singleE . NewSignal Port Architecture InOut . Just
+
+-- | Declare a uninitialized signal.
+signal_ :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => ProgramT i m (Signal a)
+signal_ = singleE $ NewSignal Port Architecture InOut Nothing
+
+-- | Declare port/generic signals of the given mode.
+port, generic :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> ProgramT i m (Signal a)
+port    m = singleE $ NewSignal Port    Entity m Nothing
+generic m = singleE $ NewSignal Generic Entity m Nothing
 
 {-
 --------------------------------------------------------------------------------
