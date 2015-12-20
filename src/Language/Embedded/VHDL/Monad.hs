@@ -524,14 +524,22 @@ portMap l n ns = V.ConComponent $
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable
 
-assignSignal :: Identifier -> Expression -> V.SequentialStatement
-assignSignal i e = V.SSignalAss $
-  V.SignalAssignmentStatement
+assignSignal :: Identifier -> Expression -> V.ConcurrentStatement
+assignSignal i e = V.ConSignalAss $ V.CSASCond Nothing False $ 
+    (V.ConditionalSignalAssignment
+      (V.TargetName (V.NSimple i))
+      (V.Options False Nothing)
+      (V.ConditionalWaveforms
+        ([])
+        ( V.WaveElem [V.WaveEExp e Nothing]
+        , Nothing)))
+  
+  {-
     (Nothing)
     (V.TargetName (V.NSimple i))
     (Nothing)
     (V.WaveElem [V.WaveEExp e Nothing])
-
+-}
 assignVariable :: Identifier -> Expression -> V.SequentialStatement
 assignVariable i e = V.SVarAss $
   V.VariableAssignmentStatement
