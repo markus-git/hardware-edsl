@@ -51,7 +51,8 @@ module Language.Embedded.VHDL.Monad (
   , unconstrainedArray
   , constrainedArray
   , portMap
-  , assignSignal
+  , assignConcurrentSignal
+  , assignSequentialSignal
   , assignVariable
 
   , module Language.Embedded.VHDL.Monad.Expression
@@ -524,8 +525,8 @@ portMap l n ns = V.ConComponent $
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable
 
-assignSignal :: Identifier -> Expression -> V.ConcurrentStatement
-assignSignal i e = V.ConSignalAss $ V.CSASCond Nothing False $ 
+assignConcurrentSignal :: Identifier -> Expression -> V.ConcurrentStatement
+assignConcurrentSignal i e = V.ConSignalAss $ V.CSASCond Nothing False $ 
     (V.ConditionalSignalAssignment
       (V.TargetName (V.NSimple i))
       (V.Options False Nothing)
@@ -533,13 +534,15 @@ assignSignal i e = V.ConSignalAss $ V.CSASCond Nothing False $
         ([])
         ( V.WaveElem [V.WaveEExp e Nothing]
         , Nothing)))
-  
-  {-
+
+assignSequentialSignal :: Identifier -> Expression -> V.SequentialStatement
+assignSequentialSignal i e = V.SSignalAss $
+  V.SignalAssignmentStatement
     (Nothing)
     (V.TargetName (V.NSimple i))
     (Nothing)
     (V.WaveElem [V.WaveEExp e Nothing])
--}
+
 assignVariable :: Identifier -> Expression -> V.SequentialStatement
 assignVariable i e = V.SVarAss $
   V.VariableAssignmentStatement

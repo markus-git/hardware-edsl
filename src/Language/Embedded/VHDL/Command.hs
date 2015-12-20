@@ -141,7 +141,7 @@ compileSignal (NewSignal clause scope mode exp) =
 compileSignal (GetSignal (Signal s)) =
   do undefined -- Don't know what to put here, something like '... (varE s)' but that loses the 's'..
 compileSignal (SetSignal s exp) =
-  do M.addConcurrent =<< M.assignSignal (toIdent s) <$> compE exp
+  do M.addSequential =<< M.assignSequentialSignal (toIdent s) <$> compE exp
 
 --------------------------------------------------------------------------------
 -- ** ..
@@ -227,7 +227,7 @@ compileVariable (NewVariable exp) =
 compileVariable (GetVariable v) =
   do undefined -- ... same as for signals
 compileVariable (SetVariable v exp) =
-  do M.addConcurrent =<< M.assignSignal (toIdent v) <$> compE exp
+  do M.addSequential =<< M.assignVariable (toIdent v) <$> compE exp
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -255,10 +255,28 @@ setVariable v = singleE . SetVariable v
 (==:) = setVariable
 
 --------------------------------------------------------------------------------
+-- * ... Arrays
+--------------------------------------------------------------------------------
+
+-- ...
+
+--------------------------------------------------------------------------------
+-- * ... Packages
+--------------------------------------------------------------------------------
+
+-- ...
+
+--------------------------------------------------------------------------------
 -- * ... Entities
 --------------------------------------------------------------------------------
 
+-- ...
 
+--------------------------------------------------------------------------------
+-- * ... Processes
+--------------------------------------------------------------------------------
+
+-- ...
 
 {-
 --------------------------------------------------------------------------------
