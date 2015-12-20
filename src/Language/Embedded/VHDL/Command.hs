@@ -147,17 +147,31 @@ compileSignal (SetSignal s exp) =
 -- ** ..
 
 -- | Declare a signal.
-signal  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Signal a)
-signal  = singleE . NewSignal Port Architecture InOut . Just
+newSignal  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Signal a)
+newSignal  = singleE . NewSignal Port Architecture InOut . Just
 
--- | Declare a uninitialized signal.
-signal_ :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => ProgramT i m (Signal a)
-signal_ = singleE $ NewSignal Port Architecture InOut Nothing
+-- | Declare an uninitialized signal.
+newSignal_ :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => ProgramT i m (Signal a)
+newSignal_ = singleE $ NewSignal Port Architecture InOut Nothing
+
+-- | Fetches the current value of a signal.
+getSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> ProgramT i m (IExp i a)
+getSignal = singleE . GetSignal
+
+-- | Update the value of a signal.
+setSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
+setSignal s = singleE . SetSignal s
+
+--------------------------------------------------------------------------------
+
+-- | Short-hand for 'setSignal'.
+(<==) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
+(<==) = setSignal
 
 -- | Declare port/generic signals of the given mode.
-port, generic :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> ProgramT i m (Signal a)
-port    m = singleE $ NewSignal Port    Entity m Nothing
-generic m = singleE $ NewSignal Generic Entity m Nothing
+newPort, newGeneric :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> ProgramT i m (Signal a)
+newPort    m = singleE $ NewSignal Port    Entity m Nothing
+newGeneric m = singleE $ NewSignal Generic Entity m Nothing
 
 --------------------------------------------------------------------------------
 -- * ... Variables
@@ -214,6 +228,38 @@ compileVariable (GetVariable v) =
   do undefined -- ... same as for signals
 compileVariable (SetVariable v exp) =
   do M.addConcurrent =<< M.assignSignal (toIdent v) <$> compE exp
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+-- | Declare a variable.
+newVariable  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Variable a)
+newVariable  = singleE . NewVariable . Just
+
+-- | Declare an uninitialized variable.
+newVariable_ :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => ProgramT i m (Variable a)
+newVariable_ = singleE $ NewVariable Nothing
+
+-- | Fetches the current value of a variable.
+getVariable  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> ProgramT i m (IExp i a)
+getVariable = singleE . GetVariable
+
+-- | Updates the value of a variable.
+setVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> IExp i a -> ProgramT i m ()
+setVariable v = singleE . SetVariable v
+
+--------------------------------------------------------------------------------
+
+-- | Short-hand for 'setVariable'.
+(==:) :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> IExp i a -> ProgramT i m ()
+(==:) = setVariable
+
+--------------------------------------------------------------------------------
+-- * ... Entities
+--------------------------------------------------------------------------------
+
+
+
 {-
 --------------------------------------------------------------------------------
 -- *
