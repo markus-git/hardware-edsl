@@ -270,7 +270,7 @@ setVariable v = singleE . SetVariable v
 -- * ... Entities
 --------------------------------------------------------------------------------
 
--- ...
+-- | ...
 data EntityCMD (exp :: * -> *) (prog :: * -> *) a
   where
     NewEntity
@@ -298,6 +298,7 @@ compileEntity (NewEntity s prog) = M.entity (Ident s) prog
 --------------------------------------------------------------------------------
 -- ** ...
 
+-- | Declare a new entity by running the given program to initialize ports.
 newEntity :: (EntityCMD (IExp i) :<: i) => String -> ProgramT i m a -> ProgramT i m a
 newEntity e = singleE . NewEntity e
 
@@ -305,7 +306,7 @@ newEntity e = singleE . NewEntity e
 -- * ... Architectures
 --------------------------------------------------------------------------------
 
--- ...
+-- | ...
 data ArchitectureCMD (exp :: * -> *) (prog :: * -> *) a
   where
     NewArchitecture
@@ -334,6 +335,7 @@ compileArchitecture (NewArchitecture e a prog) = M.architecture (Ident e) (Ident
 --------------------------------------------------------------------------------
 -- ** ...
 
+-- | Declare a new architecture by running the given program to produce a body.
 newArchitecture :: (ArchitectureCMD (IExp i) :<: i) => String -> String -> ProgramT i m a -> ProgramT i m a
 newArchitecture e a = singleE . NewArchitecture e a
 
@@ -341,7 +343,51 @@ newArchitecture e a = singleE . NewArchitecture e a
 -- * ... Processes
 --------------------------------------------------------------------------------
 
--- ...
+-- | ...
+data SignalX = forall a. SignalX (Signal a)
+
+-- | ...
+data ProcessCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    NewProcess
+      :: [SignalX]
+      -> prog ()
+      -> ProcessCMD exp prog ()
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+type instance IExp (ProcessCMD e)       = e
+type instance IExp (ProcessCMD e :+: i) = e
+
+instance HFunctor (ProcessCMD exp)
+  where
+    hfmap f (NewProcess is p) = NewProcess is (f p)
+
+instance CompileExp exp => Interp (ProcessCMD exp) VHDL
+  where
+    interp = compileProcess
+
+compileProcess :: forall exp a. CompileExp exp => ProcessCMD exp VHDL a -> VHDL a
+compileProcess (NewProcess is prog) =
+  do l      <- M.newLabel
+     (a, c) <- M.inProcess l (fmap unX is) prog
+     M.addConcurrent (V.ConProcess c)
+     return a
+  where
+    unX :: SignalX -> Identifier
+    unX (SignalX s) = toIdent s
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+-- | ...
+toX :: Signal a -> SignalX
+toX = SignalX
+
+-- | ...
+newProcess :: (ProcessCMD (IExp i) :<: i) => [SignalX] -> ProgramT i m () -> ProgramT i m ()
+newProcess is = singleE . NewProcess is
 
 --------------------------------------------------------------------------------
 -- * ... Conditionals
