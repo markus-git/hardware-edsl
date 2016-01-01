@@ -306,6 +306,36 @@ newEntity e = singleE . NewEntity e
 --------------------------------------------------------------------------------
 
 -- ...
+data ArchitectureCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    NewArchitecture
+      :: String
+      -> String
+      -> prog a
+      -> ArchitectureCMD exp prog a
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+type instance IExp (ArchitectureCMD e)       = e
+type instance IExp (ArchitectureCMD e :+: i) = e
+
+instance HFunctor (ArchitectureCMD exp)
+  where
+    hfmap f (NewArchitecture e a p) = NewArchitecture e a (f p)
+
+instance CompileExp exp => Interp (ArchitectureCMD exp) VHDL
+  where
+    interp = compileArchitecture
+
+compileArchitecture :: forall exp a. CompileExp exp => ArchitectureCMD exp VHDL a -> VHDL a
+compileArchitecture (NewArchitecture e a prog) = M.architecture (Ident e) (Ident a) prog
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+newArchitecture :: (ArchitectureCMD (IExp i) :<: i) => String -> String -> ProgramT i m a -> ProgramT i m a
+newArchitecture e a = singleE . NewArchitecture e a
 
 --------------------------------------------------------------------------------
 -- * ... Processes
