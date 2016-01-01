@@ -271,9 +271,50 @@ setVariable v = singleE . SetVariable v
 --------------------------------------------------------------------------------
 
 -- ...
+data EntityCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    NewEntity
+      :: String
+      -> prog a
+      -> EntityCMD exp prog a
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+type instance IExp (EntityCMD e)       = e
+type instance IExp (EntityCMD e :+: i) = e
+
+instance HFunctor (EntityCMD exp)
+  where
+    hfmap f (NewEntity e p) = NewEntity e (f p)
+
+instance CompileExp exp => Interp (EntityCMD exp) VHDL
+  where
+    interp = compileEntity
+
+compileEntity :: forall exp a. CompileExp exp => EntityCMD exp VHDL a -> VHDL a
+compileEntity (NewEntity s prog) = M.entity (Ident s) prog
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+newEntity :: (EntityCMD (IExp i) :<: i) => String -> ProgramT i m a -> ProgramT i m a
+newEntity e = singleE . NewEntity e
+
+--------------------------------------------------------------------------------
+-- * ... Architectures
+--------------------------------------------------------------------------------
+
+-- ...
 
 --------------------------------------------------------------------------------
 -- * ... Processes
+--------------------------------------------------------------------------------
+
+-- ...
+
+--------------------------------------------------------------------------------
+-- * ... Conditionals
 --------------------------------------------------------------------------------
 
 -- ...
