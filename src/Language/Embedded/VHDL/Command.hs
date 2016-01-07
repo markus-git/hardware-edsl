@@ -393,7 +393,72 @@ newProcess is = singleE . NewProcess is
 -- * ... Conditionals
 --------------------------------------------------------------------------------
 
--- ...
+-- | ...
+data ConditionalCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    If :: PredicateExp exp Bool
+       => (exp Bool, prog ())   -- if
+       -> [(exp Bool, prog ())] -- else-if
+       -> Maybe (prog ())       -- else
+       -> ConditionalCMD exp prog ()
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+type instance IExp (ConditionalCMD e)       = e
+type instance IExp (ConditionalCMD e :+: i) = e
+
+instance HFunctor (ConditionalCMD exp)
+  where
+    hfmap f (If a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
+
+instance CompileExp exp => Interp (ConditionalCMD exp) VHDL
+  where
+    interp = compileConditional
+
+compileConditional :: forall exp a. CompileExp exp => ConditionalCMD exp VHDL a -> VHDL a
+compileConditional (If (a, b) cs em) =
+  do let (es, ds) = unzip cs
+         el       = maybe (return ()) id em
+     ae  <- compE a
+     ese <- mapM compE es
+     s   <- M.inConditional (ae, b) (zip ese ds) el
+     M.addSequential $ V.SIf s
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+-- | Conditional statements guarded by if and then clauses with an optional else.
+conditional
+  :: ( ConditionalCMD (IExp i) :<: i
+     , PredicateExp   (IExp i) Bool
+     )
+  =>  (IExp i Bool, ProgramT i m ())
+  -> [(IExp i Bool, ProgramT i m ())]
+  -> Maybe (ProgramT i m ())
+  -> ProgramT i m ()
+conditional a bs = singleE . If a bs
+
+-- | Guarded statement.
+when
+  :: ( ConditionalCMD (IExp i) :<: i
+     , PredicateExp   (IExp i) Bool
+     )
+  => IExp i Bool
+  -> ProgramT i m ()
+  -> ProgramT i m ()
+when e p = conditional (e, p) [] Nothing
+
+-- | Standard if-then-else statement.
+iff
+  :: ( ConditionalCMD (IExp i) :<: i
+     , PredicateExp   (IExp i) Bool
+     )
+  => IExp i Bool
+  -> ProgramT i m ()
+  -> ProgramT i m ()
+  -> ProgramT i m ()
+iff b t e = conditional (b, t) [] (Just e)
 
 {-
 --------------------------------------------------------------------------------
