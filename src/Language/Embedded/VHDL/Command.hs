@@ -343,7 +343,7 @@ newArchitecture e a = singleE . NewArchitecture e a
 -- * ... Processes
 --------------------------------------------------------------------------------
 
--- | ...
+-- | Untyped signals.
 data SignalX = forall a. SignalX (Signal a)
 
 -- | ...

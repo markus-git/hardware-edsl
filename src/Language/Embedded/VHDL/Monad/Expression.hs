@@ -97,6 +97,9 @@ lit    = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . I
 null :: Primary
 null = PrimLit LitNull
 
+cast :: SubtypeIndication -> Expression -> Primary
+cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion t
+
 --------------------------------------------------------------------------------
 -- * Array things
 --------------------------------------------------------------------------------

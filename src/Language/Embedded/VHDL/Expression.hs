@@ -21,7 +21,7 @@ module Language.Embedded.VHDL.Expression
   , mul
   , div, mod, rem
   , exp, abs
-  , value, force, share
+  , value, force, share, cast
 
   -- types
   , std_logic
@@ -73,6 +73,7 @@ import qualified Prelude
 -- * ...
 --------------------------------------------------------------------------------
 
+-- | Collection of commonly required classes required by VHDL expressions.
 class    (Typeable a, Rep a, Eq a) => Type a
 instance (Typeable a, Rep a, Eq a) => Type a
 
@@ -333,7 +334,7 @@ data Primary sig
     Aggregate  :: Type a => Primary (Full a)
     Function   :: Type a => Primary (Full a)
     Qualified  :: Type a => Primary (Full a)
-    Conversion :: Type a => Primary (Full a)
+    Conversion :: (Type a, Type b) => (a -> b) -> Primary (a :-> Full b)
     Allocator  :: Type a => Primary (Full a)
 
 instance Equality   Primary
@@ -341,33 +342,33 @@ instance StringTree Primary
 
 instance Symbol Primary
   where
-    symSig (Name _)     = signature
-    symSig (Literal _)  = signature
-    symSig (Aggregate)  = signature
-    symSig (Function)   = signature
-    symSig (Qualified)  = signature
-    symSig (Conversion) = signature
-    symSig (Allocator)  = signature
+    symSig (Name _)       = signature
+    symSig (Literal _)    = signature
+    symSig (Aggregate)    = signature
+    symSig (Function)     = signature
+    symSig (Qualified)    = signature
+    symSig (Conversion _) = signature
+    symSig (Allocator)    = signature
 
 instance Render Primary
   where
-    renderSym (Name _)     = "name"
-    renderSym (Literal _)  = "lit"
-    renderSym (Aggregate)  = "agg"
-    renderSym (Function)   = "fun"
-    renderSym (Qualified)  = "qual"
-    renderSym (Conversion) = "conv"
-    renderSym (Allocator)  = "alloc"
+    renderSym (Name _)       = "name"
+    renderSym (Literal _)    = "lit"
+    renderSym (Aggregate)    = "agg"
+    renderSym (Function)     = "fun"
+    renderSym (Qualified)    = "qual"
+    renderSym (Conversion _) = "conv"
+    renderSym (Allocator)    = "alloc"
 
 instance Eval Primary
   where
-    evalSym (Name _)     = error "VHDL: cannot eval open name!"
-    evalSym (Literal i)  = i
-    evalSym (Aggregate)  = undefined
-    evalSym (Function)   = undefined
-    evalSym (Qualified)  = undefined
-    evalSym (Conversion) = undefined
-    evalSym (Allocator)  = undefined
+    evalSym (Name _)       = error "VHDL: cannot eval open name!"
+    evalSym (Literal i)    = i
+    evalSym (Aggregate)    = undefined
+    evalSym (Function)     = undefined
+    evalSym (Qualified)    = undefined
+    evalSym (Conversion f) = f
+    evalSym (Allocator)    = undefined
 
 instance EvalEnv Primary env
 
@@ -446,6 +447,9 @@ force = resugar
 
 share :: (Syntax a, Syntax b) => a -> (a -> b) -> b
 share = sugarSymTyped Let
+
+cast  :: (Syntax a, Syntax b) => (Internal a -> Internal b) -> a -> b
+cast f = sugarSymTyped (Conversion f)
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -592,7 +596,7 @@ compileT _ =
      declare (undefined :: a)
      return t
 
-compileE :: ASTF Dom a -> VHDL Kind
+compileE :: forall a. ASTF Dom a -> VHDL Kind
 compileE var
   | Just (Var  v) <- prj var = return $ P $ M.name $ vars v
   | Just (VarT v) <- prj var = return $ P $ M.name $ vars v
@@ -668,6 +672,13 @@ compileE (factor :$ x)
   where
     go :: (V.Primary -> V.Factor) -> VHDL Kind
     go f = un (\a -> Hoist.F $ f (lift a)) x
+compileE (primary :$ x)
+  | Just (Conversion f) <- prj primary =
+      do t <- compileT (undefined :: Data a)
+         go $ M.cast t
+  where
+    go :: (V.Expression -> V.Primary) -> VHDL Kind
+    go f = un (\a -> Hoist.P $ f (lift a)) x
 compileE (primary)
   | Just (Name  n) <- prj primary = case n of
       (V.NSimple i) -> undefined
@@ -676,7 +687,11 @@ compileE (primary)
       (V.NIndex  i) -> undefined
       (V.NSlice  s) -> undefined
       (V.NAttr   a) -> undefined
-  | Just (Literal i) <- prj primary = return $ Hoist.P $ M.lit $ format i
+  | Just (Literal i)    <- prj primary = return $ Hoist.P $ M.lit $ format i
+  | Just (Aggregate)    <- prj primary = undefined
+  | Just (Function)     <- prj primary = undefined
+  | Just (Qualified)    <- prj primary = undefined
+  | Just (Allocator)    <- prj primary = undefined
 compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
 
 --------------------------------------------------------------------------------
