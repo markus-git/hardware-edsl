@@ -100,6 +100,9 @@ null = PrimLit LitNull
 cast :: SubtypeIndication -> Expression -> Primary
 cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion t
 
+qualified :: SubtypeIndication -> Expression -> Primary
+qualified (SubtypeIndication _ t _) = PrimQual . QualExp t
+
 --------------------------------------------------------------------------------
 -- * Array things
 --------------------------------------------------------------------------------

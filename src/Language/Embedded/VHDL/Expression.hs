@@ -332,8 +332,8 @@ data Primary sig
     Name       :: Type a => V.Name -> Primary (Full a)
     Literal    :: Type a => a      -> Primary (Full a)
     Aggregate  :: Type a => Primary (Full a)
-    Function   :: Type a => Primary (Full a)
-    Qualified  :: Type a => Primary (Full a)
+    Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
+    Qualified  :: (Type a, Type b) => b        -> Primary (a :-> Full a)
     Conversion :: (Type a, Type b) => (a -> b) -> Primary (a :-> Full b)
     Allocator  :: Type a => Primary (Full a)
 
@@ -345,8 +345,8 @@ instance Symbol Primary
     symSig (Name _)       = signature
     symSig (Literal _)    = signature
     symSig (Aggregate)    = signature
-    symSig (Function)     = signature
-    symSig (Qualified)    = signature
+    symSig (Function _ _) = signature
+    symSig (Qualified _)  = signature
     symSig (Conversion _) = signature
     symSig (Allocator)    = signature
 
@@ -355,8 +355,8 @@ instance Render Primary
     renderSym (Name _)       = "name"
     renderSym (Literal _)    = "lit"
     renderSym (Aggregate)    = "agg"
-    renderSym (Function)     = "fun"
-    renderSym (Qualified)    = "qual"
+    renderSym (Function _ _) = "fun"
+    renderSym (Qualified _)  = "qual"
     renderSym (Conversion _) = "conv"
     renderSym (Allocator)    = "alloc"
 
@@ -365,8 +365,8 @@ instance Eval Primary
     evalSym (Name _)       = error "VHDL: cannot eval open name!"
     evalSym (Literal i)    = i
     evalSym (Aggregate)    = undefined
-    evalSym (Function)     = undefined
-    evalSym (Qualified)    = undefined
+    evalSym (Function _ f) = f
+    evalSym (Qualified _)  = error "?"
     evalSym (Conversion f) = f
     evalSym (Allocator)    = undefined
 
@@ -673,9 +673,10 @@ compileE (factor :$ x)
     go :: (V.Primary -> V.Factor) -> VHDL Kind
     go f = un (\a -> Hoist.F $ f (lift a)) x
 compileE (primary :$ x)
-  | Just (Conversion f) <- prj primary =
-      do t <- compileT (undefined :: Data a)
-         go $ M.cast t
+  | Just (Conversion f)        <- prj primary =
+      compileT (undefined :: Data a) >>= go . M.cast
+  | Just (Qualified (a :: b))  <- prj primary =
+      compileT (undefined :: Data b) >>= go . M.qualified 
   where
     go :: (V.Expression -> V.Primary) -> VHDL Kind
     go f = un (\a -> Hoist.P $ f (lift a)) x
@@ -687,11 +688,10 @@ compileE (primary)
       (V.NIndex  i) -> undefined
       (V.NSlice  s) -> undefined
       (V.NAttr   a) -> undefined
-  | Just (Literal i)    <- prj primary = return $ Hoist.P $ M.lit $ format i
-  | Just (Aggregate)    <- prj primary = undefined
-  | Just (Function)     <- prj primary = undefined
-  | Just (Qualified)    <- prj primary = undefined
-  | Just (Allocator)    <- prj primary = undefined
+  | Just (Literal i) <- prj primary = return $ Hoist.P $ M.lit $ format i
+  | Just (Function _ _) <- prj primary = undefined -- ** !!! **
+  | Just (Aggregate) <- prj primary = undefined
+  | Just (Allocator) <- prj primary = undefined
 compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
 
 --------------------------------------------------------------------------------
