@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 
 module Language.Embedded.VHDL.Expression
+       {-
   ( VHDLDomain
   , Data
   , Type
@@ -28,14 +29,14 @@ module Language.Embedded.VHDL.Expression
   , signed, usigned
   , signed8, signed16, signed32, signed64
   , usigned8, usigned16, usigned32, usigned64
-  ) where
+  )-} where
 
 import Language.VHDL (Identifier(..))
 import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Monad (VHDL)
-import Language.Embedded.VHDL.Expression.Hoist
+import Language.Embedded.VHDL.Expression.Hoist (Hoist)
 import Language.Embedded.VHDL.Expression.Represent
 import qualified Language.Embedded.VHDL.Monad            as M
 import qualified Language.Embedded.VHDL.Expression.Hoist as Hoist
@@ -74,8 +75,8 @@ import qualified Prelude
 --------------------------------------------------------------------------------
 
 -- | Collection of commonly required classes required by VHDL expressions.
-class    (Typeable a, Rep a, Eq a) => Type a
-instance (Typeable a, Rep a, Eq a) => Type a
+class    (Typeable a, Rep a, Eq a) => VType a
+instance (Typeable a, Rep a, Eq a) => VType a
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -126,12 +127,12 @@ instance EvalEnv Expression env
 
 data Relational sig
   where
-    Eq   :: Type a => Relational (a :-> a :-> Full Bool)
-    Neq  :: Type a => Relational (a :-> a :-> Full Bool)
-    Lt   :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
-    Lte  :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
-    Gt   :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
-    Gte  :: (Type a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Eq   :: VType a => Relational (a :-> a :-> Full Bool)
+    Neq  :: VType a => Relational (a :-> a :-> Full Bool)
+    Lt   :: (VType a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Lte  :: (VType a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Gt   :: (VType a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Gte  :: (VType a, Ord a) => Relational (a :-> a :-> Full Bool)
 
 instance Equality   Relational
 instance StringTree Relational
@@ -170,12 +171,12 @@ instance EvalEnv Relational env
 
 data Shift sig
   where
-    Sll :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
-    Srl :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
-    Sla :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
-    Sra :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
-    Rol :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
-    Ror :: (Type a, Bits a, Type b, Integral b) => Shift (a :-> b :-> Full a)
+    Sll :: (VType a, Bits a, VType b, Integral b) => Shift (a :-> b :-> Full a)
+    Srl :: (VType a, Bits a, VType b, Integral b) => Shift (a :-> b :-> Full a)
+    Sla :: (VType a, Bits a, VType b, Integral b) => Shift (a :-> b :-> Full a)
+    Sra :: (VType a, Bits a, VType b, Integral b) => Shift (a :-> b :-> Full a)
+    Rol :: (VType a, Bits a, VType b, Integral b) => Shift (a :-> b :-> Full a)
+    Ror :: (VType a, Bits a, VType b, Integral b) => Shift (a :-> b :-> Full a)
 
 instance Equality   Shift
 instance StringTree Shift
@@ -221,11 +222,11 @@ instance EvalEnv Shift env
 
 data Simple sig
   where
-    Neg :: (Type a, Num a) => Simple (a :->       Full a)
-    Pos :: (Type a, Num a) => Simple (a :->       Full a)
-    Add :: (Type a, Num a) => Simple (a :-> a :-> Full a)
-    Sub :: (Type a, Num a) => Simple (a :-> a :-> Full a)
-    Cat :: (Type a, Show a, Read a) => Simple (a :-> a :-> Full a)
+    Neg :: (VType a, Num a) => Simple (a :->       Full a)
+    Pos :: (VType a, Num a) => Simple (a :->       Full a)
+    Add :: (VType a, Num a) => Simple (a :-> a :-> Full a)
+    Sub :: (VType a, Num a) => Simple (a :-> a :-> Full a)
+    Cat :: (VType a, Show a, Read a) => Simple (a :-> a :-> Full a)
 
 instance Equality   Simple
 instance StringTree Simple
@@ -261,10 +262,10 @@ instance EvalEnv Simple env
 
 data Term sig
   where
-    Mul :: (Type a, Num a)      => Term (a :-> a :-> Full a)
-    Div :: (Type a, Integral a) => Term (a :-> a :-> Full a)
-    Mod :: (Type a, Integral a) => Term (a :-> a :-> Full a)
-    Rem :: (Type a, Integral a) => Term (a :-> a :-> Full a)
+    Mul :: (VType a, Num a)      => Term (a :-> a :-> Full a)
+    Div :: (VType a, Integral a) => Term (a :-> a :-> Full a)
+    Mod :: (VType a, Integral a) => Term (a :-> a :-> Full a)
+    Rem :: (VType a, Integral a) => Term (a :-> a :-> Full a)
 
 instance Equality   Term
 instance StringTree Term
@@ -297,8 +298,8 @@ instance EvalEnv Term env
 
 data Factor sig
   where
-    Exp :: (Type a, Num a, Type b, Integral b) => Factor (a :-> b :-> Full a)
-    Abs :: (Type a, Num a) => Factor (a :-> Full a)
+    Exp :: (VType a, Num a, VType b, Integral b) => Factor (a :-> b :-> Full a)
+    Abs :: (VType a, Num a) => Factor (a :-> Full a)
     Not :: Factor (Bool :-> Full Bool)
 
 instance Equality   Factor
@@ -329,13 +330,13 @@ instance EvalEnv Factor env
 
 data Primary sig
   where
-    Name       :: Type a => V.Name -> Primary (Full a)
-    Literal    :: Type a => a      -> Primary (Full a)
-    Aggregate  :: Type a => Primary (Full a)
+    Name       :: VType a => V.Name -> Primary (Full a)
+    Literal    :: VType a => a      -> Primary (Full a)
+    Aggregate  :: VType a => Primary (Full a)
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
-    Qualified  :: (Type a, Type b) => b        -> Primary (a :-> Full a)
-    Conversion :: (Type a, Type b) => (a -> b) -> Primary (a :-> Full b)
-    Allocator  :: Type a => Primary (Full a)
+    Qualified  :: (VType a, VType b) => b        -> Primary (a :-> Full a)
+    Conversion :: (VType a, VType b) => (a -> b) -> Primary (a :-> Full b)
+    Allocator  :: VType a => Primary (Full a)
 
 instance Equality   Primary
 instance StringTree Primary
@@ -373,17 +374,11 @@ instance Eval Primary
 instance EvalEnv Primary env
 
 --------------------------------------------------------------------------------
+-- ** ...
 
-type VHDLDomain = Typed Dom
-
-type Dom = 
-  -- Syntactic
-      BindingT
-  :+: Let
-  :+: Tuple
-  :+: Construct
-  -- VHDL constructs
-  :+: Expression
+-- | Domain of VHDL expressions.
+type Dom =
+      Expression
   :+: Relational
   :+: Shift
   :+: Simple
@@ -391,128 +386,136 @@ type Dom =
   :+: Factor
   :+: Primary
 
-newtype Data a = Data { unData :: ASTF VHDLDomain a }
-
-instance Type a => Syntactic (Data a)
+-- | Typed VHDL expressions.
+data T sig
   where
-    type Domain   (Data a) = VHDLDomain
-    type Internal (Data a) = a
+    T :: Rep (DenResult sig) => { unT :: Dom sig } -> T sig
 
-    desugar = unData
-    sugar   = Data
+-- | VHDL Expressions.
+newtype VExp a = VExp { unVExp :: ASTF T a }
 
-class    (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
-instance (Syntactic a, Domain a ~ VHDLDomain, Type (Internal a)) => Syntax a
+instance Syntactic (VExp a)
+  where
+    type Domain   (VExp a) = T
+    type Internal (VExp a) = a
 
-type instance PredicateExp Data = Type
+    desugar = unVExp
+    sugar   = VExp
+
+type instance PredicateExp VExp = VType
 
 --------------------------------------------------------------------------------
--- * Backend
---------------------------------------------------------------------------------
 
-codeMotionInterface :: CodeMotionInterface VHDLDomain
-codeMotionInterface = defaultInterface VarT LamT sharable (const True)
+instance Equality T
   where
-    sharable :: ASTF VHDLDomain a -> ASTF VHDLDomain b -> Bool
-    sharable (Sym _) _ = False
-    sharable (lam :$ _) _
-      | Just _ <- prLam lam = False
-    sharable _ (lam :$ _)
-      | Just _ <- prLam lam = False
-    sharable (sel :$ _) _
-      | Just Sel1 <- prj sel = False
-      | Just Sel2 <- prj sel = False
-      | Just Sel3 <- prj sel = False
-      | Just Sel4 <- prj sel = False
-    sharable _ _ = True
+    equal (T s) (T t) = equal s t
+    hash  (T s)       = hash s
+    
+instance StringTree T
+  where
+    stringTreeSym as (T s) = stringTreeSym as (T s)
 
-showExpr :: (Syntactic a, Domain a ~ VHDLDomain) => a -> String
-showExpr = render . codeMotion codeMotionInterface . desugar
+instance Symbol T
+  where
+    symSig (T s) = symSig s
 
-showAST :: (Syntactic a, Domain a ~ VHDLDomain) => a -> String
-showAST = Syntactic.showAST . codeMotion codeMotionInterface . desugar
-
-eval :: (Syntactic a, Domain a ~ VHDLDomain) => a -> Internal a
-eval = evalClosed . desugar
+instance Render T
+  where
+    renderSym     (T s) = renderSym s
+    renderArgs as (T s) = renderArgs as s
 
 --------------------------------------------------------------------------------
 -- * Frontend
 --------------------------------------------------------------------------------
 
-value :: Syntax a => Internal a -> a
-value = sugar . injT . Literal
+-- | Specialized sugarSym for T.
+sugarT
+  :: ( Signature (SmartSig fi), sub :<: Dom
+     , T :<: SmartSym fi
+     , SyntacticN f fi
+     , SmartFun (SmartSym fi) (SmartSig fi) ~ fi
+     , Rep (DenResult (SmartSig fi)))
+  => sub (SmartSig fi)
+  -> f
+sugarT sym = sugarSym (T $ inj sym)
 
-force :: Syntax a => a -> a
-force = resugar
+-- | ...
+value :: VType a => a -> VExp a
+value i = sugarT (Literal i)
 
-share :: (Syntax a, Syntax b) => a -> (a -> b) -> b
-share = sugarSymTyped Let
+-- | ...
+variable :: VType a => Integer -> VExp a
+variable = undefined
 
-cast  :: (Syntax a, Syntax b) => (Internal a -> Internal b) -> a -> b
-cast f = sugarSymTyped (Conversion f)
+-- | ...
+cast  :: (VType a, VType b) => (a -> b) -> VExp a -> VExp b
+cast f = sugarT (Conversion f)
 
 --------------------------------------------------------------------------------
--- ** ...
+
+true, false :: VExp Bool
+true  = value True
+false = value False
 
 -- logical operators
-and, or, xor, xnor, nand, nor :: Data Bool -> Data Bool -> Data Bool
-and  = sugarSymTyped And
-or   = sugarSymTyped Or
-xor  = sugarSymTyped Xor
-xnor = sugarSymTyped Xnor
-nand = sugarSymTyped Nand
-nor  = sugarSymTyped Nor
+and, or, xor, xnor, nand, nor :: VExp Bool -> VExp Bool -> VExp Bool
+and  = sugarT And
+or   = sugarT Or
+xor  = sugarT Xor
+xnor = sugarT Xnor
+nand = sugarT Nand
+nor  = sugarT Nor
 
 -- relational operators
-eq, neq :: (Type a, Eq a) => Data a -> Data a -> Data Bool
-eq  = sugarSymTyped Eq
-neq = sugarSymTyped Neq
+eq, neq :: (VType a, Eq a) => VExp a -> VExp a -> VExp Bool
+eq  = sugarT Eq
+neq = sugarT Neq
 
-lt, lte, gt, gte :: (Type a, Ord a) => Data a -> Data a -> Data Bool
-lt  = sugarSymTyped Lt
-lte = sugarSymTyped Lte
-gt  = sugarSymTyped Gt
-gte = sugarSymTyped Gte
+lt, lte, gt, gte :: (VType a, Ord a) => VExp a -> VExp a -> VExp Bool
+lt  = sugarT Lt
+lte = sugarT Lte
+gt  = sugarT Gt
+gte = sugarT Gte
 
 -- shift operators
-sll, srl, sla, sra, rol, ror :: (Type a, Bits a, Type b, Integral b) => Data a -> Data b -> Data a
-sll = sugarSymTyped Sll
-srl = sugarSymTyped Srl
-sla = sugarSymTyped Sla
-sra = sugarSymTyped Sra
-rol = sugarSymTyped Rol
-ror = sugarSymTyped Ror
+sll, srl, sla, sra, rol, ror :: (VType a, Bits a, VType b, Integral b) => VExp a -> VExp b -> VExp a
+sll = sugarT Sll
+srl = sugarT Srl
+sla = sugarT Sla
+sra = sugarT Sra
+rol = sugarT Rol
+ror = sugarT Ror
 
 -- adding operators
-add, sub :: (Type a, Num a) => Data a -> Data a -> Data a
-add = sugarSymTyped Add
-sub = sugarSymTyped Sub
+add, sub :: (VType a, Num a) => VExp a -> VExp a -> VExp a
+add = sugarT Add
+sub = sugarT Sub
 
-cat :: (Type a, Read a, Show a) => Data a -> Data a -> Data a
-cat = sugarSymTyped Cat
+cat :: (VType a, Read a, Show a) => VExp a -> VExp a -> VExp a
+cat = sugarT Cat
 
 -- multiplying operators
-mul :: (Type a, Num a) => Data a -> Data a -> Data a
-mul = sugarSymTyped Mul
+mul :: (VType a, Num a) => VExp a -> VExp a -> VExp a
+mul = sugarT Mul
 
-div, mod, rem :: (Type a, Integral a) => Data a -> Data a -> Data a
-div = sugarSymTyped Div
-mod = sugarSymTyped Mod
-rem = sugarSymTyped Rem
+div, mod, rem :: (VType a, Integral a) => VExp a -> VExp a -> VExp a
+div = sugarT Div
+mod = sugarT Mod
+rem = sugarT Rem
 
 -- miscellaneous operators
-exp :: (Type a, Num a, Type b, Integral b) => Data a -> Data b -> Data a
-exp = sugarSymTyped Exp
+exp :: (VType a, Num a, VType b, Integral b) => VExp a -> VExp b -> VExp a
+exp = sugarT Exp
 
-abs :: (Type a, Num a) => Data a -> Data a
-abs = sugarSymTyped Abs
+abs :: (VType a, Num a) => VExp a -> VExp a
+abs = sugarT Abs
 
-not :: Data Bool -> Data Bool
-not = sugarSymTyped Not
+not :: VExp Bool -> VExp Bool
+not = sugarT Not
 
 --------------------------------------------------------------------------------
 -- ** ...
-
+{-
 instance (Type a, Eq a) => Eq (Data a)
   where
     (==) = error "VHDL: equality checking is not supported"
@@ -562,40 +565,53 @@ instance (Type a, Fractional a) => Fractional (Data a)
     recip        = (/) (value 1)
     fromRational = error "VHDL: fromRational is not supported"
     
+-}
 --------------------------------------------------------------------------------
 -- * Evaluation of Expressions
 --------------------------------------------------------------------------------
 
-instance EvaluateExp Data
+instance EvaluateExp VExp
   where
     litE  = value
-    evalE = eval
+    evalE = evalVExp
+
+--------------------------------------------------------------------------------
+
+evalVExp :: VExp a -> a
+evalVExp = go . unVExp
+  where
+    go :: AST T sig -> Denotation sig
+    go (Sym (T s)) = evalSym s
+    go (f :$ a)    = go f $ go a
 
 --------------------------------------------------------------------------------
 -- * Compilation of expressions
 --------------------------------------------------------------------------------
 
-instance CompileExp Data
+instance CompileExp VExp
   where
-    varE i = sugarSymTyped ((VarT (Syntactic.Name i)))
+    varE i = undefined
     
     compT = compileT
 
-    compE = liftA lift
+    compE = undefined
+{-
+            liftA lift
           . compileE
           . mapAST (\(Typed s) -> s)
           . codeMotion codeMotionInterface
           . desugar
-
+-}
 --------------------------------------------------------------------------------
--- ** ...
 
-compileT :: forall a. Rep a => Data a -> VHDL T.Type
+compileT :: forall a. VType a => VExp a -> VHDL T.Type
 compileT _ =
   do let t = unTag (typed :: Tagged a T.Type)
      declare (undefined :: a)
      return t
 
+--------------------------------------------------------------------------------
+{-
 compileE :: forall a. ASTF Dom a -> VHDL Kind
 compileE var
   | Just (Var  v) <- prj var = return $ P $ M.name $ vars v
@@ -693,9 +709,9 @@ compileE (primary)
   | Just (Aggregate)    <- prj primary = undefined
   | Just (Allocator)    <- prj primary = undefined
 compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
-
+-}
 --------------------------------------------------------------------------------
-
+{-
 -- | ...
 vars :: Syntactic.Name -> String
 vars v = 'v' : show v
@@ -710,5 +726,5 @@ bin f x y = do
   x' <- compileE x
   y' <- compileE y
   return $ f x' y'
-
+-}
 --------------------------------------------------------------------------------
