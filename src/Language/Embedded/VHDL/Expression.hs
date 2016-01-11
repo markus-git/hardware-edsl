@@ -594,14 +594,8 @@ instance CompileExp VExp
     
     compT = compVType
 
-    compE = undefined
-{-
-            liftA lift
-          . compileE
-          . mapAST (\(Typed s) -> s)
-          . codeMotion codeMotionInterface
-          . desugar
--}
+    compE = liftA Hoist.lift . compVExp
+
 --------------------------------------------------------------------------------
 
 compVType :: forall a. VType a => VExp a -> VHDL T.Type
@@ -610,12 +604,9 @@ compVType _ =
      declare (undefined :: a)
      return t
 
---------------------------------------------------------------------------------
-
 compVExp :: VExp a -> VHDL Kind
 compVExp = simpleMatch (\(T s) -> compVDom s) . unVExp
   where
-    -- | ...
     compVExp' :: ASTF T a -> VHDL Kind
     compVExp' = compVExp . VExp
 
