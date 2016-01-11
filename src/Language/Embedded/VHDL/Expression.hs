@@ -515,32 +515,32 @@ not = sugarT Not
 
 --------------------------------------------------------------------------------
 -- ** ...
-{-
-instance (Type a, Eq a) => Eq (Data a)
+
+instance (VType a, Eq a) => Eq (VExp a)
   where
     (==) = error "VHDL: equality checking is not supported"
 
-instance (Type a, Ord a) => Ord (Data a)
+instance (VType a, Ord a) => Ord (VExp a)
   where
     compare = error "VHDL: compare is not supported"
     max     = error "VHDL: max is not supported"
     min     = error "VHDL: min is not supported"
 
-instance (Type a, Bounded a) => Bounded (Data a)
+instance (VType a, Bounded a) => Bounded (VExp a)
   where
     minBound = value minBound
     maxBound = value maxBound
 
-instance (Type a, Enum a) => Enum (Data a)
+instance (VType a, Enum a) => Enum (VExp a)
   where
     toEnum   = error "VHDL: toEnum is not supported"
     fromEnum = error "VHDL: fromEnum is not supported"
 
-instance (Type a, Real a) => Real (Data a)
+instance (VType a, Real a) => Real (VExp a)
   where
     toRational = error "VHDL: toRational is not supported"
 
-instance (Type a, Num a) => Num (Data a)
+instance (VType a, Num a) => Num (VExp a)
   where
     fromInteger = value . fromInteger
     (+)         = add
@@ -549,7 +549,7 @@ instance (Type a, Num a) => Num (Data a)
     abs         = abs
     signum      = error "VHDL: signum is not supported"
 
-instance (Type a, Integral a) => Integral (Data a)
+instance (VType a, Integral a) => Integral (VExp a)
   where
     quot         = error "VHDL: quotient is not supported"
     rem          = rem
@@ -559,13 +559,12 @@ instance (Type a, Integral a) => Integral (Data a)
     divMod   a b = (div  a b, mod a b)
     toInteger    = error "VHDL: toInteger is not supported"
 
-instance (Type a, Fractional a) => Fractional (Data a)
+instance (VType a, Fractional a) => Fractional (VExp a)
   where
     (/)          = error "VHDL: floating point division is not _yet_ supported"
     recip        = (/) (value 1)
-    fromRational = error "VHDL: fromRational is not supported"
-    
--}
+    fromRational = error "VHDL: fromRational is not supported"    
+
 --------------------------------------------------------------------------------
 -- * Evaluation of Expressions
 --------------------------------------------------------------------------------
