@@ -36,7 +36,7 @@ import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Monad (VHDL)
-import Language.Embedded.VHDL.Expression.Hoist (Hoist)
+import Language.Embedded.VHDL.Expression.Hoist (Hoist, Kind)
 import Language.Embedded.VHDL.Expression.Represent
 import qualified Language.Embedded.VHDL.Monad            as M
 import qualified Language.Embedded.VHDL.Expression.Hoist as Hoist
@@ -389,7 +389,7 @@ type Dom =
 -- | Typed VHDL expressions.
 data T sig
   where
-    T :: Rep (DenResult sig) => { unT :: Dom sig } -> T sig
+    T :: VType (DenResult sig) => { unT :: Dom sig } -> T sig
 
 -- | VHDL Expressions.
 newtype VExp a = VExp { unVExp :: ASTF T a }
@@ -410,7 +410,7 @@ instance Equality T
   where
     equal (T s) (T t) = equal s t
     hash  (T s)       = hash s
-    
+
 instance StringTree T
   where
     stringTreeSym as (T s) = stringTreeSym as (T s)
@@ -434,7 +434,7 @@ sugarT
      , T :<: SmartSym fi
      , SyntacticN f fi
      , SmartFun (SmartSym fi) (SmartSig fi) ~ fi
-     , Rep (DenResult (SmartSig fi)))
+     , VType (DenResult (SmartSig fi)))
   => sub (SmartSig fi)
   -> f
 sugarT sym = sugarSym (T $ inj sym)
@@ -445,7 +445,7 @@ value i = sugarT (Literal i)
 
 -- | ...
 variable :: VType a => Integer -> VExp a
-variable = undefined
+variable v = sugarT (Name $ V.NSimple $ V.Ident $ 'v' : show v)
 
 -- | ...
 cast  :: (VType a, VType b) => (a -> b) -> VExp a -> VExp b
@@ -590,9 +590,9 @@ evalVExp = go . unVExp
 
 instance CompileExp VExp
   where
-    varE i = undefined
+    varE  = variable
     
-    compT = compileT
+    compT = compVType
 
     compE = undefined
 {-
@@ -604,28 +604,52 @@ instance CompileExp VExp
 -}
 --------------------------------------------------------------------------------
 
-compileT :: forall a. VType a => VExp a -> VHDL T.Type
-compileT _ =
+compVType :: forall a. VType a => VExp a -> VHDL T.Type
+compVType _ =
   do let t = unTag (typed :: Tagged a T.Type)
      declare (undefined :: a)
      return t
 
 --------------------------------------------------------------------------------
+
+compVExp :: VExp a -> VHDL Kind
+compVExp = simpleMatch (\(T s) -> compVDom s) . unVExp
+  where
+    compVDom :: VType (DenResult sig) => Dom sig -> Args (AST T) sig -> VHDL Kind
+    compVDom var  args
+      | Just (Var v) <- prj var = return $ Hoist.P $ M.name $ 'v' : show v
+    compVDom expr (x :* y :* _)
+      | Just And  <- prj expr = go $ \a b -> M.and  [a, b]
+      | Just Or   <- prj expr = go $ \a b -> M.or   [a, b]
+      | Just Xor  <- prj expr = go $ \a b -> M.xor  [a, b]
+      | Just Xnor <- prj expr = go $ \a b -> M.xnor [a, b]
+      | Just Nand <- prj expr = go $ M.nand
+      | Just Nor  <- prj expr = go $ M.nor
+      where
+        go :: (V.Relation -> V.Relation -> V.Expression) -> VHDL Kind
+        go f = do
+          x' <- Hoist.lift <$> compVExp' x
+          y' <- Hoist.lift <$> compVExp' y
+          return $ Hoist.E $ f x' y'
+
+-- | ...
+compVExp' :: ASTF T a -> VHDL Kind
+compVExp' = compVExp . VExp
+
+-- | ...
+compBin :: (Kind -> Kind -> Kind) -> ASTF T a -> ASTF T b -> VHDL Kind
+compBin f x y =
+  do x' <- compVExp' x
+     y' <- compVExp' y
+     return $ f x' y'
+
+-- | ...
+compUn  :: (Kind -> Kind) -> ASTF T a -> VHDL Kind
+compUn f x =
+  do x' <- compVExp' x
+     return $ f x'
+
 {-
-compileE :: forall a. ASTF Dom a -> VHDL Kind
-compileE var
-  | Just (Var  v) <- prj var = return $ P $ M.name $ vars v
-  | Just (VarT v) <- prj var = return $ P $ M.name $ vars v
-compileE val
-  | Just (Literal v) <- prj val = return $ P $ M.string $ format v
-compileE (lets :$ a :$ (lam :$ body))
-  | Just (Let)    <- prj lets
-  , Just (LamT v) <- prj lam
-  = do let v' = Ident $ vars v
-       a' <- lift <$> compileE a
-       M.addSequential $ M.assignVariable v' a'
-       compileE body
-     -- that we pick variable assignment might be a problem
 compileE (expr :$ x :$ y)
   | Just And  <- prj expr = go $ \a b -> M.and  [a, b]
   | Just Or   <- prj expr = go $ \a b -> M.or   [a, b]
@@ -710,21 +734,5 @@ compileE (primary)
   | Just (Allocator)    <- prj primary = undefined
 compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
 -}
---------------------------------------------------------------------------------
-{-
--- | ...
-vars :: Syntactic.Name -> String
-vars v = 'v' : show v
 
--- | ...
-un :: (Kind -> Kind) -> ASTF Dom a -> VHDL Kind
-un f x = compileE x >>= return . f
-
--- | ...
-bin :: (Kind -> Kind -> Kind) -> ASTF Dom a -> ASTF Dom b -> VHDL Kind
-bin f x y = do
-  x' <- compileE x
-  y' <- compileE y
-  return $ f x' y'
--}
 --------------------------------------------------------------------------------
