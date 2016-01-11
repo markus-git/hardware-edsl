@@ -615,7 +615,11 @@ compVType _ =
 compVExp :: VExp a -> VHDL Kind
 compVExp = simpleMatch (\(T s) -> compVDom s) . unVExp
   where
-    compVDom :: VType (DenResult sig) => Dom sig -> Args (AST T) sig -> VHDL Kind
+    -- | ...
+    compVExp' :: ASTF T a -> VHDL Kind
+    compVExp' = compVExp . VExp
+
+    compVDom :: forall sig. VType (DenResult sig) => Dom sig -> Args (AST T) sig -> VHDL Kind
     compVDom var  args
       | Just (Var v) <- prj var = return $ Hoist.P $ M.name $ 'v' : show v
     compVDom expr (x :* y :* _)
@@ -623,116 +627,95 @@ compVExp = simpleMatch (\(T s) -> compVDom s) . unVExp
       | Just Or   <- prj expr = go $ \a b -> M.or   [a, b]
       | Just Xor  <- prj expr = go $ \a b -> M.xor  [a, b]
       | Just Xnor <- prj expr = go $ \a b -> M.xnor [a, b]
-      | Just Nand <- prj expr = go $ M.nand
-      | Just Nor  <- prj expr = go $ M.nor
+      | Just Nand <- prj expr = go M.nand
+      | Just Nor  <- prj expr = go M.nor
       where
         go :: (V.Relation -> V.Relation -> V.Expression) -> VHDL Kind
         go f = do
           x' <- Hoist.lift <$> compVExp' x
           y' <- Hoist.lift <$> compVExp' y
           return $ Hoist.E $ f x' y'
-
--- | ...
-compVExp' :: ASTF T a -> VHDL Kind
-compVExp' = compVExp . VExp
-
--- | ...
-compBin :: (Kind -> Kind -> Kind) -> ASTF T a -> ASTF T b -> VHDL Kind
-compBin f x y =
-  do x' <- compVExp' x
-     y' <- compVExp' y
-     return $ f x' y'
-
--- | ...
-compUn  :: (Kind -> Kind) -> ASTF T a -> VHDL Kind
-compUn f x =
-  do x' <- compVExp' x
-     return $ f x'
-
-{-
-compileE (expr :$ x :$ y)
-  | Just And  <- prj expr = go $ \a b -> M.and  [a, b]
-  | Just Or   <- prj expr = go $ \a b -> M.or   [a, b]
-  | Just Xor  <- prj expr = go $ \a b -> M.xor  [a, b]
-  | Just Xnor <- prj expr = go $ \a b -> M.xnor [a, b]
-  | Just Nand <- prj expr = go $ M.nand
-  | Just Nor  <- prj expr = go $ M.nor
-  where
-    go :: (V.Relation -> V.Relation -> V.Expression) -> VHDL Kind
-    go f = bin (\a b -> Hoist.E $ f (lift a) (lift b)) x y
-compileE (relate :$ x :$ y)
-  | Just Eq  <- prj relate = go $ M.eq
-  | Just Neq <- prj relate = go $ M.neq
-  | Just Lt  <- prj relate = go $ M.lt
-  | Just Lte <- prj relate = go $ M.lte
-  | Just Gt  <- prj relate = go $ M.gt
-  | Just Gte <- prj relate = go $ M.gte
-  where
-    go :: (V.ShiftExpression -> V.ShiftExpression -> V.Relation) -> VHDL Kind
-    go f = bin (\a b -> Hoist.R $ f (lift a) (lift b)) x y
-compileE (shift :$ x :$ y)
-  | Just Sll <- prj shift = go $ M.sll
-  | Just Srl <- prj shift = go $ M.srl
-  | Just Sla <- prj shift = go $ M.sla
-  | Just Sra <- prj shift = go $ M.sra
-  | Just Rol <- prj shift = go $ M.rol
-  | Just Ror <- prj shift = go $ M.ror
-  where
-    go :: (V.SimpleExpression -> V.SimpleExpression -> V.ShiftExpression) -> VHDL Kind
-    go f = bin (\a b -> Hoist.Sh $ f (lift a) (lift b)) x y
-compileE (simple :$ x)
-  | Just Neg <- prj simple = go $ M.neg
-  | Just Pos <- prj simple = go $ lift
-  where
-    go :: (V.Term -> V.SimpleExpression) -> VHDL Kind
-    go f = un (\a -> Hoist.Si $ f (lift a)) x
-compileE (simple :$ x :$ y)
-  | Just Add <- prj simple = go $ \a b -> M.add [a, b]
-  | Just Sub <- prj simple = go $ \a b -> M.sub [a, b]
-  | Just Cat <- prj simple = go $ \a b -> M.cat [a, b]
-  where
-    go :: (V.Term -> V.Term -> V.SimpleExpression) -> VHDL Kind
-    go f = bin (\a b -> Hoist.Si $ f (lift a) (lift b)) x y
-compileE (term :$ x :$ y)
-  | Just Mul <- prj term = go $ \a b -> M.mul [a, b]
-  | Just Div <- prj term = go $ \a b -> M.div [a, b]
-  | Just Mod <- prj term = go $ \a b -> M.mod [a, b]
-  | Just Rem <- prj term = go $ \a b -> M.rem [a, b]
-  where
-    go :: (V.Factor -> V.Factor -> V.Term) -> VHDL Kind
-    go f = bin (\a b -> Hoist.T $ f (lift a) (lift b)) x y
-compileE (factor :$ x :$ y)
-  | Just Exp <- prj factor = go $ M.exp
-  where
-    go :: (V.Primary -> V.Primary -> V.Factor) -> VHDL Kind
-    go f = bin (\a b -> Hoist.F $ f (lift a) (lift b)) x y
-compileE (factor :$ x)
-  | Just Abs <- prj factor = go $ M.abs
-  | Just Not <- prj factor = go $ M.not
-  where
-    go :: (V.Primary -> V.Factor) -> VHDL Kind
-    go f = un (\a -> Hoist.F $ f (lift a)) x
-compileE (primary :$ x)
-  | Just (Conversion f)        <- prj primary =
-      compileT (undefined :: Data a) >>= go . M.cast
-  | Just (Qualified (a :: b))  <- prj primary =
-      compileT (undefined :: Data b) >>= go . M.qualified 
-  where
-    go :: (V.Expression -> V.Primary) -> VHDL Kind
-    go f = un (\a -> Hoist.P $ f (lift a)) x
-compileE (primary)
-  | Just (Name  n) <- prj primary = case n of
-      (V.NSimple i) -> undefined
-      (V.NOp     o) -> undefined
-      (V.NSelect s) -> undefined
-      (V.NIndex  i) -> undefined
-      (V.NSlice  s) -> undefined
-      (V.NAttr   a) -> undefined
-  | Just (Literal i)    <- prj primary = return $ Hoist.P $ M.lit $ format i
-  | Just (Function _ _) <- prj primary = undefined
-  | Just (Aggregate)    <- prj primary = undefined
-  | Just (Allocator)    <- prj primary = undefined
-compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
--}
+    compVDom relate (x :* y :* _)
+      | Just Eq  <- prj relate = go M.eq
+      | Just Neq <- prj relate = go M.neq
+      | Just Lt  <- prj relate = go M.lt
+      | Just Lte <- prj relate = go M.lte
+      | Just Gt  <- prj relate = go M.gt
+      | Just Gte <- prj relate = go M.gte
+      where
+        go :: (V.ShiftExpression -> V.ShiftExpression -> V.Relation) -> VHDL Kind
+        go f = do
+          x' <- Hoist.lift <$> compVExp' x
+          y' <- Hoist.lift <$> compVExp' y
+          return $ Hoist.R $ f x' y'
+    compVDom shift (x :* y :* _)
+      | Just Sll <- prj shift = go $ M.sll
+      | Just Srl <- prj shift = go $ M.srl
+      | Just Sla <- prj shift = go $ M.sla
+      | Just Sra <- prj shift = go $ M.sra
+      | Just Rol <- prj shift = go $ M.rol
+      | Just Ror <- prj shift = go $ M.ror
+      where
+        go :: (V.SimpleExpression -> V.SimpleExpression -> V.ShiftExpression) -> VHDL Kind
+        go f = do
+          x' <- Hoist.lift <$> compVExp' x
+          y' <- Hoist.lift <$> compVExp' y
+          return $ Hoist.Sh $ f x' y'
+    compVDom simple (x :* y :* _)
+      | Just Add <- prj simple = go M.add
+      | Just Sub <- prj simple = go M.sub
+      | Just Cat <- prj simple = go M.cat
+      where
+        go :: ([V.Term] -> V.SimpleExpression) -> VHDL Kind
+        go f = do
+          x' <- Hoist.lift <$> compVExp' x
+          y' <- Hoist.lift <$> compVExp' y
+          return $ Hoist.Si $ f [x', y']
+    compVDom simple (x :* _)
+      | Just Neg <- prj simple = do
+          x' <- Hoist.lift <$> compVExp' x
+          return $ Hoist.Si $ M.neg x'
+      | Just Pos <- prj simple = do
+          x' <- Hoist.lift <$> compVExp' x
+          return $ Hoist.Si x'
+    compVDom term (x :* y :* _)
+      | Just Mul <- prj term = go M.mul
+      | Just Div <- prj term = go M.div
+      | Just Mod <- prj term = go M.mod
+      | Just Rem <- prj term = go M.rem
+      where
+        go :: ([V.Factor] -> V.Term) -> VHDL Kind
+        go f = do
+          x' <- Hoist.lift <$> compVExp' x
+          y' <- Hoist.lift <$> compVExp' y
+          return $ Hoist.T $ f [x', y']
+    compVDom factor (x :* y :* _)
+      | Just Exp <- prj factor = do
+          x' <- Hoist.lift <$> compVExp' x
+          y' <- Hoist.lift <$> compVExp' y
+          return $ Hoist.F $ M.exp x' y'
+    compVDom factor (x :* _)
+      | Just Abs <- prj factor = do
+          x' <- Hoist.lift <$> compVExp' x
+          return $ Hoist.F $ M.abs x'
+      | Just Not <- prj factor = do
+          x' <- Hoist.lift <$> compVExp' x
+          return $ Hoist.F $ M.not x'
+    compVDom primary (x :* Nil)
+      | Just (Qualified t)  <- prj primary = do
+          f  <- compVType (undefined :: VExp (DenResult sig))
+          x' <- Hoist.lift <$> compVExp' x
+          return $ Hoist.P $ M.qualified f x'
+      | Just (Conversion f) <- prj primary = do
+          t  <- compVType (undefined :: VExp (DenResult sig))
+          x' <- Hoist.lift <$> compVExp' x
+          return $ Hoist.P $ M.cast t x'
+    compVDom primary args
+      | Just (Name n)       <- prj primary = case n of
+          (V.NSimple (V.Ident i)) -> return $ Hoist.P $ M.name i
+      | Just (Literal i)    <- prj primary = return $ Hoist.P $ M.lit $ format i
+      | Just (Aggregate)    <- prj primary = undefined
+      | Just (Function _ f) <- prj primary = undefined
+      | Just (Allocator)    <- prj primary = undefined
 
 --------------------------------------------------------------------------------
