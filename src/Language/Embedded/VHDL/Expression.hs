@@ -688,10 +688,10 @@ compileE (primary)
       (V.NIndex  i) -> undefined
       (V.NSlice  s) -> undefined
       (V.NAttr   a) -> undefined
-  | Just (Literal i) <- prj primary = return $ Hoist.P $ M.lit $ format i
-  | Just (Function _ _) <- prj primary = undefined -- ** !!! **
-  | Just (Aggregate) <- prj primary = undefined
-  | Just (Allocator) <- prj primary = undefined
+  | Just (Literal i)    <- prj primary = return $ Hoist.P $ M.lit $ format i
+  | Just (Function _ _) <- prj primary = undefined
+  | Just (Aggregate)    <- prj primary = undefined
+  | Just (Allocator)    <- prj primary = undefined
 compileE x = error $ "imperative-edsl: missing compiler case for " ++ (Syntactic.showAST x)
 
 --------------------------------------------------------------------------------
