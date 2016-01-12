@@ -330,13 +330,13 @@ instance EvalEnv Factor env
 
 data Primary sig
   where
-    Name       :: VType a => V.Name -> Primary (Full a)
-    Literal    :: VType a => a      -> Primary (Full a)
-    Aggregate  :: VType a => Primary (Full a)
+    Name       :: (VType a) => V.Name -> Primary (Full a)
+    Literal    :: (VType a) => a      -> Primary (Full a)
+    Aggregate  :: (VType a) => [a]    -> Primary (Full [a])
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
     Qualified  :: (VType a, VType b) => b        -> Primary (a :-> Full a)
     Conversion :: (VType a, VType b) => (a -> b) -> Primary (a :-> Full b)
-    Allocator  :: VType a => Primary (Full a)
+    Allocator  :: (VType a) => Primary (Full a)
 
 instance Equality   Primary
 instance StringTree Primary
@@ -345,7 +345,7 @@ instance Symbol Primary
   where
     symSig (Name _)       = signature
     symSig (Literal _)    = signature
-    symSig (Aggregate)    = signature
+    symSig (Aggregate _)  = undefined
     symSig (Function _ _) = signature
     symSig (Qualified _)  = signature
     symSig (Conversion _) = signature
@@ -355,7 +355,7 @@ instance Render Primary
   where
     renderSym (Name _)       = "name"
     renderSym (Literal _)    = "lit"
-    renderSym (Aggregate)    = "agg"
+    renderSym (Aggregate _)  = "agg"
     renderSym (Function _ _) = "fun"
     renderSym (Qualified _)  = "qual"
     renderSym (Conversion _) = "conv"
@@ -365,7 +365,7 @@ instance Eval Primary
   where
     evalSym (Name _)       = error "VHDL: cannot eval open name!"
     evalSym (Literal i)    = i
-    evalSym (Aggregate)    = undefined
+    evalSym (Aggregate xs) = xs
     evalSym (Function _ f) = f
     evalSym (Qualified _)  = error "?"
     evalSym (Conversion f) = f
@@ -704,8 +704,11 @@ compVExp = simpleMatch (\(T s) -> compVDom s) . unVExp
       | Just (Name n)       <- prj primary = case n of
           (V.NSimple (V.Ident i)) -> return $ Hoist.P $ M.name i
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ M.lit $ format i
-      | Just (Aggregate)    <- prj primary = undefined
-      | Just (Function _ f) <- prj primary = undefined
+      | Just (Aggregate xs) <- prj primary = do
+          return $ Hoist.P $ M.aggregate $ fmap (Hoist.lift . M.lit . format) xs
+      | Just (Function _ f) <- prj primary = do
+          as <- sequence $ listArgs compVExp' args
+          undefined
       | Just (Allocator)    <- prj primary = undefined
 
 --------------------------------------------------------------------------------
