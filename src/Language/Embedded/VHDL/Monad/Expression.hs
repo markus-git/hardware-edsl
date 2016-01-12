@@ -97,11 +97,22 @@ lit    = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . I
 null :: Primary
 null = PrimLit LitNull
 
+aggregate :: [Expression] -> Primary
+aggregate = PrimAgg . Aggregate . fmap (ElementAssociation Nothing)
+
 cast :: SubtypeIndication -> Expression -> Primary
 cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion t
 
 qualified :: SubtypeIndication -> Expression -> Primary
 qualified (SubtypeIndication _ t _) = PrimQual . QualExp t
+
+function :: Identifier -> [Expression] -> Primary
+function i [] = PrimFun $ FunctionCall (NSimple i) Nothing
+function i xs = PrimFun
+  . FunctionCall (NSimple i)
+  . Just
+  . AssociationList
+  $ fmap (AssociationElement Nothing . APDesignator . ADExpression) xs
 
 --------------------------------------------------------------------------------
 -- * Array things
@@ -129,8 +140,8 @@ update i l e = undefined
 -- * Record things
 --------------------------------------------------------------------------------
 
-aggregate :: [(Maybe Choices, Expression)] -> Primary
-aggregate es = PrimAgg $ Aggregate $ map (uncurry ElementAssociation) es
+aggregate' :: [(Maybe Choices, Expression)] -> Primary
+aggregate' es = PrimAgg $ Aggregate $ map (uncurry ElementAssociation) es
 
 selected  :: Identifier -> Identifier -> Primary
 selected p s = PrimName $ NSelect $ SelectedName (PName $ NSimple p) (SSimple s)

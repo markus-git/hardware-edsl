@@ -504,10 +504,6 @@ constrainedArray name typ range = compositeTypeDeclaration name $
   V.CTDArray (V.ArrC (V.ConstrainedArrayDefinition
     (V.IndexConstraint [V.DRRange range]) typ))
 
--- | ..
-constrainedArrayBy :: Identifier -> Type -> V.Range -> V.TypeDeclaration
-constrainedArrayBy = undefined
-
 --------------------------------------------------------------------------------
 -- ** Global/Local Declarations
 

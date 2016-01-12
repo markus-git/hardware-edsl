@@ -706,9 +706,9 @@ compVExp = simpleMatch (\(T s) -> compVDom s) . unVExp
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ M.lit $ format i
       | Just (Aggregate xs) <- prj primary = do
           return $ Hoist.P $ M.aggregate $ fmap (Hoist.lift . M.lit . format) xs
-      | Just (Function _ f) <- prj primary = do
+      | Just (Function f _) <- prj primary = do
           as <- sequence $ listArgs compVExp' args
-          undefined
+          return $ Hoist.P $ M.function (V.Ident f) (fmap Hoist.lift as)
       | Just (Allocator)    <- prj primary = undefined
 
 --------------------------------------------------------------------------------
