@@ -360,11 +360,11 @@ instance HFunctor (ArrayCMD exp)
     hfmap _ (CopyArray a b i)    = CopyArray a b i
     hfmap _ (UnsafeGetArray i a) = UnsafeGetArray i a
 
-instance CompileExp exp => Interp (ArrayCMD exp) VHDL
+instance (CompileExp exp, EvaluateExp exp) => Interp (ArrayCMD exp) VHDL
   where
     interp = compileArray
 
-compileArray :: forall exp a. CompileExp exp => ArrayCMD exp VHDL a -> VHDL a
+compileArray :: forall exp a. (CompileExp exp, EvaluateExp exp) => ArrayCMD exp VHDL a -> VHDL a
 compileArray (NewArray len) =
   do n <- compE  len
      t <- compTA len (undefined :: a)
@@ -386,10 +386,11 @@ compileArray (InitArray is) =
   do t <- compTA (undefined :: exp i) (undefined :: a)
      a <- freshA
      i <- Array <$> M.freshUnique
+     x <- sequence [compE (litE a :: exp b) | (a :: b) <- is]
      let len = M.downtoZero . H.lift . M.lit . show $ length is
          arr = M.constrainedArray a t len
      M.addType arr
-     M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) Nothing
+     M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) (Just $ H.lift $ M.aggregate x)
      return i
 
 freshA :: VHDL Identifier
