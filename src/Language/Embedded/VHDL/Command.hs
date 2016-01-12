@@ -375,13 +375,7 @@ compileArray (NewArray len) =
      M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) Nothing
      return i
 compileArray (NewArray_) =
-  do t <- compTA (undefined :: exp i) (undefined :: a)
-     a <- freshA
-     i <- Array <$> M.freshUnique
-     let arr = M.unconstrainedArray a t
-     M.addType arr
-     M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) (error "what range!?")
-     return i
+  do error "Needs a range constraint somewhere..."
 compileArray (InitArray is) =
   do t <- compTA (undefined :: exp i) (undefined :: a)
      a <- freshA
@@ -392,6 +386,15 @@ compileArray (InitArray is) =
      M.addType arr
      M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) (Just $ H.lift $ M.aggregate x)
      return i
+compileArray (GetArray i arr) =
+  do -- ...
+     undefined
+compileArray (SetArray i e arr) =
+  do i' <- compE i
+     e' <- compE e
+     -- this could be concurrent as well.
+     M.addSequential $ M.assignArray (M.index (toIdent arr) i') e'
+
 
 freshA :: VHDL Identifier
 freshA = toIdent . ('t' :) . show <$> M.freshUnique

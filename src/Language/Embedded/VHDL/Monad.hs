@@ -55,6 +55,7 @@ module Language.Embedded.VHDL.Monad (
   , assignConcurrentSignal
   , assignSequentialSignal
   , assignVariable
+  , assignArray
 
   , module Language.Embedded.VHDL.Monad.Expression
   ) where
@@ -557,6 +558,14 @@ assignVariable i e = V.SVarAss $
     (Nothing)
     (V.TargetName (V.NSimple i))
     (e)
+
+assignArray :: V.Name -> Expression -> V.SequentialStatement
+assignArray i e = V.SSignalAss $
+  V.SignalAssignmentStatement
+    (Nothing)
+    (V.TargetName i)
+    (Nothing)
+    (V.WaveElem [V.WaveEExp e Nothing])
 
 --------------------------------------------------------------------------------
 -- Some helper classes and their instances

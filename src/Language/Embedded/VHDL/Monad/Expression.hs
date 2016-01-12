@@ -127,11 +127,8 @@ downtoZero = flip downto (lift $ lit $ show 0)
 slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
 slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
 
-index :: Integral i => Identifier -> i -> Primary
-index i l = PrimName $ NIndex $ IndexedName (PName $ NSimple i) [lift lit]
-  where
-    lit :: Primary
-    lit = PrimLit $ LitNum $ NLitAbstract $ ALitDecimal $ DecimalLiteral (toInteger l) Nothing Nothing
+index :: Identifier -> Expression -> Name
+index i l = NIndex $ IndexedName (PName $ NSimple i) [l]
 
 update :: Integral i => Identifier -> i -> Expression -> Primary
 update i l e = undefined
