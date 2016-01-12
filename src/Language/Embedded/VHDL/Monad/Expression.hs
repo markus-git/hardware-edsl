@@ -110,6 +110,9 @@ qualified (SubtypeIndication _ t _) = PrimQual . QualExp t
 downto :: Expression -> Expression -> Range
 downto f t = RSimple (lift f) DownTo (lift t)
 
+downtoZero :: Expression -> Range
+downtoZero = flip downto (lift $ lit $ show 0)
+
 slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
 slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
 

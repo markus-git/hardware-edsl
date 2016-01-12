@@ -46,6 +46,7 @@ module Language.Embedded.VHDL.Monad (
   , package
 
     -- ^ common
+  , asSimpleType
   , interfaceConstant, interfaceSignal, interfaceVariable
   , declRecord, declConstant, declSignal, declVariable
   , unconstrainedArray
@@ -460,6 +461,13 @@ designTypes set
 --------------------------------------------------------------------------------
 -- * Common things
 --------------------------------------------------------------------------------
+
+asSimpleType :: V.TypeDeclaration -> V.SubtypeIndication
+asSimpleType (V.TDFull    (V.FullTypeDeclaration i _))     = fromSimpleName i
+asSimpleType (V.TDPartial (V.IncompleteTypeDeclaration i)) = fromSimpleName i
+
+fromSimpleName :: Identifier -> V.SubtypeIndication
+fromSimpleName i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
 
 --------------------------------------------------------------------------------
 -- **  Ports/Generic declarations

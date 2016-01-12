@@ -84,6 +84,8 @@ class ToIdent a
   where
     toIdent :: a -> V.Identifier
 
+instance ToIdent String where toIdent = V.Ident
+
 --------------------------------------------------------------------------------
 -- ** ...
 
@@ -363,8 +365,29 @@ instance CompileExp exp => Interp (ArrayCMD exp) VHDL
     interp = compileArray
 
 compileArray :: forall exp a. CompileExp exp => ArrayCMD exp VHDL a -> VHDL a
-compileArray (NewArray i) =
-  do undefined
+compileArray (NewArray len) =
+  do n <- compE  len
+     t <- compTA len (undefined :: a)
+     a <- freshA
+     i <- Array <$> M.freshUnique
+     let arr = M.constrainedArray a t (M.downtoZero n)
+     M.addType arr
+     M.addLocal $ M.declVariable (toIdent i) (M.asSimpleType arr) Nothing
+     return i
+compileArray (NewArray_) =
+  do t <- compTA (undefined :: exp i) (undefined :: a)
+     a <- freshA
+     i <- Array <$> M.freshUnique
+     let arr = M.unconstrainedArray a t
+     M.addType arr
+     M.addLocal $ M.declVariable (toIdent i) (M.asSimpleType arr) (error "Must declare range!")
+     return i
+
+freshA :: VHDL Identifier
+freshA = toIdent . ('t' :) . show <$> M.freshUnique
+
+compTA :: forall exp i a. (PredicateExp exp a, CompileExp exp) => exp i -> Array i a -> VHDL Type
+compTA _ _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
 -- * ...
