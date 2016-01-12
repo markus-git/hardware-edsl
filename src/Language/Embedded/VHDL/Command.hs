@@ -32,6 +32,11 @@ module Language.Embedded.VHDL.Command
   , setVariable
   , (==:)
 
+    -- ^ Arrays.
+  , Array
+  , ArrayCMD
+  , CompArrayIx(..)
+    
     -- ^ Entities.
   , EntityCMD
   , newEntity
@@ -94,6 +99,29 @@ compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
 
 compTM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL Type
 compTM _ = compT (undefined :: exp a)
+
+freshVar :: forall exp a. (CompileExp exp, PredicateExp exp a) => VHDL (exp a, Identifier)
+freshVar = do
+  i <- varE <$> M.freshUnique :: VHDL (exp a)
+  n <- dig  <$> compE i
+  t <- compT (undefined :: exp a)
+  M.addLocal $ M.declVariable n t Nothing
+  return (i, n)
+
+freshVar_ :: forall exp a. (CompileExp exp, PredicateExp exp a) => VHDL (exp a)
+freshVar_ = fst <$> freshVar
+
+-- diggity dig!
+dig :: V.Expression -> V.Identifier
+dig (V.ENand
+      (V.Relation
+        (V.ShiftExpression
+          (V.SimpleExpression _
+            (V.Term
+              (V.FacPrim
+                (V.PrimName
+                  (V.NSimple i))
+     _)_)_)_)_)_) = i
 
 --------------------------------------------------------------------------------
 -- * ... Signals
@@ -159,8 +187,11 @@ compileSignal (NewSignal clause scope mode exp) =
          Port    -> M.addPort    interface
          Generic -> M.addGeneric interface
      return i
-compileSignal (GetSignal (Signal s)) =
-  do undefined -- Don't know what to put here, something like '... (varE s)' but that loses the 's'..
+compileSignal (GetSignal s) =
+  do (v, i) <- freshVar :: VHDL (a, Identifier)
+     e <- compE v
+     M.addSequential $ M.assignSequentialSignal i (H.lift $ V.PrimName $ V.NSimple $ toIdent s)
+     return v
 compileSignal (SetSignal s exp) =
   do M.addSequential =<< M.assignSequentialSignal (toIdent s) <$> compE exp
 
@@ -286,6 +317,11 @@ instance ToIdent (Array i a)
   where
     toIdent (Array i) = Ident $ 'a' : show i
 
+class CompArrayIx exp
+  where
+    compArrayIx :: PredicateExp exp a => exp i -> Array i a -> Maybe (exp a)
+    compArrayIx _ _ = Nothing
+
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Creates an array of given length.
@@ -360,11 +396,11 @@ instance HFunctor (ArrayCMD exp)
     hfmap _ (CopyArray a b i)    = CopyArray a b i
     hfmap _ (UnsafeGetArray i a) = UnsafeGetArray i a
 
-instance (CompileExp exp, EvaluateExp exp) => Interp (ArrayCMD exp) VHDL
+instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (ArrayCMD exp) VHDL
   where
     interp = compileArray
 
-compileArray :: forall exp a. (CompileExp exp, EvaluateExp exp) => ArrayCMD exp VHDL a -> VHDL a
+compileArray :: forall exp a. (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => ArrayCMD exp VHDL a -> VHDL a
 compileArray (NewArray len) =
   do n <- compE  len
      t <- compTA len (undefined :: a)
@@ -394,7 +430,16 @@ compileArray (SetArray i e arr) =
      e' <- compE e
      -- this could be concurrent as well.
      M.addSequential $ M.assignArray (M.index (toIdent arr) i') e'
-
+compileArray (CopyArray arr1 arr2 i) =
+  do error "Not sure what this would be in VHDL..."
+compileArray (UnsafeGetArray i arr) =
+  case compArrayIx i arr of
+      Nothing -> do
+        i' <- compE i
+        --v  <- M.newSym
+        --M.addSequential $ M.assignVariable v (H.lift $ V.PrimName $ M.index (toIdent arr) i')
+        undefined
+      Just e -> return e
 
 freshA :: VHDL Identifier
 freshA = toIdent . ('t' :) . show <$> M.freshUnique
