@@ -437,13 +437,13 @@ compileArray (SetArray i e arr) =
      M.addSequential $ M.assignArray (M.index (toIdent arr) i') e'
 compileArray (CopyArray arr1 arr2 i) =
   do error "Not sure what this would be in VHDL..."
-compileArray (UnsafeGetArray i arr) =
-  case compArrayIx i arr of
+compileArray (UnsafeGetArray ix arr) =
+  case compArrayIx ix arr of
       Nothing -> do
-        i' <- compE i
-        --v  <- M.newSym
-        --M.addSequential $ M.assignVariable v (H.lift $ V.PrimName $ M.index (toIdent arr) i')
-        undefined
+        (v, i) <- freshVar :: VHDL (a, Identifier)
+        e <- compE ix
+        M.addSequential $ M.assignVariable i (H.lift $ V.PrimName $ M.index (toIdent arr) e)
+        return v
       Just e -> return e
 
 freshA :: VHDL Identifier
