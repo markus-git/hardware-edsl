@@ -36,6 +36,11 @@ module Language.Embedded.VHDL.Command
   , Array
   , ArrayCMD
   , CompArrayIx(..)
+  , newArray
+  , initArray
+  , getArray
+  , setArray
+  , unsafeGetArray
     
     -- ^ Entities.
   , EntityCMD
@@ -455,7 +460,50 @@ compTA _ _ = compT (undefined :: exp a)
 --------------------------------------------------------------------------------
 -- * ...
 
+-- | Create an uninitialized array.
+newArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , ArrayCMD (IExp instr) :<: instr )
+  => IExp instr i -> ProgramT instr m (Array i a)
+newArray = singleE . NewArray
 
+-- | Create an initialized array.
+initArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , ArrayCMD (IExp instr) :<: instr )
+  => [a] -> ProgramT instr m (Array i a)  
+initArray = singleE . InitArray
+
+-- | Get an element of an array.
+getArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , ArrayCMD (IExp instr) :<: instr )
+  => IExp instr i -> Array i a -> ProgramT instr m (IExp instr a)
+getArray i = singleE . GetArray i
+
+-- | Set an element of an array.
+setArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , ArrayCMD (IExp instr) :<: instr )
+  => IExp instr i -> IExp instr a -> Array i a -> ProgramT instr m ()
+setArray i a = singleE . SetArray i a
+
+-- | ...
+unsafeGetArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , ArrayCMD (IExp instr) :<: instr )
+  => IExp instr i -> Array i a -> ProgramT instr m (IExp instr a)
+unsafeGetArray i = singleE . UnsafeGetArray i
 
 --------------------------------------------------------------------------------
 -- * ... Packages
