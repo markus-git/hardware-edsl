@@ -277,7 +277,99 @@ setVariable v = singleE . SetVariable v
 -- * ... Arrays
 --------------------------------------------------------------------------------
 
--- ...
+-- | ...
+data Array i a = Array Integer
+
+instance ToIdent (Array i a)
+  where
+    toIdent (Array i) = Ident $ 'a' : show i
+
+data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    -- ^ Creates an array of given length.
+    NewArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => exp i -> ArrayCMD exp prog (Array i a)
+
+    -- ^ Creates an array with a unspecified length.
+    NewArray_
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => ArrayCMD exp prog (Array i a)
+
+    -- ^ Creates an array from the given list of elements.
+    InitArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => [a] -> ArrayCMD exp prog (Array i a)
+
+    -- ^ ...
+    GetArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => exp i -> Array i a -> ArrayCMD exp prog (exp a)
+
+    -- ^ ...
+    SetArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => exp i -> exp a -> Array i a -> ArrayCMD exp prog ()
+
+    -- ^ ...
+    CopyArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => Array i a -> Array i a -> exp i -> ArrayCMD exp prog ()
+
+    -- ^ ..
+    UnsafeGetArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => exp i -> Array i a -> ArrayCMD exp prog (exp a)
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+type instance IExp (ArrayCMD e)       = e
+type instance IExp (ArrayCMD e :+: i) = e
+
+instance HFunctor (ArrayCMD exp)
+  where
+    hfmap _ (NewArray i)         = NewArray i
+    hfmap _ (NewArray_)          = NewArray_
+    hfmap _ (InitArray is)       = InitArray is
+    hfmap _ (GetArray i a)       = GetArray i a
+    hfmap _ (SetArray i e a)     = SetArray i e a
+    hfmap _ (CopyArray a b i)    = CopyArray a b i
+    hfmap _ (UnsafeGetArray i a) = UnsafeGetArray i a
+
+instance CompileExp exp => Interp (ArrayCMD exp) VHDL
+  where
+    interp = compileArray
+
+compileArray :: forall exp a. CompileExp exp => ArrayCMD exp VHDL a -> VHDL a
+compileArray (NewArray i) =
+  do undefined
+
+--------------------------------------------------------------------------------
+-- * ...
+
+
 
 --------------------------------------------------------------------------------
 -- * ... Packages
