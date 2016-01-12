@@ -46,7 +46,7 @@ module Language.Embedded.VHDL.Monad (
   , package
 
     -- ^ common
-  , asSimpleType
+  , typeName
   , interfaceConstant, interfaceSignal, interfaceVariable
   , declRecord, declConstant, declSignal, declVariable
   , unconstrainedArray
@@ -462,9 +462,9 @@ designTypes set
 -- * Common things
 --------------------------------------------------------------------------------
 
-asSimpleType :: V.TypeDeclaration -> V.SubtypeIndication
-asSimpleType (V.TDFull    (V.FullTypeDeclaration i _))     = fromSimpleName i
-asSimpleType (V.TDPartial (V.IncompleteTypeDeclaration i)) = fromSimpleName i
+typeName :: V.TypeDeclaration -> V.SubtypeIndication
+typeName (V.TDFull    (V.FullTypeDeclaration i _))     = fromSimpleName i
+typeName (V.TDPartial (V.IncompleteTypeDeclaration i)) = fromSimpleName i
 
 fromSimpleName :: Identifier -> V.SubtypeIndication
 fromSimpleName i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
@@ -503,6 +503,10 @@ constrainedArray :: Identifier -> Type -> V.Range -> V.TypeDeclaration
 constrainedArray name typ range = compositeTypeDeclaration name $
   V.CTDArray (V.ArrC (V.ConstrainedArrayDefinition
     (V.IndexConstraint [V.DRRange range]) typ))
+
+-- | ..
+constrainedArrayBy :: Identifier -> Type -> V.Range -> V.TypeDeclaration
+constrainedArrayBy = undefined
 
 --------------------------------------------------------------------------------
 -- ** Global/Local Declarations

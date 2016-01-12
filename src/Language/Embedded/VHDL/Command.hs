@@ -372,7 +372,7 @@ compileArray (NewArray len) =
      i <- Array <$> M.freshUnique
      let arr = M.constrainedArray a t (M.downtoZero n)
      M.addType arr
-     M.addLocal $ M.declVariable (toIdent i) (M.asSimpleType arr) Nothing
+     M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) Nothing
      return i
 compileArray (NewArray_) =
   do t <- compTA (undefined :: exp i) (undefined :: a)
@@ -380,7 +380,16 @@ compileArray (NewArray_) =
      i <- Array <$> M.freshUnique
      let arr = M.unconstrainedArray a t
      M.addType arr
-     M.addLocal $ M.declVariable (toIdent i) (M.asSimpleType arr) (error "Must declare range!")
+     M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) (error "what range!?")
+     return i
+compileArray (InitArray is) =
+  do t <- compTA (undefined :: exp i) (undefined :: a)
+     a <- freshA
+     i <- Array <$> M.freshUnique
+     let len = M.downtoZero . H.lift . M.lit . show $ length is
+         arr = M.constrainedArray a t len
+     M.addType arr
+     M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) Nothing
      return i
 
 freshA :: VHDL Identifier
