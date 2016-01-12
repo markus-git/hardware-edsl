@@ -1,14 +1,19 @@
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE TypeFamilies   #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Embedded.VHDL.Interface where
 
-import Language.VHDL                     (Expression, Identifier(..))
-import Language.Embedded.VHDL.Monad      (VHDL)
-import Language.Embedded.VHDL.Monad.Type (Type)
+import Language.VHDL (Expression, Identifier(..))
+import qualified Language.VHDL as V
 
+import Language.Embedded.VHDL.Monad (VHDL)
+import Language.Embedded.VHDL.Monad.Type (Type)
+import qualified Language.Embedded.VHDL.Monad as M
+
+import Control.Applicative ((<$>))
 import Data.Constraint
-import Data.Typeable   (Typeable)
+import Data.Typeable (Typeable)
 
 --------------------------------------------------------------------------------
 -- *

@@ -36,6 +36,7 @@ import qualified Language.VHDL as V
 
 import Language.Embedded.VHDL.Interface
 import Language.Embedded.VHDL.Monad (VHDL)
+import Language.Embedded.VHDL.Command (CompArrayIx)
 import Language.Embedded.VHDL.Expression.Hoist (Hoist, Kind)
 import Language.Embedded.VHDL.Expression.Represent
 import qualified Language.Embedded.VHDL.Monad            as M
@@ -401,6 +402,8 @@ instance Syntactic (VExp a)
 
     desugar = unVExp
     sugar   = VExp
+
+instance CompArrayIx VExp
 
 type instance PredicateExp VExp = VType
 
