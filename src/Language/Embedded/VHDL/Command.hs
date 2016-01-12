@@ -276,10 +276,13 @@ compileVariable (NewVariable exp) =
      i <- Variable <$> M.freshUnique
      M.addLocal $ M.declVariable (toIdent i) t v
      return i
-compileVariable (GetVariable v) =
-  do undefined -- ... same as for signals
-compileVariable (SetVariable v exp) =
-  do M.addSequential =<< M.assignVariable (toIdent v) <$> compE exp
+compileVariable (GetVariable var) =
+  do (v, i) <- freshVar :: VHDL (a, Identifier)
+     e <- compE v
+     M.addSequential $ M.assignVariable i (H.lift $ V.PrimName $ V.NSimple $ toIdent var)
+     return v
+compileVariable (SetVariable var exp) =
+  do M.addSequential =<< M.assignVariable (toIdent var) <$> compE exp
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -422,9 +425,11 @@ compileArray (InitArray is) =
      M.addType arr
      M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) (Just $ H.lift $ M.aggregate x)
      return i
-compileArray (GetArray i arr) =
-  do -- ...
-     undefined
+compileArray (GetArray ix arr) =
+  do (v, i) <- freshVar :: VHDL (a, Identifier)
+     e <- compE ix
+     M.addSequential $ M.assignSequentialSignal i (H.lift $ V.PrimName $ M.index (toIdent arr) e)
+     return v
 compileArray (SetArray i e arr) =
   do i' <- compE i
      e' <- compE e
