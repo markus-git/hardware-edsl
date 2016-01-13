@@ -35,9 +35,9 @@ testSimple = do
          do x <- newPort  InOut true :: Prog (Signal Bool)
             y <- newPort_ In         :: Prog (Signal Bool)
             return x
-  a <- newArchitecture "simple" "behavioural" $
-         do i <== (true `and` false)
-  return ()
+  newArchitecture "simple" "behavioural" $
+    newProcess [toX i] $
+      i <== (true `and` false)
 
 --------------------------------------------------------------------------------
 
