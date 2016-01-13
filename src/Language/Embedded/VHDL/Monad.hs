@@ -399,8 +399,6 @@ entity name m =
 
 -- | Declares a package with the given name by consuming all type declarations
 --   produced by running the monadic action.
---
--- *** package body is always empty for now (until we support VHDL functions).
 package :: MonadV m => String -> m a -> m a
 package name m =
   do oldTypes <- CMS.gets _types
@@ -411,10 +409,12 @@ package name m =
            V.PackageDeclaration
              (V.Ident name)
              (fmap V.PHDIType $ Set.toList newTypes)
+{-             
      addDesign_ $ V.LibrarySecondary $ V.SecondaryPackage $
            V.PackageBody
              (V.Ident name)
              ([])
+-}
      CMS.modify $ \e -> e { _types = oldTypes }
      return result
 
