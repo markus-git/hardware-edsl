@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE Rank2Types                 #-}
 
 -- used for the Ord/Eq inst. of XDeclaration etc.
 {-# LANGUAGE StandaloneDeriving #-}
@@ -453,9 +454,10 @@ designTypes set
   where
     pack :: MonadV m => m ()
     pack = package "types" $ do
+      -- *** Instead of importing every library possible the correct ones
+      --     should be declared when adding a type through 'addType'.
       newLibrary "IEEE"
       newImport  "IEEE.STD_LOGIC_1164"
-      newImport  "IEEE.STD_LOGIC_UNSIGNED"
       newImport  "IEEE.NUMERIC_STD"
       CMS.modify $ \e -> e { _types = set }
 

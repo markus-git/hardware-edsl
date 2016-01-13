@@ -212,7 +212,7 @@ compileSignal (NewSignal clause scope mode exp) =
 compileSignal (GetSignal s) =
   do (v, i) <- freshVar :: VHDL (a, Identifier)
      e <- compE v
-     M.addSequential $ M.assignSequentialSignal i (H.lift $ V.PrimName $ V.NSimple $ toIdent s)
+     M.addSequential $ M.assignVariable i (H.lift $ V.PrimName $ V.NSimple $ toIdent s)
      return v
 compileSignal (SetSignal s exp) =
   do M.addSequential =<< M.assignSequentialSignal (toIdent s) <$> compE exp
@@ -440,6 +440,8 @@ instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (ArrayCMD 
   where
     interp = compileArray
 
+-- *** Signal commands can be both sequential and parallel and I shouldn't
+--     depend on them always being sequential.
 compileArray :: forall exp a. (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => ArrayCMD exp VHDL a -> VHDL a
 compileArray (NewArray len) =
   do n <- compE  len
@@ -465,7 +467,7 @@ compileArray (InitArray is) =
 compileArray (GetArray ix arr) =
   do (v, i) <- freshVar :: VHDL (a, Identifier)
      e <- compE ix
-     M.addSequential $ M.assignSequentialSignal i (H.lift $ V.PrimName $ M.index (toIdent arr) e)
+     M.addSequential $ M.assignVariable i (H.lift $ V.PrimName $ M.index (toIdent arr) e)
      return v
 compileArray (SetArray i e arr) =
   do i' <- compE i

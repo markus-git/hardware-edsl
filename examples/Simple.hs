@@ -45,7 +45,7 @@ testSimple = do
 testArrays :: Prog ()
 testArrays = do
   i <- newEntity "arrays" $
-         newPort InOut true :: Prog (Signal Bool)
+         newPort Out true :: Prog (Signal Bool)
   newArchitecture "arrays" "behavioural" $
     newProcess [toX i] $
       do a <- newArray (litE 4) :: Prog (Array Int8 Bool)
