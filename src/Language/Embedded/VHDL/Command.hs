@@ -8,13 +8,15 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 
 module Language.Embedded.VHDL.Command
-  ( Clause
-  , Scope
+  ( compile
+  , icompile
   , ToIdent(..)
 
     -- ^ Signals.
   , Signal
   , SignalCMD
+  , Scope
+  , Clause
   , newSignal
   , newSignal_
   , getSignal
