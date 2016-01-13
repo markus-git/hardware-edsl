@@ -52,11 +52,7 @@ import qualified Language.Embedded.VHDL.Monad.Type as T
 
 import Language.Syntactic hiding (fold, printExpr, showAST, drawAST, writeHtmlAST)
 import Language.Syntactic.Functional hiding (Literal, Name)
-import Language.Syntactic.Functional.Sharing
-import Language.Syntactic.Functional.Tuple
-import Language.Syntactic.Sugar.BindingTyped ()
-import Language.Syntactic.Sugar.TupleTyped ()
-import qualified Language.Syntactic            as Syntactic
+import qualified Language.Syntactic as Syntactic
 import qualified Language.Syntactic.Functional as Syntactic
 
 import Control.Arrow
