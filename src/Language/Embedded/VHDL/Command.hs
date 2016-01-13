@@ -1,7 +1,4 @@
 {-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE DeriveFunctor         #-}
-{-# LANGUAGE DeriveFoldable        #-}
-{-# LANGUAGE DeriveTraversable     #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -48,6 +45,10 @@ module Language.Embedded.VHDL.Command
   , getArray
   , setArray
   , unsafeGetArray
+
+    -- ^ Loops.
+  , LoopCMD
+  , for
     
     -- ^ Entities.
   , EntityCMD
@@ -85,8 +86,6 @@ import Control.Arrow (second)
 import Control.Monad.Identity           hiding (when)
 import Control.Monad.Operational.Higher hiding (when)
 import Control.Applicative
-import Data.Foldable hiding (sequence_)
-import Data.Traversable
 import Data.Typeable
 import Data.ALaCarte
 import Data.Ix
