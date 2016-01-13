@@ -23,7 +23,9 @@ module Language.Embedded.VHDL.Command
   , setSignal
   , (<==)
   , newPort
+  , newPort_
   , newGeneric
+  , newGeneric_
 
     -- ^ Variables.
   , Variable
@@ -141,9 +143,11 @@ dig (V.ENand
 -- | If a signal is declared with a scope of 'Entity' its classified as either a
 --   port or generic signal.
 data Clause   = Port    | Generic
+  deriving (Show)
 
 -- | Scope of a signal.
 data Scope    = Process | Architecture | Entity
+  deriving (Show)
 
 -- | ...
 data Signal a = Signal Integer
@@ -234,14 +238,29 @@ setSignal s = singleE . SetSignal s
 
 --------------------------------------------------------------------------------
 
+-- | Declare port signals of the given mode and assign it initial value.
+newPort :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> IExp i a -> ProgramT i m (Signal a)
+newPort m = singleE . NewSignal Port Entity m . Just
+
+-- | Declare port signals of the given mode.
+newPort_ :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> ProgramT i m (Signal a)
+newPort_ m = singleE $ NewSignal Port Entity m Nothing
+
+--------------------------------------------------------------------------------
+
+-- | Declare generic signals of the given mode and assign it initial value.
+newGeneric :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> IExp i a -> ProgramT i m (Signal a)
+newGeneric m = singleE . NewSignal Generic Entity m . Just
+
+-- | Declare generic signals of the given mode.
+newGeneric_ :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> ProgramT i m (Signal a)
+newGeneric_ m = singleE $ NewSignal Generic Entity m Nothing
+
+--------------------------------------------------------------------------------
+
 -- | Short-hand for 'setSignal'.
 (<==) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
 (<==) = setSignal
-
--- | Declare port/generic signals of the given mode.
-newPort, newGeneric :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Mode -> ProgramT i m (Signal a)
-newPort    m = singleE $ NewSignal Port    Entity m Nothing
-newGeneric m = singleE $ NewSignal Generic Entity m Nothing
 
 --------------------------------------------------------------------------------
 -- * ... Variables

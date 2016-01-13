@@ -32,8 +32,8 @@ type Prog = Program CMD
 testSimple :: Prog ()
 testSimple = do
   i <- newEntity "simple" $
-         do x <- newSignal true :: Prog (Signal Bool)
-            y <- newSignal_     :: Prog (Signal Bool)
+         do x <- newPort  InOut true :: Prog (Signal Bool)
+            y <- newPort_ In         :: Prog (Signal Bool)
             return x
   a <- newArchitecture "simple" "behavioural" $
          do i <== (true `and` false)
