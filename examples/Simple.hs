@@ -2,11 +2,7 @@
 
 module Simple where
 
-import Language.VHDL
 import Language.Embedded.VHDL
-import Language.Embedded.VHDL.Monad (prettyVHDL)
-import qualified Language.Embedded.VHDL.Monad as M
-
 import Control.Monad.Identity
 import Control.Monad.Operational.Higher
 import Data.ALaCarte
@@ -18,33 +14,35 @@ import Prelude hiding (and)
 -- * ...
 --------------------------------------------------------------------------------
 
-true, false :: Data Bool
-true  = litE True
-false = litE False
+-- | Command set used for our 'simple' programs.
+type CMD =
+      SignalCMD       VExp
+  :+: VariableCMD     VExp
+  :+: ArrayCMD        VExp
+  :+: EntityCMD       VExp
+  :+: ArchitectureCMD VExp
+  :+: ProcessCMD      VExp
+  :+: ConditionalCMD  VExp
+
+type Prog = Program CMD
+
+--------------------------------------------------------------------------------
+-- ** Example VHDL programs.
+
+testSimple :: Prog ()
+testSimple = do
+  i <- newEntity "simple" $
+         do x <- newSignal true :: Prog (Signal Bool)
+            y <- newSignal_     :: Prog (Signal Bool)
+            return x
+  a <- newArchitecture "simple" "behavioural" $
+         do i <== (true `and` false)
+  return ()
 
 --------------------------------------------------------------------------------
 
-simple :: Data Bool
-simple = true `and` false
-
---------------------------------------------------------------------------------
-
-type CMD = SequentialCMD Data :+: ConcurrentCMD Data :+: HeaderCMD Data
-
-wrapper :: Type a => Data a -> Program CMD ()
-wrapper var = do
-  i <- entity "entity" $ do
-    library "IEEE"
-    imports "IEEE.STD_LOGIC"
-    signalPort Out (Nothing :: Maybe (IExp CMD Bool))
-  a <- newArray
-  architecture "simple" "entity" $ do
-    process "main" [] $
-      i <== var
-
---------------------------------------------------------------------------------
-
-test :: IO ()
-test = putStrLn $ compile $ simpleWrap simple
+printTests :: IO ()
+printTests = do
+  putStrLn $ compile $ testSimple
 
 --------------------------------------------------------------------------------
