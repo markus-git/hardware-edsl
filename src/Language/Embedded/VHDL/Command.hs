@@ -86,18 +86,22 @@ import Data.Ix
 -- * ...
 --------------------------------------------------------------------------------
 
-data Clause   = Port    | Generic
+-- | Compile a program to VHDL code represented as a string.
+compile :: (Interp instr VHDL, HFunctor instr) => Program instr a -> String
+compile = show . M.prettyVHDL . interpret
 
-data Scope    = Process | Architecture | Entity
+-- | Compile a program to VHDL code and print it on the screen.
+icompile :: (Interp instr VHDL, HFunctor instr) => Program instr a -> IO ()
+icompile = putStrLn . compile
+
+--------------------------------------------------------------------------------
+-- ** ...
 
 class ToIdent a
   where
     toIdent :: a -> V.Identifier
 
 instance ToIdent String where toIdent = V.Ident
-
---------------------------------------------------------------------------------
--- ** ...
 
 compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
@@ -131,6 +135,13 @@ dig (V.ENand
 --------------------------------------------------------------------------------
 -- * ... Signals
 --------------------------------------------------------------------------------
+
+-- | If a signal is declared with a scope of 'Entity' its classified as either a
+--   port or generic signal.
+data Clause   = Port    | Generic
+
+-- | Scope of a signal.
+data Scope    = Process | Architecture | Entity
 
 -- | ...
 data Signal a = Signal Integer
