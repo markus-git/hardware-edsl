@@ -557,6 +557,11 @@ data LoopCMD (exp :: * -> *) (prog :: * -> *) a
       -> (exp n -> prog ()) -- step
       -> LoopCMD exp prog ()
 
+    While
+      :: prog (exp Bool)
+      -> prog ()
+      -> LoopCMD exp prog ()
+
 --------------------------------------------------------------------------------
 -- **
 
@@ -565,18 +570,21 @@ type instance IExp (LoopCMD e :+: i) = e
 
 instance HFunctor (LoopCMD exp)
   where
-    hfmap f (For r step) = For r (f . step)
+    hfmap f (For r step)      = For r (f . step)
+    hfmap f (While cont step) = While (f cont) (f step)
 
 instance CompileExp exp => Interp (LoopCMD exp) VHDL
   where
     interp = compileLoop
 
 compileLoop :: forall exp a. CompileExp exp => LoopCMD exp VHDL a -> VHDL a
-compileLoop (For (r :: exp n) step) =
+compileLoop (For r step) =
   do range  <- compE r
-     (v, i) <- freshVar :: VHDL (exp n, Identifier)
+     (v, i) <- freshVar
      loop   <- M.inFor i (M.fromZero range) (step v)
      M.addSequential $ V.SLoop $ loop
+compileLoop (While b step) =
+  do undefined
 
 --------------------------------------------------------------------------------
 -- **

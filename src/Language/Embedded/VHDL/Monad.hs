@@ -39,6 +39,7 @@ module Language.Embedded.VHDL.Monad (
     -- ^ statements
   , inProcess
   , inFor
+  , inWhile
   , inConditional
   , inCase
 
@@ -297,6 +298,19 @@ inFor i r m =
          (Just (V.IterFor (V.ParameterSpecification
            (i)
            (V.DRRange r))))
+         (newSequential)
+
+inWhile :: MonadV m => Expression -> m () -> m (V.LoopStatement)
+inWhile cont m =
+  do oldSequential <- CMS.gets _sequential
+     CMS.modify $ \e -> e { _sequential = [] }
+     m
+     newSequential <- reverse <$> CMS.gets _sequential
+     CMS.modify $ \e -> e { _sequential = oldSequential }
+     return $
+       V.LoopStatement
+         (Nothing)
+         (Just (V.IterWhile cont))
          (newSequential)
 
 --------------------------------------------------------------------------------
