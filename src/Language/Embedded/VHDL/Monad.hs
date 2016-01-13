@@ -38,6 +38,7 @@ module Language.Embedded.VHDL.Monad (
 
     -- ^ statements
   , inProcess
+  , inFor
   , inConditional
   , inCase
 
@@ -279,7 +280,25 @@ inProcess l is m =
   where
     sensitivity | P.null is = Nothing
                 | otherwise = Just $ V.SensitivityList $ fmap V.NSimple is
-      
+
+--------------------------------------------------------------------------------
+-- ** Loop-statements
+
+inFor :: MonadV m => Identifier -> V.Range -> m () -> m (V.LoopStatement)
+inFor i r m =
+  do oldSequential <- CMS.gets _sequential
+     CMS.modify $ \e -> e { _sequential = [] }
+     m
+     newSequential <- reverse <$> CMS.gets _sequential
+     CMS.modify $ \e -> e { _sequential = oldSequential }
+     return $
+       V.LoopStatement
+         (Nothing)
+         (Just (V.IterFor (V.ParameterSpecification
+           (i)
+           (V.DRRange r))))
+         (newSequential)
+
 --------------------------------------------------------------------------------
 -- ** If-statements
 

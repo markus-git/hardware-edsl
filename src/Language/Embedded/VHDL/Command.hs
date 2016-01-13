@@ -1,4 +1,7 @@
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE DeriveFoldable        #-}
+{-# LANGUAGE DeriveTraversable     #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeOperators         #-}
@@ -82,6 +85,8 @@ import Control.Arrow (second)
 import Control.Monad.Identity           hiding (when)
 import Control.Monad.Operational.Higher hiding (when)
 import Control.Applicative
+import Data.Foldable hiding (sequence_)
+import Data.Traversable
 import Data.Typeable
 import Data.ALaCarte
 import Data.Ix
@@ -540,10 +545,50 @@ unsafeGetArray
 unsafeGetArray i = singleE . UnsafeGetArray i
 
 --------------------------------------------------------------------------------
--- * ... Packages
+-- * Loop statements.
 --------------------------------------------------------------------------------
 
--- ...
+-- | ...
+data LoopCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    For
+      :: (PredicateExp exp n, Integral n)
+      => exp n              -- range
+      -> (exp n -> prog ()) -- step
+      -> LoopCMD exp prog ()
+
+--------------------------------------------------------------------------------
+-- **
+
+type instance IExp (LoopCMD e)       = e
+type instance IExp (LoopCMD e :+: i) = e
+
+instance HFunctor (LoopCMD exp)
+  where
+    hfmap f (For r step) = For r (f . step)
+
+instance CompileExp exp => Interp (LoopCMD exp) VHDL
+  where
+    interp = compileLoop
+
+compileLoop :: forall exp a. CompileExp exp => LoopCMD exp VHDL a -> VHDL a
+compileLoop (For (r :: exp n) step) =
+  do range  <- compE r
+     (v, i) <- freshVar :: VHDL (exp n, Identifier)
+     loop   <- M.inFor i (M.fromZero range) (step v)
+     M.addSequential $ V.SLoop $ loop
+
+--------------------------------------------------------------------------------
+-- **
+
+for
+  :: ( LoopCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) n
+     , Integral n )
+  => IExp instr n
+  -> (IExp instr n -> ProgramT instr m ())
+  -> ProgramT instr m ()
+for range = singleE . For range
 
 --------------------------------------------------------------------------------
 -- * ... Entities
