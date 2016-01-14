@@ -7,32 +7,7 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
--- Needed for shitty Cabal error.
-{-# LANGUAGE Rank2Types #-}
-
-module Language.Embedded.VHDL.Expression
-       {-
-  ( VHDLDomain
-  , Data
-  , Type
-
-  -- expressions
-  , not, and, or, xor, xnor, nand, nor
-  , eq, neq
-  , lt, lte, gt, gte
-  , sll, srl, sla, sra, rol, ror
-  , add, sub, cat
-  , mul
-  , div, mod, rem
-  , exp, abs
-  , value, force, share, cast
-
-  -- types
-  , std_logic
-  , signed, usigned
-  , signed8, signed16, signed32, signed64
-  , usigned8, usigned16, usigned32, usigned64
-  )-} where
+module Language.Embedded.VHDL.Expression where
 
 import Language.VHDL (Identifier(..))
 import qualified Language.VHDL as V
@@ -203,17 +178,16 @@ instance Eval Shift
   where
     evalSym Sll = \x i -> Bits.shiftL x (fromIntegral i)
     evalSym Srl = \x i -> shiftLR     x (fromIntegral i)
+      where
+        shiftLR :: Bits a => a -> Int -> a
+        shiftLR x n = let y = Bits.shiftR x n in
+          case Bits.bitSizeMaybe x of
+            Just i  -> foldr (flip Bits.clearBit) y [i - n `Prelude.mod` i .. i]
+            Nothing -> y
     evalSym Sla = \x i -> Bits.shiftL x (fromIntegral i)
     evalSym Sra = \x i -> Bits.shiftR x (fromIntegral i)
     evalSym Rol = \x i -> Bits.rotateL x (fromIntegral i)
     evalSym Ror = \x i -> Bits.rotateR x (fromIntegral i)
-
-shiftLR :: Bits a => a -> Int -> a
-shiftLR x n =
-  let y = Bits.shiftR x n
-  in case Bits.bitSizeMaybe x of
-    Just i  -> foldr (flip Bits.clearBit) y [i - n `Prelude.mod` i .. i]
-    Nothing -> y
 
 instance EvalEnv Shift env
 
@@ -299,8 +273,8 @@ instance EvalEnv Term env
 data Factor sig
   where
     Exp :: (VType a, Num a, VType b, Integral b) => Factor (a :-> b :-> Full a)
-    Abs :: (VType a, Num a) => Factor (a :-> Full a)
-    Not :: Factor (Bool :-> Full Bool)
+    Abs :: (VType a, Num a)                      => Factor (a :-> Full a)
+    Not ::                                          Factor (Bool :-> Full Bool)
 
 instance Equality   Factor
 instance StringTree Factor
@@ -330,13 +304,13 @@ instance EvalEnv Factor env
 
 data Primary sig
   where
-    Name       :: (VType a) => V.Name -> Primary (Full a)
-    Literal    :: (VType a) => a      -> Primary (Full a)
-    Aggregate  :: (VType a) => [a]    -> Primary (Full [a])
-    Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
+    Name       :: (VType a)          => V.Name   -> Primary (Full a)
+    Literal    :: (VType a)          => a        -> Primary (Full a)
+    Aggregate  :: (VType a)          => [a]      -> Primary (Full [a])
+    Function   :: (Signature sig)    => String   -> Denotation sig -> Primary sig
     Qualified  :: (VType a, VType b) => b        -> Primary (a :-> Full a)
     Conversion :: (VType a, VType b) => (a -> b) -> Primary (a :-> Full b)
-    Allocator  :: (VType a) => Primary (Full a)
+    Allocator  :: (VType a)          =>             Primary (Full a)
 
 instance Equality   Primary
 instance StringTree Primary
@@ -447,11 +421,11 @@ value i = sugarT (Literal i)
 
 -- | ...
 variable :: VType a => Integer -> VExp a
-variable v = sugarT (Name $ V.NSimple $ V.Ident $ 'v' : show v)
+variable v = variable' $ 'v' : show v
 
 -- | ...
 variable' :: VType a => String -> VExp a
-variable' v = sugarT (Name $ V.NSimple $ V.Ident v)
+variable' = sugarT . Name . V.NSimple . V.Ident
 
 -- | ...
 cast  :: (VType a, VType b) => (a -> b) -> VExp a -> VExp b
