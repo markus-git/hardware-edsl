@@ -88,6 +88,8 @@ import Control.Monad.Operational.Higher hiding (when)
 import Control.Applicative
 import Data.Array.IO (IOArray)
 import Data.IORef    (IORef)
+import Data.List     (genericTake)
+import Data.Foldable
 import Data.Typeable
 import Data.ALaCarte
 import Data.Ix
@@ -526,8 +528,9 @@ runArray (NewArray_)               = error "?"
 runArray (InitArray is)            = fmap ArrayE $ IA.newListArray (0, fromIntegral $ length is) is
 runArray (GetArray i (ArrayE a))   = fmap litE $ IA.readArray a $ evalE i
 runArray (SetArray i e (ArrayE a)) = IA.writeArray a (evalE i) (evalE e)
-runArray (CopyArray (ArrayE l) (ArrayE r) i) = error "?"
-runArray (UnsafeGetArray i    (ArrayE a))    = error "?"
+runArray (CopyArray (ArrayE a) (ArrayE b) l) =
+  sequence_ [ IA.readArray a i >>= IA.writeArray b i | i <- genericTake (evalE l) [0..] ]
+runArray (UnsafeGetArray i a)      = runArray (GetArray i a)
 
 --------------------------------------------------------------------------------
 -- * ...
@@ -619,8 +622,13 @@ compileLoop (While b step) =
   do undefined
 
 -- | ...
-runLoop :: forall exp prog a. EvaluateExp exp => LoopCMD exp prog a -> IO a
-runLoop (For r step) = undefined
+runLoop :: forall exp prog a. EvaluateExp exp => LoopCMD exp IO a -> IO a
+runLoop (For r step) = loop (evalE r)
+  where
+    loop i | i > 0     = step (litE i) >> loop (i - 1)
+           | otherwise = return ()
+runLoop (While b step) =
+  do undefined
 
 --------------------------------------------------------------------------------
 -- **
@@ -656,10 +664,16 @@ instance HFunctor (EntityCMD exp)
   where
     hfmap f (NewEntity e p) = NewEntity e (f p)
 
-instance CompileExp exp => Interp (EntityCMD exp) VHDL where interp = compileEntity
+instance CompileExp  exp => Interp (EntityCMD exp) VHDL where interp = compileEntity
+instance EvaluateExp exp => Interp (EntityCMD exp) IO   where interp = runEntity
 
+-- | ...
 compileEntity :: forall exp a. CompileExp exp => EntityCMD exp VHDL a -> VHDL a
 compileEntity (NewEntity s prog) = M.entity (Ident s) prog
+
+-- | ...
+runEntity :: forall exp a. EvaluateExp exp => EntityCMD exp IO a -> IO a
+runEntity (NewEntity _ prog) = prog
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -691,10 +705,16 @@ instance HFunctor (ArchitectureCMD exp)
   where
     hfmap f (NewArchitecture e a p) = NewArchitecture e a (f p)
 
-instance CompileExp exp => Interp (ArchitectureCMD exp) VHDL where interp = compileArchitecture
+instance CompileExp exp  => Interp (ArchitectureCMD exp) VHDL where interp = compileArchitecture
+instance EvaluateExp exp => Interp (ArchitectureCMD exp) IO   where interp = runArchitecture
 
+-- | ...
 compileArchitecture :: forall exp a. CompileExp exp => ArchitectureCMD exp VHDL a -> VHDL a
 compileArchitecture (NewArchitecture e a prog) = M.architecture (Ident e) (Ident a) prog
+
+-- | ...
+runArchitecture :: forall exp a. EvaluateExp exp => ArchitectureCMD exp IO a -> IO a
+runArchitecture (NewArchitecture _ _ prog) = prog
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -728,8 +748,10 @@ instance HFunctor (ProcessCMD exp)
   where
     hfmap f (NewProcess is p) = NewProcess is (f p)
 
-instance CompileExp exp => Interp (ProcessCMD exp) VHDL where interp = compileProcess
+instance CompileExp  exp => Interp (ProcessCMD exp) VHDL where interp = compileProcess
+instance EvaluateExp exp => Interp (ProcessCMD exp) IO   where interp = runProcess
 
+-- | ..
 compileProcess :: forall exp a. CompileExp exp => ProcessCMD exp VHDL a -> VHDL a
 compileProcess (NewProcess is prog) =
   do l      <- M.newLabel
@@ -739,6 +761,11 @@ compileProcess (NewProcess is prog) =
   where
     unX :: SignalX -> Identifier
     unX (SignalX s) = toIdent s
+
+-- | ..
+runProcess :: forall exp a. EvaluateExp exp => ProcessCMD exp IO a -> IO a
+runProcess (NewProcess is prog) = error "missing interp for processes"
+  -- TODO: a loop triggered by changes in its input arguments..?
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -774,8 +801,10 @@ instance HFunctor (ConditionalCMD exp)
   where
     hfmap f (If a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
 
-instance CompileExp exp => Interp (ConditionalCMD exp) VHDL where interp = compileConditional
+instance CompileExp  exp => Interp (ConditionalCMD exp) VHDL where interp = compileConditional
+instance EvaluateExp exp => Interp (ConditionalCMD exp) IO   where interp = runConditional
 
+-- | ...
 compileConditional :: forall exp a. CompileExp exp => ConditionalCMD exp VHDL a -> VHDL a
 compileConditional (If (a, b) cs em) =
   do let (es, ds) = unzip cs
@@ -784,6 +813,13 @@ compileConditional (If (a, b) cs em) =
      ese <- mapM compE es
      s   <- M.inConditional (ae, b) (zip ese ds) el
      M.addSequential $ V.SIf s
+
+-- | ...
+runConditional :: forall exp a. EvaluateExp exp => ConditionalCMD exp IO a -> IO a
+runConditional (If (a, b) cs em) = if (evalE a) then b else loop cs
+  where
+    loop []          = maybe (return ()) id em
+    loop ((c, p):xs) = if (evalE c) then p else (loop xs)
 
 --------------------------------------------------------------------------------
 -- ** ...
