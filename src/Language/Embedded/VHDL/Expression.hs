@@ -7,6 +7,9 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 
+-- Needed for shitty Cabal error.
+{-# LANGUAGE Rank2Types #-}
+
 module Language.Embedded.VHDL.Expression
        {-
   ( VHDLDomain
@@ -447,6 +450,10 @@ variable :: VType a => Integer -> VExp a
 variable v = sugarT (Name $ V.NSimple $ V.Ident $ 'v' : show v)
 
 -- | ...
+variable' :: VType a => String -> VExp a
+variable' v = sugarT (Name $ V.NSimple $ V.Ident v)
+
+-- | ...
 cast  :: (VType a, VType b) => (a -> b) -> VExp a -> VExp b
 cast f = sugarT (Conversion f)
 
@@ -709,5 +716,11 @@ compVExp = simpleMatch (\(T s) -> compVDom s) . unVExp
           as <- sequence $ listArgs compVExp' args
           return $ Hoist.P $ M.function (V.Ident f) (fmap Hoist.lift as)
       | Just (Allocator)    <- prj primary = undefined
+
+--------------------------------------------------------------------------------
+-- *** temporary random shit becuase Cabal fails to install a package ***
+
+temporaryGetName :: Primary sig -> String
+temporaryGetName (Name (V.NSimple (V.Ident i))) = i
 
 --------------------------------------------------------------------------------

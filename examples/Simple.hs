@@ -10,7 +10,7 @@ import Data.Int
 import Data.Word
 import Text.PrettyPrint
 
-import Prelude hiding (and)
+import Prelude hiding (and, or)
 
 --------------------------------------------------------------------------------
 -- * ...
@@ -21,6 +21,7 @@ type CMD =
       SignalCMD       VExp
   :+: VariableCMD     VExp
   :+: ArrayCMD        VExp
+  :+: LoopCMD         VExp
   :+: EntityCMD       VExp
   :+: ArchitectureCMD VExp
   :+: ProcessCMD      VExp
@@ -52,13 +53,27 @@ testArrays = do
          v <- getArray (litE 2) a
          i <== v
 
+testLoops :: Prog ()
+testLoops = do
+  (i, o) <- newEntity "loops" $
+         do x <- newPort_ In  :: Prog (Signal Word8)
+            y <- newPort_ Out :: Prog (Signal Word8)
+            return (x, y)
+  newArchitecture "loops" "behavioural" $
+    newProcess [toX i] $
+      for (litE 3) $ \n ->
+        do y <- getSignal i
+           o <== (n + y) 
+
 --------------------------------------------------------------------------------
 
 printTests :: IO ()
 printTests = do
-  putStrLn "\n### Simple ###"
+  putStrLn "\n### Simple ###\n"
   putStrLn $ compile $ testSimple
-  putStrLn "\n### Arrays ###"
+  putStrLn "\n### Arrays ###\n"
   putStrLn $ compile $ testArrays
+  putStrLn "\n### Loops ###\n"
+  putStrLn $ compile $ testLoops
 
 --------------------------------------------------------------------------------

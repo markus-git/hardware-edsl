@@ -14,7 +14,7 @@ module Language.Embedded.VHDL.Command
 
     -- ^ Signals.
   , Signal
-  , SignalCMD
+  , SignalCMD(..)
   , Scope
   , Clause
   , newSignal
@@ -29,7 +29,7 @@ module Language.Embedded.VHDL.Command
 
     -- ^ Variables.
   , Variable
-  , VariableCMD
+  , VariableCMD(..)
   , newVariable
   , newVariable_
   , getVariable
@@ -38,7 +38,7 @@ module Language.Embedded.VHDL.Command
 
     -- ^ Arrays.
   , Array
-  , ArrayCMD
+  , ArrayCMD(..)
   , CompArrayIx(..)
   , newArray
   , initArray
@@ -47,25 +47,25 @@ module Language.Embedded.VHDL.Command
   , unsafeGetArray
 
     -- ^ Loops.
-  , LoopCMD
+  , LoopCMD(..)
   , for
     
     -- ^ Entities.
-  , EntityCMD
+  , EntityCMD(..)
   , newEntity
 
     -- ^ Architectures.
-  , ArchitectureCMD
+  , ArchitectureCMD(..)
   , newArchitecture
 
     -- ^ Processes and untyped signals.
   , SignalX
-  , ProcessCMD
+  , ProcessCMD(..)
   , toX
   , newProcess
 
     -- ^ Conditionals.
-  , ConditionalCMD
+  , ConditionalCMD(..)
   , conditional
   , when
   , iff
@@ -86,9 +86,13 @@ import Control.Arrow (second)
 import Control.Monad.Identity           hiding (when)
 import Control.Monad.Operational.Higher hiding (when)
 import Control.Applicative
+import Data.Array.IO (IOArray)
+import Data.IORef    (IORef)
 import Data.Typeable
 import Data.ALaCarte
 import Data.Ix
+import qualified Data.Array.IO as IA
+import qualified Data.IORef    as IR
 
 --------------------------------------------------------------------------------
 -- * ...
@@ -105,17 +109,25 @@ icompile = putStrLn . compile
 --------------------------------------------------------------------------------
 -- ** ...
 
-class ToIdent a
-  where
-    toIdent :: a -> V.Identifier
-
-instance ToIdent String where toIdent = V.Ident
-
 compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
 
 compTM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL Type
 compTM _ = compT (undefined :: exp a)
+
+evalEM :: forall exp a. (PredicateExp exp a, EvaluateExp exp) => Maybe (exp a) -> a
+evalEM e = maybe (error "empty value") (id) $ fmap evalE e
+
+--------------------------------------------------------------------------------
+-- ** ..
+
+class ToIdent a
+  where
+    toIdent :: a -> V.Identifier
+
+instance ToIdent String
+  where
+    toIdent = V.Ident
 
 freshVar :: forall exp a. (CompileExp exp, PredicateExp exp a) => VHDL (exp a, Identifier)
 freshVar = do
@@ -154,11 +166,11 @@ data Scope    = Process | Architecture | Entity
   deriving (Show)
 
 -- | ...
-data Signal a = Signal Integer
+data Signal a = SignalC Integer | SignalE (IORef a)
 
 instance ToIdent (Signal a)
   where
-    toIdent (Signal i) = Ident $ 's' : show i
+    toIdent (SignalC i) = Ident $ 's' : show i
 
 -- | ...
 data SignalCMD (exp :: * -> *) (prog :: * -> *) a
@@ -194,16 +206,15 @@ instance HFunctor (SignalCMD exp)
     hfmap _ (GetSignal s)       = GetSignal s
     hfmap _ (SetSignal s e)     = SetSignal s e
 
-instance CompileExp exp => Interp (SignalCMD exp) VHDL
-  where
-    interp = compileSignal
+instance CompileExp  exp => Interp (SignalCMD exp) VHDL where interp = compileSignal
+instance EvaluateExp exp => Interp (SignalCMD exp) IO   where interp = runSignal
 
 -- | ...
 compileSignal :: forall exp a. CompileExp exp => SignalCMD exp VHDL a -> VHDL a
 compileSignal (NewSignal clause scope mode exp) =
   do v <- compEM exp
      t <- compTM exp
-     i <- Signal <$> M.freshUnique
+     i <- SignalC <$> M.freshUnique
      let block     = M.declSignal      (toIdent i)      t v
          interface = M.interfaceSignal (toIdent i) mode t v
      case scope of
@@ -220,6 +231,12 @@ compileSignal (GetSignal s) =
      return v
 compileSignal (SetSignal s exp) =
   do M.addSequential =<< M.assignSequentialSignal (toIdent s) <$> compE exp
+
+-- | ...
+runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
+runSignal (NewSignal _ _ _ exp)        = fmap SignalE $ IR.newIORef $ evalEM exp
+runSignal (GetSignal (SignalE r))      = fmap litE $ IR.readIORef r
+runSignal (SetSignal (SignalE r) exp)  = IR.writeIORef r $ evalE exp
 
 --------------------------------------------------------------------------------
 -- ** ..
@@ -270,11 +287,11 @@ newGeneric_ m = singleE $ NewSignal Generic Entity m Nothing
 -- * ... Variables
 --------------------------------------------------------------------------------
 
-data Variable a = Variable Integer
+data Variable a = VariableC Integer | VariableE (IORef a)
 
 instance ToIdent (Variable a)
   where
-    toIdent (Variable i) = Ident $ 'v' : show i
+    toIdent (VariableC i) = Ident $ 'v' : show i
 
 data VariableCMD (exp :: * -> *) (prog :: * -> *) a
   where
@@ -306,15 +323,15 @@ instance HFunctor (VariableCMD exp)
     hfmap _ (GetVariable s)   = GetVariable s
     hfmap _ (SetVariable s e) = SetVariable s e
 
-instance CompileExp exp => Interp (VariableCMD exp) VHDL
-  where
-    interp = compileVariable
+instance CompileExp  exp => Interp (VariableCMD exp) VHDL where interp = compileVariable
+instance EvaluateExp exp => Interp (VariableCMD exp) IO   where interp = runVariable
 
+-- | ...
 compileVariable :: forall exp a. CompileExp exp => VariableCMD exp VHDL a -> VHDL a
 compileVariable (NewVariable exp) =
   do v <- compEM exp
      t <- compTM exp
-     i <- Variable <$> M.freshUnique
+     i <- VariableC <$> M.freshUnique
      M.addLocal $ M.declVariable (toIdent i) t v
      return i
 compileVariable (GetVariable var) =
@@ -324,6 +341,12 @@ compileVariable (GetVariable var) =
      return v
 compileVariable (SetVariable var exp) =
   do M.addSequential =<< M.assignVariable (toIdent var) <$> compE exp
+
+-- | ...
+runVariable :: forall exp prog a. EvaluateExp exp => VariableCMD exp prog a -> IO a
+runVariable (NewVariable exp)               = fmap VariableE $ IR.newIORef $ evalEM exp
+runVariable (GetVariable (VariableE v))     = fmap litE $ IR.readIORef v
+runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v $ evalE exp
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -355,11 +378,11 @@ setVariable v = singleE . SetVariable v
 --------------------------------------------------------------------------------
 
 -- | ...
-data Array i a = Array Integer
+data Array i a = ArrayC Integer | ArrayE (IOArray i a)
 
 instance ToIdent (Array i a)
   where
-    toIdent (Array i) = Ident $ 'a' : show i
+    toIdent (ArrayC i) = Ident $ 'a' : show i
 
 class CompArrayIx exp
   where
@@ -440,9 +463,16 @@ instance HFunctor (ArrayCMD exp)
     hfmap _ (CopyArray a b i)    = CopyArray a b i
     hfmap _ (UnsafeGetArray i a) = UnsafeGetArray i a
 
-instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (ArrayCMD exp) VHDL
-  where
-    interp = compileArray
+instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (ArrayCMD exp) VHDL where interp = compileArray
+instance EvaluateExp exp                                    => Interp (ArrayCMD exp) IO   where interp = runArray
+
+-- | Fresh array type identifier
+freshA :: VHDL Identifier
+freshA = toIdent . ('t' :) . show <$> M.freshUnique
+
+-- | Compile type of array.
+compTA :: forall exp i a. (PredicateExp exp a, CompileExp exp) => exp i -> Array i a -> VHDL Type
+compTA _ _ = compT (undefined :: exp a)
 
 -- *** Signal commands can be both sequential and parallel and I shouldn't
 --     depend on them always being sequential.
@@ -451,17 +481,17 @@ compileArray (NewArray len) =
   do n <- compE  len
      t <- compTA len (undefined :: a)
      a <- freshA
-     i <- Array <$> M.freshUnique
+     i <- ArrayC <$> M.freshUnique
      let arr = M.constrainedArray a t (M.downtoZero n)
      M.addType arr
      M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) Nothing
      return i
 compileArray (NewArray_) =
-  do error "Needs a range constraint somewhere..."
+  do error "Needs a range constraint somewhere...even for unconstrained arrays"
 compileArray (InitArray is) =
   do t <- compTA (undefined :: exp i) (undefined :: a)
      a <- freshA
-     i <- Array <$> M.freshUnique
+     i <- ArrayC <$> M.freshUnique
      x <- sequence [compE (litE a :: exp b) | (a :: b) <- is]
      let len = M.downtoZero . H.lift . M.lit . show $ length is
          arr = M.constrainedArray a t len
@@ -489,11 +519,15 @@ compileArray (UnsafeGetArray ix arr) =
         return v
       Just e -> return e
 
-freshA :: VHDL Identifier
-freshA = toIdent . ('t' :) . show <$> M.freshUnique
-
-compTA :: forall exp i a. (PredicateExp exp a, CompileExp exp) => exp i -> Array i a -> VHDL Type
-compTA _ _ = compT (undefined :: exp a)
+-- | ...
+runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
+runArray (NewArray len)            = fmap ArrayE $ IA.newArray_ $ (,) 0 $ evalE len
+runArray (NewArray_)               = error "?"
+runArray (InitArray is)            = fmap ArrayE $ IA.newListArray (0, fromIntegral $ length is) is
+runArray (GetArray i (ArrayE a))   = fmap litE $ IA.readArray a $ evalE i
+runArray (SetArray i e (ArrayE a)) = IA.writeArray a (evalE i) (evalE e)
+runArray (CopyArray (ArrayE l) (ArrayE r) i) = error "?"
+runArray (UnsafeGetArray i    (ArrayE a))    = error "?"
 
 --------------------------------------------------------------------------------
 -- * ...
@@ -572,9 +606,8 @@ instance HFunctor (LoopCMD exp)
     hfmap f (For r step)      = For r (f . step)
     hfmap f (While cont step) = While (f cont) (f step)
 
-instance CompileExp exp => Interp (LoopCMD exp) VHDL
-  where
-    interp = compileLoop
+instance CompileExp  exp => Interp (LoopCMD exp) VHDL where interp = compileLoop
+instance EvaluateExp exp => Interp (LoopCMD exp) IO   where interp = runLoop
 
 compileLoop :: forall exp a. CompileExp exp => LoopCMD exp VHDL a -> VHDL a
 compileLoop (For r step) =
@@ -584,6 +617,10 @@ compileLoop (For r step) =
      M.addSequential $ V.SLoop $ loop
 compileLoop (While b step) =
   do undefined
+
+-- | ...
+runLoop :: forall exp prog a. EvaluateExp exp => LoopCMD exp prog a -> IO a
+runLoop (For r step) = undefined
 
 --------------------------------------------------------------------------------
 -- **
@@ -619,9 +656,7 @@ instance HFunctor (EntityCMD exp)
   where
     hfmap f (NewEntity e p) = NewEntity e (f p)
 
-instance CompileExp exp => Interp (EntityCMD exp) VHDL
-  where
-    interp = compileEntity
+instance CompileExp exp => Interp (EntityCMD exp) VHDL where interp = compileEntity
 
 compileEntity :: forall exp a. CompileExp exp => EntityCMD exp VHDL a -> VHDL a
 compileEntity (NewEntity s prog) = M.entity (Ident s) prog
@@ -656,9 +691,7 @@ instance HFunctor (ArchitectureCMD exp)
   where
     hfmap f (NewArchitecture e a p) = NewArchitecture e a (f p)
 
-instance CompileExp exp => Interp (ArchitectureCMD exp) VHDL
-  where
-    interp = compileArchitecture
+instance CompileExp exp => Interp (ArchitectureCMD exp) VHDL where interp = compileArchitecture
 
 compileArchitecture :: forall exp a. CompileExp exp => ArchitectureCMD exp VHDL a -> VHDL a
 compileArchitecture (NewArchitecture e a prog) = M.architecture (Ident e) (Ident a) prog
@@ -695,9 +728,7 @@ instance HFunctor (ProcessCMD exp)
   where
     hfmap f (NewProcess is p) = NewProcess is (f p)
 
-instance CompileExp exp => Interp (ProcessCMD exp) VHDL
-  where
-    interp = compileProcess
+instance CompileExp exp => Interp (ProcessCMD exp) VHDL where interp = compileProcess
 
 compileProcess :: forall exp a. CompileExp exp => ProcessCMD exp VHDL a -> VHDL a
 compileProcess (NewProcess is prog) =
@@ -743,9 +774,7 @@ instance HFunctor (ConditionalCMD exp)
   where
     hfmap f (If a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
 
-instance CompileExp exp => Interp (ConditionalCMD exp) VHDL
-  where
-    interp = compileConditional
+instance CompileExp exp => Interp (ConditionalCMD exp) VHDL where interp = compileConditional
 
 compileConditional :: forall exp a. CompileExp exp => ConditionalCMD exp VHDL a -> VHDL a
 compileConditional (If (a, b) cs em) =
