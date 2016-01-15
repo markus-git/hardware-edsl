@@ -404,14 +404,6 @@ data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
          , Ix i )
       => exp i -> ArrayCMD exp prog (Array i a)
 
-    -- ^ Creates an array with a unspecified length.
-    NewArray_
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i )
-      => ArrayCMD exp prog (Array i a)
-
     -- ^ Creates an array from the given list of elements.
     InitArray
       :: ( PredicateExp exp a
@@ -461,7 +453,6 @@ type instance IExp (ArrayCMD e :+: i) = e
 instance HFunctor (ArrayCMD exp)
   where
     hfmap _ (NewArray i)         = NewArray i
-    hfmap _ (NewArray_)          = NewArray_
     hfmap _ (InitArray is)       = InitArray is
     hfmap _ (GetArray i a)       = GetArray i a
     hfmap _ (SetArray i e a)     = SetArray i e a
@@ -491,8 +482,6 @@ compileArray (NewArray len) =
      M.addType arr
      M.addLocal $ M.declVariable (toIdent i) (M.typeName arr) Nothing
      return i
-compileArray (NewArray_) =
-  do error "Needs a range constraint somewhere...even for unconstrained arrays"
 compileArray (InitArray is) =
   do t <- compTA (undefined :: exp i) (undefined :: a)
      a <- freshA
@@ -527,7 +516,6 @@ compileArray (UnsafeGetArray ix arr) =
 -- | ...
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
 runArray (NewArray len)            = fmap ArrayE $ IA.newArray_ $ (,) 0 $ evalE len
-runArray (NewArray_)               = error "?"
 runArray (InitArray is)            = fmap ArrayE $ IA.newListArray (0, fromIntegral $ length is) is
 runArray (GetArray i (ArrayE a))   = fmap litE $ IA.readArray a $ evalE i
 runArray (SetArray i e (ArrayE a)) = IA.writeArray a (evalE i) (evalE e)
