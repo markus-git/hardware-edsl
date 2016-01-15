@@ -21,6 +21,7 @@ module Language.Embedded.VHDL.Command
   , newSignal_
   , getSignal
   , setSignal
+  , unsafeFreezeSignal
   , (<==)
   , newPort
   , newPort_
@@ -34,6 +35,7 @@ module Language.Embedded.VHDL.Command
   , newVariable_
   , getVariable
   , setVariable
+  , unsafeFreezeVariable
   , (==:)
 
     -- ^ Arrays.
@@ -130,9 +132,13 @@ class ToIdent a
   where
     toIdent :: a -> V.Identifier
 
-instance ToIdent String
-  where
-    toIdent = V.Ident
+instance ToIdent String       where toIdent = V.Ident
+instance ToIdent (Signal a)   where toIdent (SignalC i)   = Ident $ 's' : show i
+instance ToIdent (Variable a) where toIdent (VariableC i) = Ident $ 'v' : show i
+instance ToIdent (Array i a)  where toIdent (ArrayC i)    = Ident $ 'a' : show i
+
+--------------------------------------------------------------------------------
+-- ** ...
 
 freshVar :: forall exp a. (CompileExp exp, PredicateExp exp a) => VHDL (exp a, Identifier)
 freshVar = do
@@ -154,8 +160,7 @@ dig (V.ENand
             (V.Term
               (V.FacPrim
                 (V.PrimName
-                  (V.NSimple i))
-     _)_)_)_)_)_) = i
+                  (V.NSimple i)) _)_)_)_)_)_) = i
 
 --------------------------------------------------------------------------------
 -- * ... Signals
@@ -170,34 +175,20 @@ data Clause   = Port    | Generic
 data Scope    = Process | Architecture | Entity
   deriving (Show)
 
--- | ...
+-- | Signal representation.
 data Signal a = SignalC Integer | SignalE (IORef a)
 
-instance ToIdent (Signal a)
-  where
-    toIdent (SignalC i) = Ident $ 's' : show i
-
--- | ...
+-- | Commands for signals.
 data SignalCMD (exp :: * -> *) (prog :: * -> *) a
   where
-    NewSignal
-      :: PredicateExp exp a
-      => Clause
-      -> Scope
-      -> Mode
-      -> Maybe (exp a)
-      -> SignalCMD exp prog (Signal a)
-
-    GetSignal
-      :: PredicateExp exp a
-      => Signal a
-      -> SignalCMD exp prog (exp a)
-
-    SetSignal
-      :: PredicateExp exp a
-      => Signal a
-      -> exp a
-      -> SignalCMD exp prog ()
+    -- ^ ...
+    NewSignal :: PredicateExp exp a => Clause -> Scope -> Mode  -> Maybe (exp a) -> SignalCMD exp prog (Signal a)
+    -- ^ ...
+    GetSignal :: PredicateExp exp a => Signal a          -> SignalCMD exp prog (exp a)
+    -- ^ ...
+    SetSignal :: PredicateExp exp a => Signal a -> exp a -> SignalCMD exp prog ()
+    -- ^ ...
+    UnsafeFreezeSignal :: PredicateExp exp a => Signal a -> SignalCMD exp prog (exp a)
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -236,12 +227,15 @@ compileSignal (GetSignal s) =
      return v
 compileSignal (SetSignal s exp) =
   do M.addSequential =<< M.assignSequentialSignal (toIdent s) <$> compE exp
+compileSignal (UnsafeFreezeSignal (SignalC s)) =
+  do return $ varE s
 
 -- | ...
 runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
 runSignal (NewSignal _ _ _ exp)        = fmap SignalE $ IR.newIORef $ evalEM exp
 runSignal (GetSignal (SignalE r))      = fmap litE $ IR.readIORef r
 runSignal (SetSignal (SignalE r) exp)  = IR.writeIORef r $ evalE exp
+runSignal (UnsafeFreezeSignal r)       = runSignal (GetSignal r)
 
 --------------------------------------------------------------------------------
 -- ** ..
@@ -261,6 +255,10 @@ getSignal = singleE . GetSignal
 -- | Update the value of a signal.
 setSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
 setSignal s = singleE . SetSignal s
+
+-- | ...
+unsafeFreezeSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> ProgramT i m (IExp i a)
+unsafeFreezeSignal = singleE . UnsafeFreezeSignal
 
 --------------------------------------------------------------------------------
 
@@ -292,29 +290,20 @@ newGeneric_ m = singleE $ NewSignal Generic Entity m Nothing
 -- * ... Variables
 --------------------------------------------------------------------------------
 
+-- | Variable representation.
 data Variable a = VariableC Integer | VariableE (IORef a)
 
-instance ToIdent (Variable a)
-  where
-    toIdent (VariableC i) = Ident $ 'v' : show i
-
+-- | Commands for variables.
 data VariableCMD (exp :: * -> *) (prog :: * -> *) a
   where
-    NewVariable
-      :: PredicateExp exp a
-      => Maybe (exp a)
-      -> VariableCMD exp prog (Variable a)
-
-    GetVariable
-      :: PredicateExp exp a
-      => Variable a
-      -> VariableCMD exp prog (exp a)
-
-    SetVariable
-      :: PredicateExp exp a
-      => Variable a
-      -> exp a
-      -> VariableCMD exp prog ()
+    -- ^ ...
+    NewVariable :: PredicateExp exp a => Maybe (exp a) -> VariableCMD exp prog (Variable a)
+    -- ^ ...
+    GetVariable :: PredicateExp exp a => Variable a          -> VariableCMD exp prog (exp a)
+    -- ^ ...
+    SetVariable :: PredicateExp exp a => Variable a -> exp a -> VariableCMD exp prog ()
+    -- ^ ...
+    UnsafeFreezeVariable :: PredicateExp exp a => Variable a -> VariableCMD exp prog (exp a)
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -346,12 +335,15 @@ compileVariable (GetVariable var) =
      return v
 compileVariable (SetVariable var exp) =
   do M.addSequential =<< M.assignVariable (toIdent var) <$> compE exp
+compileVariable (UnsafeFreezeVariable (VariableC v)) =
+  do return $ varE v
 
 -- | ...
 runVariable :: forall exp prog a. EvaluateExp exp => VariableCMD exp prog a -> IO a
 runVariable (NewVariable exp)               = fmap VariableE $ IR.newIORef $ evalEM exp
 runVariable (GetVariable (VariableE v))     = fmap litE $ IR.readIORef v
 runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v $ evalE exp
+runVariable (UnsafeFreezeVariable v)        = runVariable (GetVariable v)
 
 --------------------------------------------------------------------------------
 -- ** ...
@@ -372,6 +364,10 @@ getVariable = singleE . GetVariable
 setVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> IExp i a -> ProgramT i m ()
 setVariable v = singleE . SetVariable v
 
+-- | ...
+unsafeFreezeVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> ProgramT i m (IExp i a)
+unsafeFreezeVariable = singleE . UnsafeFreezeVariable
+
 --------------------------------------------------------------------------------
 
 -- | Short-hand for 'setVariable'.
@@ -382,18 +378,16 @@ setVariable v = singleE . SetVariable v
 -- * ... Arrays
 --------------------------------------------------------------------------------
 
--- | ...
+-- | Array reprensentation.
 data Array i a = ArrayC Integer | ArrayE (IOArray i a)
 
-instance ToIdent (Array i a)
-  where
-    toIdent (ArrayC i) = Ident $ 'a' : show i
-
+-- | Expression types that support compilation of array indexing.
 class CompArrayIx exp
   where
     compArrayIx :: PredicateExp exp a => exp i -> Array i a -> Maybe (exp a)
     compArrayIx _ _ = Nothing
 
+-- | Array commands.
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Creates an array of given length.
@@ -403,7 +397,6 @@ data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
          , Integral i
          , Ix i )
       => exp i -> ArrayCMD exp prog (Array i a)
-
     -- ^ Creates an array from the given list of elements.
     InitArray
       :: ( PredicateExp exp a
@@ -411,32 +404,21 @@ data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
          , Integral i
          , Ix i )
       => [a] -> ArrayCMD exp prog (Array i a)
-
-    -- ^ ...
+    -- ^ Fetches the array's value at a specified index.
     GetArray
       :: ( PredicateExp exp a
          , PredicateExp exp i
          , Integral i
          , Ix i )
       => exp i -> Array i a -> ArrayCMD exp prog (exp a)
-
-    -- ^ ...
+    -- ^ Writes a value to an array at some specified index.
     SetArray
       :: ( PredicateExp exp a
          , PredicateExp exp i
          , Integral i
          , Ix i )
       => exp i -> exp a -> Array i a -> ArrayCMD exp prog ()
-
     -- ^ ...
-    CopyArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i )
-      => Array i a -> Array i a -> exp i -> ArrayCMD exp prog ()
-
-    -- ^ ..
     UnsafeGetArray
       :: ( PredicateExp exp a
          , PredicateExp exp i
@@ -456,7 +438,6 @@ instance HFunctor (ArrayCMD exp)
     hfmap _ (InitArray is)       = InitArray is
     hfmap _ (GetArray i a)       = GetArray i a
     hfmap _ (SetArray i e a)     = SetArray i e a
-    hfmap _ (CopyArray a b i)    = CopyArray a b i
     hfmap _ (UnsafeGetArray i a) = UnsafeGetArray i a
 
 instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (ArrayCMD exp) VHDL where interp = compileArray
@@ -502,8 +483,6 @@ compileArray (SetArray i e arr) =
      e' <- compE e
      -- this could be concurrent as well.
      M.addSequential $ M.assignArray (M.index (toIdent arr) i') e'
-compileArray (CopyArray arr1 arr2 i) =
-  do error "Not sure what this would be in VHDL..."
 compileArray (UnsafeGetArray ix arr) =
   case compArrayIx ix arr of
       Nothing -> do
@@ -519,8 +498,6 @@ runArray (NewArray len)            = fmap ArrayE $ IA.newArray_ $ (,) 0 $ evalE 
 runArray (InitArray is)            = fmap ArrayE $ IA.newListArray (0, fromIntegral $ length is) is
 runArray (GetArray i (ArrayE a))   = fmap litE $ IA.readArray a $ evalE i
 runArray (SetArray i e (ArrayE a)) = IA.writeArray a (evalE i) (evalE e)
-runArray (CopyArray (ArrayE a) (ArrayE b) l) =
-  sequence_ [ IA.readArray a i >>= IA.writeArray b i | i <- genericTake (evalE l) [0..] ]
 runArray (UnsafeGetArray i a)      = runArray (GetArray i a)
 
 --------------------------------------------------------------------------------
