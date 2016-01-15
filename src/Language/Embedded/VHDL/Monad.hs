@@ -1,7 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds            #-}
 {-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE Rank2Types                 #-}
 
 -- used for the Ord/Eq inst. of XDeclaration etc.
 {-# LANGUAGE StandaloneDeriving #-}
@@ -13,22 +12,16 @@ module Language.Embedded.VHDL.Monad (
   , emptyVHDLEnv
     
     -- ^ run
-  , runVHDLT
-  , runVHDL
-  , execVHDLT
-  , execVHDL
+  , runVHDLT, runVHDL, execVHDLT, execVHDL
 
-    -- ^ pretty
-  , prettyVHDL
-  , prettyVHDLT
+    -- ^ pretty printing
+  , prettyVHDL, prettyVHDLT
 
-    -- ^ names
-  , freshUnique
-  , newSym
-  , newLabel
+    -- ^ name generation
+  , freshUnique, newSym, newLabel
 
     -- ^ imports
-  , newLibrary,    newImport
+  , newLibrary, newImport
 
     -- ^ declarations
   , addPort,       addGeneric
@@ -37,81 +30,58 @@ module Language.Embedded.VHDL.Monad (
   , addType,       addComponent
 
     -- ^ statements
-  , inProcess
-  , inFor
-  , inWhile
-  , inConditional
-  , inCase
+  , inProcess, inFor, inWhile, inConditional, inCase
 
-    -- ^ ...
-  , entity
-  , architecture
-  , package
+    -- ^ structures
+  , entity, architecture, package
 
-    -- ^ common
-  , typeName
+    -- ^ common things
   , interfaceConstant, interfaceSignal, interfaceVariable
-  , declRecord, declConstant, declSignal, declVariable
-  , unconstrainedArray
-  , constrainedArray
-  , portMap
-  , assignConcurrentSignal
-  , assignSequentialSignal
-  , assignVariable
-  , assignArray
+  , declareConstant,   declareSignal,   declareVariable
+  , assignSignal,      assignSignalS,   assignVariable,   assignArray
+
+  , unconstrainedArray, constrainedArray
   ) where
 
-import Language.VHDL (Identifier(..), Mode(..), Expression, Label)
-import qualified Language.VHDL as V
+import Language.VHDL
 
-import Language.Embedded.VHDL.Monad.Expression
-import Language.Embedded.VHDL.Monad.Type
-
-import Control.Arrow          (first, second)
-import Control.Applicative
-import Control.Monad
+import Control.Applicative    ((<$>))
 import Control.Monad.Identity (Identity)
 import Control.Monad.State    (StateT, MonadState, MonadIO)
 import qualified Control.Monad.Identity as CMI
 import qualified Control.Monad.State    as CMS
 
-import Data.Maybe       (catMaybes)
-import Data.Foldable    (toList)
-import Data.Functor
-import Data.List        (groupBy)
-import Data.Set         (Set)
+import Data.Maybe    (catMaybes)
+import Data.Foldable (toList)
+import Data.Functor  (fmap)
+import Data.List     (groupBy)
+import Data.Set      (Set)
+import Data.Map      (Map)
 import qualified Data.Set as Set
-import Data.Map         (Map)
 import qualified Data.Map as Map
 
-import Text.PrettyPrint (Doc, ($+$))
-import qualified Text.PrettyPrint as Text
+import Text.PrettyPrint (Doc)
 
 import Prelude hiding (null, not, abs, exp, rem, mod, div, and, or)
 import qualified Prelude as P
 
 --------------------------------------------------------------------------------
--- * ..
+-- * VHDL monad and environment.
 --------------------------------------------------------------------------------
 
 -- | Code generation state
 data VHDLEnv = VHDLEnv
   { _unique        :: !Integer
-    -- ..
-  , _designs       :: [V.DesignUnit]
-    -- ...
-  , _context       :: Set V.ContextItem
-  , _types         :: Set V.TypeDeclaration
-    -- headers
-  , _ports         :: [V.InterfaceDeclaration]
-  , _generics      :: [V.InterfaceDeclaration]
-  , _components    :: Set V.ComponentDeclaration
-    -- declarations
-  , _global        :: [V.BlockDeclarativeItem]
-  , _local         :: [V.BlockDeclarativeItem]
-    -- statements
-  , _concurrent    :: [V.ConcurrentStatement]
-  , _sequential    :: [V.SequentialStatement]
+  , _designs       :: [DesignUnit]
+  , _context       :: Set ContextItem
+  , _types         :: Set TypeDeclaration
+  , _ports         :: [InterfaceDeclaration]
+  , _generics      :: [InterfaceDeclaration]
+  , _components    :: Set ComponentDeclaration
+  , _global        :: [BlockDeclarativeItem]
+  , _local         :: [BlockDeclarativeItem]
+  , _concurrent    :: [ConcurrentStatement]
+  , _sequential    :: [SequentialStatement]
   }
 
 -- | Initial state during code generation
@@ -130,7 +100,7 @@ emptyVHDLEnv = VHDLEnv
   }
 
 --------------------------------------------------------------------------------
--- * 
+-- * VHDL monad.
 
 -- | Type constraints for the VHDL monads
 type MonadV m = (Functor m, Applicative m, Monad m, MonadState VHDLEnv m)
@@ -164,7 +134,7 @@ execVHDL :: VHDL a -> VHDLEnv -> VHDLEnv
 execVHDL m = CMI.runIdentity . execVHDLT m
 
 --------------------------------------------------------------------------------
--- ** Generating uniques
+-- ** Generating uniques.
 
 -- | Generates a unique integer.
 freshUnique :: MonadV m => m Integer
@@ -182,83 +152,60 @@ newLabel :: MonadV m => m Label
 newLabel = do i <- freshUnique; return (Ident $ 'l' : show i)
 
 --------------------------------------------------------------------------------
--- ** ...
+-- ** VHDL environment updates.
 
 -- | Adds a new library import to the context.
 newLibrary :: MonadV m => String -> m ()
 newLibrary l = CMS.modify $ \s -> s { _context = Set.insert item (_context s) }
   where
-    item :: V.ContextItem
-    item = V.ContextLibrary (V.LibraryClause (V.LogicalNameList [V.Ident l]))
+    item :: ContextItem
+    item = ContextLibrary (LibraryClause (LogicalNameList [Ident l]))
 
 -- | Adds a new library use clause to the context (with an .ALL suffix by default).
 newImport :: MonadV m => String -> m ()
 newImport i = CMS.modify $ \s -> s { _context = Set.insert item (_context s) }
   where
-    item :: V.ContextItem
-    item = V.ContextUse (V.UseClause [V.SelectedName (V.PName (V.NSimple (V.Ident i))) (V.SAll)])
-
---------------------------------------------------------------------------------
--- ** Header declarations -- ignores port/generic maps for now
+    item :: ContextItem
+    item = ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) (SAll)])
 
 -- | Adds a port declaration to the entity.
-addPort :: MonadV m => V.InterfaceDeclaration -> m ()
+addPort :: MonadV m => InterfaceDeclaration -> m ()
 addPort p = CMS.modify $ \s -> s { _ports = p : (_ports s) }
 
 -- | Adds a generic declaration to the entity.
-addGeneric :: MonadV m => V.InterfaceDeclaration -> m ()
+addGeneric :: MonadV m => InterfaceDeclaration -> m ()
 addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
 
---------------------------------------------------------------------------------
--- ** Type declarations
-
 -- | Adds a type declaration.
-addType :: MonadV m => V.TypeDeclaration -> m ()
+addType :: MonadV m => TypeDeclaration -> m ()
 addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
 
 -- | Adds a component declaration.
-addComponent :: MonadV m => V.ComponentDeclaration -> m ()
+addComponent :: MonadV m => ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
 
---------------------------------------------------------------------------------
--- ** Item declarations
-
 -- | Adds a global declaration.
-addGlobal :: MonadV m => V.BlockDeclarativeItem -> m ()
+addGlobal :: MonadV m => BlockDeclarativeItem -> m ()
 addGlobal g = CMS.modify $ \s -> s { _global = g : (_global s) }
 
 -- | Adds a local declaration.
-addLocal :: MonadV m => V.BlockDeclarativeItem -> m ()
+addLocal :: MonadV m => BlockDeclarativeItem -> m ()
 addLocal l = CMS.modify $ \s -> s { _local = l : (_local s) }
 
---------------------------------------------------------------------------------
--- ** Statement declarations
-
 -- | Adds a concurrent statement.
-addConcurrent :: MonadV m => V.ConcurrentStatement -> m ()
+addConcurrent :: MonadV m => ConcurrentStatement -> m ()
 addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
 
 -- | Adds a sequential statement.
-addSequential :: MonadV m => V.SequentialStatement -> m ()
+addSequential :: MonadV m => SequentialStatement -> m ()
 addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 
 --------------------------------------------------------------------------------
 -- * Concurrent and sequential statements
 --------------------------------------------------------------------------------
 
--- | ... helper ...
-contain :: MonadV m => m () -> m [V.SequentialStatement]
-contain m = do
-  m                                          -- do
-  new <- reverse <$> CMS.gets _sequential    -- get
-  CMS.modify $ \e -> e { _sequential = [] }  -- reset
-  return new                                 -- return
-
---------------------------------------------------------------------------------
--- ** Process-statements
-
 -- | Runs the given action inside a process.
-inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, V.ProcessStatement)
+inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, ProcessStatement)
 inProcess l is m =
   do oldLocals     <- CMS.gets _local
      oldSequential <- CMS.gets _sequential
@@ -270,7 +217,7 @@ inProcess l is m =
      CMS.modify $ \e -> e { _local      = oldLocals
                           , _sequential = oldSequential }
      return ( result
-            , V.ProcessStatement
+            , ProcessStatement
                 (Just l)                        -- label
                 (False)                         -- postponed
                 (sensitivity)                   -- sensitivitylist
@@ -278,12 +225,10 @@ inProcess l is m =
                 (newSequential))                -- statementpart
   where
     sensitivity | P.null is = Nothing
-                | otherwise = Just $ V.SensitivityList $ fmap V.NSimple is
+                | otherwise = Just $ SensitivityList $ fmap NSimple is
 
---------------------------------------------------------------------------------
--- ** Loop-statements
-
-inFor :: MonadV m => Identifier -> V.Range -> m () -> m (V.LoopStatement)
+-- | Run program in for loop.
+inFor :: MonadV m => Identifier -> Range -> m () -> m (LoopStatement)
 inFor i r m =
   do oldSequential <- CMS.gets _sequential
      CMS.modify $ \e -> e { _sequential = [] }
@@ -291,14 +236,15 @@ inFor i r m =
      newSequential <- reverse <$> CMS.gets _sequential
      CMS.modify $ \e -> e { _sequential = oldSequential }
      return $
-       V.LoopStatement
+       LoopStatement
          (Nothing)
-         (Just (V.IterFor (V.ParameterSpecification
+         (Just (IterFor (ParameterSpecification
            (i)
-           (V.DRRange r))))
+           (DRRange r))))
          (newSequential)
 
-inWhile :: MonadV m => Expression -> m () -> m (V.LoopStatement)
+-- | Run program inside while loop.
+inWhile :: MonadV m => Expression -> m () -> m (LoopStatement)
 inWhile cont m =
   do oldSequential <- CMS.gets _sequential
      CMS.modify $ \e -> e { _sequential = [] }
@@ -306,16 +252,13 @@ inWhile cont m =
      newSequential <- reverse <$> CMS.gets _sequential
      CMS.modify $ \e -> e { _sequential = oldSequential }
      return $
-       V.LoopStatement
+       LoopStatement
          (Nothing)
-         (Just (V.IterWhile cont))
+         (Just (IterWhile cont))
          (newSequential)
 
---------------------------------------------------------------------------------
--- ** If-statements
-
--- | ...
-inConditional :: MonadV m => (V.Condition, m ()) -> [(V.Condition, m ())] -> m () -> m (V.IfStatement)
+-- | Conditional statements.
+inConditional :: MonadV m => (Condition, m ()) -> [(Condition, m ())] -> m () -> m (IfStatement)
 inConditional (c, m) os e =
   do let (cs, ns) = unzip os
      oldSequential <- CMS.gets _sequential
@@ -325,22 +268,19 @@ inConditional (c, m) os e =
      e'  <- contain e
      CMS.modify $ \e -> e { _sequential = oldSequential }
      return $
-       V.IfStatement
+       IfStatement
          (Nothing)
          (c, m')
          (zip cs ns')
          (maybeList e')
   where
-    maybeList :: [V.SequentialStatement] -> Maybe [V.SequentialStatement]
+    maybeList :: [SequentialStatement] -> Maybe [SequentialStatement]
     maybeList xs
       | P.null xs = Nothing
       | otherwise = Just xs
 
---------------------------------------------------------------------------------
--- ** Case-statements
-
--- | ...
-inCase :: MonadV m => V.Expression -> [(V.Choices, m ())] -> m (V.CaseStatement)
+-- | Case statements.
+inCase :: MonadV m => Expression -> [(Choices, m ())] -> m (CaseStatement)
 inCase e choices =
   do let (cs, ns) = unzip choices
      oldSequential <- CMS.gets _sequential
@@ -348,28 +288,35 @@ inCase e choices =
      ns' <- mapM contain ns
      CMS.modify $ \e -> e { _sequential = oldSequential }     
      return $
-       V.CaseStatement
+       CaseStatement
          (Nothing)
          (e)
-         (zipWith V.CaseStatementAlternative cs ns')
+         (zipWith CaseStatementAlternative cs ns')
+
+contain :: MonadV m => m () -> m [SequentialStatement]
+contain m = do
+  m                                          -- do
+  new <- reverse <$> CMS.gets _sequential    -- get
+  CMS.modify $ \e -> e { _sequential = [] }  -- reset
+  return new                                 -- return
 
 --------------------------------------------------------------------------------
 -- * Design units
 --------------------------------------------------------------------------------
 
--- | ... design unit with context
-addDesign :: MonadV m => V.LibraryUnit -> m ()
+-- ... design unit with context
+addDesign :: MonadV m => LibraryUnit -> m ()
 addDesign lib =
   do ctxt <- CMS.gets _context
      dsig <- CMS.gets _designs
-     let item = V.DesignUnit (V.ContextClause (Set.toList ctxt)) lib
+     let item = DesignUnit (ContextClause (Set.toList ctxt)) lib
      CMS.modify $ \s -> s { _designs = item : dsig
                           , _context = Set.empty
                           }
 
--- | .. design unit ignoring context
-addDesign_ :: MonadV m => V.LibraryUnit -> m ()
-addDesign_ lib = CMS.modify $ \s -> s { _designs = (V.DesignUnit (V.ContextClause []) lib) : (_designs s)}
+-- .. design unit ignoring context
+addDesign_ :: MonadV m => LibraryUnit -> m ()
+addDesign_ lib = CMS.modify $ \s -> s { _designs = (DesignUnit (ContextClause []) lib) : (_designs s)}
 
 --------------------------------------------------------------------------------
 -- ** Architectures
@@ -386,10 +333,10 @@ architecture entity name m =
      result        <- m
      newGlobal     <- reverse <$> CMS.gets _global
      newConcurrent <- reverse <$> CMS.gets _concurrent
-     addDesign_ $ V.LibrarySecondary $ V.SecondaryArchitecture $
-           V.ArchitectureBody
+     addDesign_ $ LibrarySecondary $ SecondaryArchitecture $
+           ArchitectureBody
              (name)
-             (V.NSimple entity)
+             (NSimple entity)
              (merge newGlobal)
              (newConcurrent)
      CMS.modify $ \e -> e { _global     = oldGlobal
@@ -410,21 +357,21 @@ entity name m =
      result      <- m
      newPorts    <- reverse <$> CMS.gets _ports
      newGenerics <- reverse <$> CMS.gets _generics
-     addDesign  $ V.LibraryPrimary $ V.PrimaryEntity $
-           V.EntityDeclaration
+     addDesign  $ LibraryPrimary $ PrimaryEntity $
+           EntityDeclaration
              (name)
-             (V.EntityHeader
-               (V.GenericClause <$> maybeNull newGenerics)
-               (V.PortClause    <$> maybeNull newPorts))
+             (EntityHeader
+               (GenericClause <$> maybeNull newGenerics)
+               (PortClause    <$> maybeNull newPorts))
              ([])
              (Nothing)
      CMS.modify $ \e -> e { _ports    = oldPorts
                           , _generics = oldGenerics }
      return result
   where
-    maybeNull :: [V.InterfaceDeclaration] -> Maybe V.InterfaceList
+    maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
     maybeNull [] = Nothing
-    maybeNull xs = Just $ V.InterfaceList $ merge xs
+    maybeNull xs = Just $ InterfaceList $ merge xs
 
 --------------------------------------------------------------------------------
 -- ** Packages
@@ -437,21 +384,15 @@ package name m =
      CMS.modify $ \e -> e { _types = Set.empty }
      result   <- m
      newTypes <- CMS.gets _types
-     addDesign  $ V.LibraryPrimary $ V.PrimaryPackage $
-           V.PackageDeclaration
-             (V.Ident name)
-             (fmap V.PHDIType $ Set.toList newTypes)
-{-             
-     addDesign_ $ V.LibrarySecondary $ V.SecondaryPackage $
-           V.PackageBody
-             (V.Ident name)
-             ([])
--}
+     addDesign  $ LibraryPrimary $ PrimaryPackage $
+           PackageDeclaration
+             (Ident name)
+             (fmap PHDIType $ Set.toList newTypes)
      CMS.modify $ \e -> e { _types = oldTypes }
      return result
 
 --------------------------------------------------------------------------------
--- * Pretty
+-- * Pretty printing VHDL programs
 --------------------------------------------------------------------------------
 
 -- | Runs the VHDL monad and pretty prints its resulting VHDL program.
@@ -469,16 +410,14 @@ prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
 -- *** Shouldn't use revers to fix ordering issues! Pair architectures/bodies
 --     with their respective entities.
 prettyVEnv :: VHDLEnv -> Doc
-prettyVEnv env = V.pp (V.DesignFile $ types ++ archi)
+prettyVEnv env = pp (DesignFile $ types ++ archi)
   where
     archi = reverse $ _designs env
     types = reverse $ designTypes (_types env)
 
--- | ...
---
 -- *** Scan type declarations for necessary imports instead.
 -- *** Types are added in an ugly manner.
-designTypes :: Set V.TypeDeclaration -> [V.DesignUnit]
+designTypes :: Set TypeDeclaration -> [DesignUnit]
 designTypes set
   | Set.null set = []
   | otherwise    = _designs . snd $ runVHDL pack emptyVHDLEnv
@@ -496,113 +435,87 @@ designTypes set
 -- * Common things
 --------------------------------------------------------------------------------
 
-typeName :: V.TypeDeclaration -> V.SubtypeIndication
-typeName (V.TDFull    (V.FullTypeDeclaration i _))     = fromSimpleName i
-typeName (V.TDPartial (V.IncompleteTypeDeclaration i)) = fromSimpleName i
+--------------------------------------------------------------------------------
+-- ** Ports/Generic declarations
 
-fromSimpleName :: Identifier -> V.SubtypeIndication
-fromSimpleName i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
+interfaceConstant :: Identifier -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
+interfaceConstant i t e = InterfaceConstantDeclaration [i] t e
+
+interfaceSignal   :: Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
+interfaceSignal i m t e = InterfaceSignalDeclaration [i] (Just m) t False e
+
+interfaceVariable :: Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
+interfaceVariable i m t e = InterfaceVariableDeclaration [i] (Just m) t e
 
 --------------------------------------------------------------------------------
--- **  Ports/Generic declarations
+-- ** Array Declarations.
 
-interfaceConstant :: Identifier -> Type -> Maybe Expression -> V.InterfaceDeclaration
-interfaceConstant i t e = V.InterfaceConstantDeclaration [i] t e
+compositeTypeDeclaration :: Identifier -> CompositeTypeDefinition -> TypeDeclaration
+compositeTypeDeclaration name t = TDFull (FullTypeDeclaration name (TDComposite t))
 
-interfaceSignal   :: Identifier -> Mode -> Type -> Maybe Expression -> V.InterfaceDeclaration
-interfaceSignal i m t e = V.InterfaceSignalDeclaration [i] (Just m) t False e
-
-interfaceVariable :: Identifier -> Mode -> Type -> Maybe Expression -> V.InterfaceDeclaration
-interfaceVariable i m t e = V.InterfaceVariableDeclaration [i] (Just m) t e
-
---------------------------------------------------------------------------------
--- ** Type/Component Declarations
-
-compositeTypeDeclaration :: Identifier -> V.CompositeTypeDefinition -> V.TypeDeclaration
-compositeTypeDeclaration name t = V.TDFull (V.FullTypeDeclaration name (V.TDComposite t))
-
-declRecord :: Identifier -> [(Identifier, Type)] -> V.TypeDeclaration
-declRecord name es = compositeTypeDeclaration name $
-    V.CTDRecord (V.RecordTypeDefinition (fmap decl es) (Just name))
-  where
-    decl (i, t) = V.ElementDeclaration [i] t
-
--- | ...
-unconstrainedArray :: Identifier -> Type -> V.TypeDeclaration
+unconstrainedArray :: Identifier -> SubtypeIndication -> TypeDeclaration
 unconstrainedArray name typ = compositeTypeDeclaration name $
-  V.CTDArray (V.ArrU (V.UnconstrainedArrayDefinition [] typ))
+  CTDArray (ArrU (UnconstrainedArrayDefinition [] typ))
 
--- | ...
-constrainedArray :: Identifier -> Type -> V.Range -> V.TypeDeclaration
+constrainedArray :: Identifier -> SubtypeIndication -> Range -> TypeDeclaration
 constrainedArray name typ range = compositeTypeDeclaration name $
-  V.CTDArray (V.ArrC (V.ConstrainedArrayDefinition
-    (V.IndexConstraint [V.DRRange range]) typ))
+  CTDArray (ArrC (ConstrainedArrayDefinition
+    (IndexConstraint [DRRange range]) typ))
 
 --------------------------------------------------------------------------------
--- ** Global/Local Declarations
+-- ** Global/Local Declarations.
 
-declConstant :: Identifier -> Type -> Maybe Expression -> V.BlockDeclarativeItem
-declConstant i t e = V.BDIConstant $ V.ConstantDeclaration [i] t e
+declareConstant :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
+declareConstant i t e = BDIConstant $ ConstantDeclaration [i] t e
 
-declSignal :: Identifier -> Type -> Maybe Expression -> V.BlockDeclarativeItem
-declSignal i t e = V.BDISignal $ V.SignalDeclaration [i] t Nothing e
+declareSignal :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
+declareSignal i t e = BDISignal $ SignalDeclaration [i] t Nothing e
 
-declVariable :: Identifier -> Type -> Maybe Expression -> V.BlockDeclarativeItem
-declVariable i t e = V.BDIShared $ V.VariableDeclaration False [i] t e
-
---------------------------------------------------------------------------------
--- ** Component instantiation (port mapping)
-
-portMap :: Label -> Identifier -> [V.ActualDesignator] -> V.ConcurrentStatement
-portMap l n ns = V.ConComponent $
-  V.ComponentInstantiationStatement
-    (l)
-    (V.IUComponent (V.NSimple n))
-    (Nothing)
-    (Just $ V.PortMapAspect
-      (V.AssociationList $
-        fmap (V.AssociationElement Nothing) $
-          fmap V.APDesignator ns))
+declareVariable :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
+declareVariable i t e = BDIShared $ VariableDeclaration False [i] t e
 
 --------------------------------------------------------------------------------
--- ** Assign Signal/Variable
+-- ** Assign Signal/Variable.
 
-assignConcurrentSignal :: Identifier -> Expression -> V.ConcurrentStatement
-assignConcurrentSignal i e = V.ConSignalAss $ V.CSASCond Nothing False $ 
-    (V.ConditionalSignalAssignment
-      (V.TargetName (V.NSimple i))
-      (V.Options False Nothing)
-      (V.ConditionalWaveforms
+assignSignal :: Identifier -> Expression -> ConcurrentStatement
+assignSignal i e = ConSignalAss $ CSASCond Nothing False $ 
+    ConditionalSignalAssignment
+      (TargetName (NSimple i))
+      (Options False Nothing)
+      (ConditionalWaveforms
         ([])
-        ( V.WaveElem [V.WaveEExp e Nothing]
-        , Nothing)))
+        ( WaveElem [WaveEExp e Nothing]
+        , Nothing))
 
-assignSequentialSignal :: Identifier -> Expression -> V.SequentialStatement
-assignSequentialSignal i e = V.SSignalAss $
-  V.SignalAssignmentStatement
+assignSignalS :: Identifier -> Expression -> SequentialStatement
+assignSignalS i e = SSignalAss $
+  SignalAssignmentStatement
     (Nothing)
-    (V.TargetName (V.NSimple i))
+    (TargetName (NSimple i))
     (Nothing)
-    (V.WaveElem [V.WaveEExp e Nothing])
+    (WaveElem [WaveEExp e Nothing])
 
-assignVariable :: Identifier -> Expression -> V.SequentialStatement
-assignVariable i e = V.SVarAss $
-  V.VariableAssignmentStatement
+assignVariable :: Identifier -> Expression -> SequentialStatement
+assignVariable i e = SVarAss $
+  VariableAssignmentStatement
     (Nothing)
-    (V.TargetName (V.NSimple i))
+    (TargetName (NSimple i))
     (e)
 
-assignArray :: V.Name -> Expression -> V.SequentialStatement
-assignArray i e = V.SSignalAss $
-  V.SignalAssignmentStatement
+assignArray :: Name -> Expression -> SequentialStatement
+assignArray i e = SSignalAss $
+  SignalAssignmentStatement
     (Nothing)
-    (V.TargetName i)
+    (TargetName i)
     (Nothing)
-    (V.WaveElem [V.WaveEExp e Nothing])
+    (WaveElem [WaveEExp e Nothing])
 
 --------------------------------------------------------------------------------
 -- Some helper classes and their instances
 --------------------------------------------------------------------------------
+--
+-- I use BlockDeclarativeItem to represent all declarative items, which means we
+-- have to translate them over to their correct VHDL kind when generating an AST
 
 class Merge a
   where
@@ -615,99 +528,85 @@ class Merge a
     merge :: [a] -> [a]
     merge = fmap reduce . groupBy group
 
-
-instance Merge V.BlockDeclarativeItem
+instance Merge BlockDeclarativeItem
   where
     group  l r      = setBlockIds l [] == setBlockIds r []
     reduce bs@(b:_) = setBlockIds b $ concatMap getBlockIds bs
 
-instance Merge V.InterfaceDeclaration
+instance Merge InterfaceDeclaration
   where
-    group  l r    = l { V.idecl_identifier_list = [] } == r { V.idecl_identifier_list = [] }
-    reduce (x:xs) = x { V.idecl_identifier_list = ids x ++ concatMap ids xs }
-      where ids   = V.idecl_identifier_list
+    group  l r    = l { idecl_identifier_list = [] } == r { idecl_identifier_list = [] }
+    reduce (x:xs) = x { idecl_identifier_list = ids x ++ concatMap ids xs }
+      where ids   = idecl_identifier_list
 
 --------------------------------------------------------------------------------
 
-setBlockIds :: V.BlockDeclarativeItem -> [Identifier] -> V.BlockDeclarativeItem
-setBlockIds (V.BDIConstant c) is = V.BDIConstant $ c { V.const_identifier_list  = is }
-setBlockIds (V.BDISignal   s) is = V.BDISignal   $ s { V.signal_identifier_list = is }
-setBlockIds (V.BDIShared   v) is = V.BDIShared   $ v { V.var_identifier_list    = is }
-setBlockIds (V.BDIFile     f) is = V.BDIFile     $ f { V.fd_identifier_list     = is }
+setBlockIds :: BlockDeclarativeItem -> [Identifier] -> BlockDeclarativeItem
+setBlockIds (BDIConstant c) is = BDIConstant $ c { const_identifier_list  = is }
+setBlockIds (BDISignal   s) is = BDISignal   $ s { signal_identifier_list = is }
+setBlockIds (BDIShared   v) is = BDIShared   $ v { var_identifier_list    = is }
+setBlockIds (BDIFile     f) is = BDIFile     $ f { fd_identifier_list     = is }
 setBlockIds x                 _  = x
 
-getBlockIds :: V.BlockDeclarativeItem -> [Identifier]
-getBlockIds (V.BDIConstant c) = V.const_identifier_list c
-getBlockIds (V.BDISignal   s) = V.signal_identifier_list s
-getBlockIds (V.BDIShared   v) = V.var_identifier_list v
-getBlockIds (V.BDIFile     f) = V.fd_identifier_list f
-
---------------------------------------------------------------------------------
--- I use BlockDeclarativeItem to represent all declarative items, which means we
--- have to translate them over to their correct VHDL kind when generating an AST
---------------------------------------------------------------------------------
+getBlockIds :: BlockDeclarativeItem -> [Identifier]
+getBlockIds (BDIConstant c) = const_identifier_list c
+getBlockIds (BDISignal   s) = signal_identifier_list s
+getBlockIds (BDIShared   v) = var_identifier_list v
+getBlockIds (BDIFile     f) = fd_identifier_list f
 
 class Declarative a
   where
     -- lists are used so we can fail without having to throw errors
-    translate :: [V.BlockDeclarativeItem] -> [a]
+    translate :: [BlockDeclarativeItem] -> [a]
 
-instance Declarative V.ProcessDeclarativeItem
+instance Declarative ProcessDeclarativeItem
   where
     translate = catMaybes . fmap tryProcess
 
 -- | Try to transform the declarative item into a process item
-tryProcess :: V.BlockDeclarativeItem -> Maybe (V.ProcessDeclarativeItem)
-tryProcess (V.BDIConstant c) = Just $ V.PDIConstant c
-tryProcess (V.BDIShared   v) = Just $ V.PDIVariable v
-tryProcess (V.BDIFile     f) = Just $ V.PDIFile     f
+tryProcess :: BlockDeclarativeItem -> Maybe (ProcessDeclarativeItem)
+tryProcess (BDIConstant c) = Just $ PDIConstant c
+tryProcess (BDIShared   v) = Just $ PDIVariable v
+tryProcess (BDIFile     f) = Just $ PDIFile     f
 tryProcess _                 = Nothing
 
 --------------------------------------------------------------------------------
--- **  Ord instance for use in sets
+-- Ord instance for use in sets
+--------------------------------------------------------------------------------
 --
 -- *** These break the Ord rules but seems to be needed for Set.
---     Should be replaced.
 
-deriving instance Ord V.ContextItem
+deriving instance Ord ContextItem
+deriving instance Ord LibraryClause
+deriving instance Ord LogicalNameList
+deriving instance Ord UseClause
 
-deriving instance Ord V.LibraryClause
-
-deriving instance Ord V.LogicalNameList
-
-deriving instance Ord V.UseClause
-
---------------------------------------------------------------------------------
-
-instance Ord V.TypeDeclaration 
+instance Ord TypeDeclaration 
   where
-    compare (V.TDFull l)    (V.TDFull r)    = compare (V.ftd_identifier l) (V.ftd_identifier r)
-    compare (V.TDPartial l) (V.TDPartial r) = compare l r
-    compare (V.TDFull l)    _               = GT
-    compare (V.TDPartial l) _               = LT
+    compare (TDFull l)    (TDFull r)    = compare (ftd_identifier l) (ftd_identifier r)
+    compare (TDPartial l) (TDPartial r) = compare l r
+    compare (TDFull l)    _               = GT
+    compare (TDPartial l) _               = LT
 
-deriving instance Ord V.IncompleteTypeDeclaration
+deriving instance Ord IncompleteTypeDeclaration
 
-instance Ord V.ComponentDeclaration
+instance Ord ComponentDeclaration
   where
-    compare l r = compare (V.comp_identifier l) (V.comp_identifier r)
+    compare l r = compare (comp_identifier l) (comp_identifier r)
 
---------------------------------------------------------------------------------
+deriving instance Ord SubtypeIndication
+deriving instance Ord TypeMark
 
-deriving instance Ord V.SubtypeIndication
-
-deriving instance Ord V.TypeMark
-
-instance Ord V.Constraint
+instance Ord Constraint
   where
-    compare (V.CRange a) (V.CRange b) = compare a b
+    compare (CRange a) (CRange b) = compare a b
     compare _ _ = error "Ord not supported for index constraints"
 
-deriving instance Ord V.RangeConstraint
+deriving instance Ord RangeConstraint
 
-instance Ord V.Range
+instance Ord Range
   where
-    compare (V.RSimple a b c) (V.RSimple x y z) =
+    compare (RSimple a b c) (RSimple x y z) =
       case compare a x of
         GT -> GT
         LT -> LT
@@ -720,80 +619,56 @@ instance Ord V.Range
             EQ -> EQ
     compare _ _ = error "Ord not supported for attribute ranges"
 
-deriving instance Ord V.Direction
+deriving instance Ord Direction
+deriving instance Ord Expression
+deriving instance Ord Relation
+deriving instance Ord ShiftExpression
+deriving instance Ord SimpleExpression
+deriving instance Ord Term
+deriving instance Ord Factor
 
---------------------------------------------------------------------------------
-
-deriving instance Ord V.Expression
-
-deriving instance Ord V.Relation
-
-deriving instance Ord V.ShiftExpression
-
-deriving instance Ord V.SimpleExpression
-
-deriving instance Ord V.Term
-
-deriving instance Ord V.Factor
-
-instance Ord V.Primary
+instance Ord Primary
   where
-    compare (V.PrimName a) (V.PrimName x) = compare a x
+    compare (PrimName a) (PrimName x) = compare a x
 
---------------------------------------------------------------------------------
+deriving instance Ord LogicalOperator
+deriving instance Ord RelationalOperator
+deriving instance Ord ShiftOperator
+deriving instance Ord AddingOperator
+deriving instance Ord Sign
+deriving instance Ord MultiplyingOperator
+deriving instance Ord MiscellaneousOperator
+deriving instance Ord Identifier
 
-deriving instance Ord V.LogicalOperator
-
-deriving instance Ord V.RelationalOperator
-
-deriving instance Ord V.ShiftOperator
-
-deriving instance Ord V.AddingOperator
-
-deriving instance Ord V.Sign
-
-deriving instance Ord V.MultiplyingOperator
-
-deriving instance Ord V.MiscellaneousOperator
-
---------------------------------------------------------------------------------
-
-deriving instance Ord V.Identifier
-
-instance Ord V.Name
+instance Ord Name
   where
-    compare (V.NSimple a) (V.NSimple x) = compare a x
-    compare (V.NSelect a) (V.NSelect x) = compare a x
-    compare (V.NIndex  a) (V.NIndex  x) = compare a x
-    compare (V.NSlice  a) (V.NSlice  x) = compare a x
-    compare (V.NAttr   a) (V.NAttr   x) = compare a x
+    compare (NSimple a) (NSimple x) = compare a x
+    compare (NSelect a) (NSelect x) = compare a x
+    compare (NIndex  a) (NIndex  x) = compare a x
+    compare (NSlice  a) (NSlice  x) = compare a x
+    compare (NAttr   a) (NAttr   x) = compare a x
 
-deriving instance Ord V.StringLiteral
+deriving instance Ord StringLiteral
+deriving instance Ord SelectedName
 
-deriving instance Ord V.SelectedName
-
-instance Ord V.Suffix
+instance Ord Suffix
   where
-    compare (V.SSimple a) (V.SSimple x) = compare a x
-    compare (V.SChar   a) (V.SChar   x) = compare a x
-    compare (V.SAll)      (V.SAll)      = EQ
+    compare (SSimple a) (SSimple x) = compare a x
+    compare (SChar   a) (SChar   x) = compare a x
+    compare (SAll)      (SAll)      = EQ
     compare _ _ = error "Ord not supported for operator symbols"
 
-deriving instance Ord V.CharacterLiteral
+deriving instance Ord CharacterLiteral
+deriving instance Ord IndexedName
+deriving instance Ord SliceName
+deriving instance Ord DiscreteRange
 
-deriving instance Ord V.IndexedName
-
-deriving instance Ord V.SliceName
-
-deriving instance Ord V.DiscreteRange
-
-instance Ord V.Prefix
+instance Ord Prefix
   where
-    compare (V.PName a) (V.PName x) = compare a x
+    compare (PName a) (PName x) = compare a x
     compare _ _ = error "Ord not supported for function names"
 
-deriving instance Ord V.AttributeName
-
-deriving instance Ord V.Signature
+deriving instance Ord AttributeName
+deriving instance Ord Signature
 
 --------------------------------------------------------------------------------

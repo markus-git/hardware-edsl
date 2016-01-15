@@ -12,7 +12,7 @@ import Language.VHDL
 import Language.Embedded.VHDL.Monad.Expression (lit)
 
 --------------------------------------------------------------------------------
--- * Types
+-- * VHDL Types.
 --------------------------------------------------------------------------------
 
 -- | Type indication for signals/variables/..
