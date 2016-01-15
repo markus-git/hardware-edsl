@@ -22,12 +22,12 @@ module Language.Embedded.VHDL.Monad (
   , prettyVHDL
   , prettyVHDLT
 
-    -- ^ ...
+    -- ^ names
   , freshUnique
   , newSym
   , newLabel
 
-    -- ^ ...
+    -- ^ imports
   , newLibrary,    newImport
 
     -- ^ declarations
@@ -59,8 +59,6 @@ module Language.Embedded.VHDL.Monad (
   , assignSequentialSignal
   , assignVariable
   , assignArray
-
-  , module Language.Embedded.VHDL.Monad.Expression
   ) where
 
 import Language.VHDL (Identifier(..), Mode(..), Expression, Label)

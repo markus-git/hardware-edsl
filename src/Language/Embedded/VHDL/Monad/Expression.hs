@@ -1,10 +1,9 @@
 module Language.Embedded.VHDL.Monad.Expression where
 
 import Language.VHDL
-import Language.Embedded.VHDL.Expression.Hoist hiding (Kind)
 
 --------------------------------------------------------------------------------
--- * Expressions (and its layers)
+-- * Expressions and their sub-layers.
 --------------------------------------------------------------------------------
 
 relation :: RelationalOperator -> ShiftExpression -> ShiftExpression -> Relation
@@ -16,8 +15,8 @@ shiftexp s a b = ShiftExpression a (Just (s, b))
 simplexp :: Maybe Sign -> AddingOperator -> [Term] -> SimpleExpression
 simplexp s o (a:as) = SimpleExpression s a (fmap ((,) o) as)
 
-term     :: MultiplyingOperator -> [Factor] -> Term
-term     o (a:as) = Term a (fmap ((,) o) as)
+term :: MultiplyingOperator -> [Factor] -> Term
+term o (a:as) = Term a (fmap ((,) o) as)
 
 --------------------------------------------------------------------------------
 -- ** Expressions
@@ -86,69 +85,57 @@ not = FacNot
 
 --------------------------------------------------------------------------------
 -- ** Primaries
---
--- Meh..
 
-name, string, lit :: String -> Primary
-name   = PrimName . NSimple . Ident
+-- names
+string :: String -> Primary
 string = PrimLit . LitString . SLit
-lit    = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident
 
-null :: Primary
-null = PrimLit LitNull
+indexed :: Identifier -> Expression -> Name
+indexed i l = NIndex $ IndexedName (PName $ NSimple i) [l]
 
-aggregate :: [Expression] -> Primary
-aggregate = PrimAgg . Aggregate . fmap (ElementAssociation Nothing)
-
-cast :: SubtypeIndication -> Expression -> Primary
-cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion t
-
-qualified :: SubtypeIndication -> Expression -> Primary
-qualified (SubtypeIndication _ t _) = PrimQual . QualExp t
-
-function :: Identifier -> [Expression] -> Primary
-function i [] = PrimFun $ FunctionCall (NSimple i) Nothing
-function i xs = PrimFun
-  . FunctionCall (NSimple i)
-  . Just
-  . AssociationList
-  $ fmap (AssociationElement Nothing . APDesignator . ADExpression) xs
-
---------------------------------------------------------------------------------
--- * Array things
---------------------------------------------------------------------------------
-
-downto :: Expression -> Expression -> Range
-downto f t = RSimple (lift f) DownTo (lift t)
-
-downtoZero :: Expression -> Range
-downtoZero = flip downto (lift $ lit $ show 0)
-
-upto :: Expression -> Expression -> Range
-upto f t = RSimple (lift f) To (lift t)
-
-fromZero :: Expression -> Range
-fromZero = upto (lift $ lit $ show 0)
-
---------------------------------------------------------------------------------
+selected  :: Identifier -> Identifier -> Primary
+selected p s = PrimName $ NSelect $ SelectedName (PName $ NSimple p) (SSimple s)
 
 slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
 slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
 
-index :: Identifier -> Expression -> Name
-index i l = NIndex $ IndexedName (PName $ NSimple i) [l]
+-- literals
+lit :: Show i => i -> Primary
+lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident . show
 
-update :: Integral i => Identifier -> i -> Expression -> Primary
-update i l e = undefined
+null :: Primary
+null = PrimLit LitNull
+
+-- aggregates
+aggregate :: [Expression] -> Primary
+aggregate = PrimAgg . Aggregate . fmap (ElementAssociation Nothing)
+
+associate :: [(Maybe Choices, Expression)] -> Primary
+associate es = PrimAgg $ Aggregate $ map (uncurry ElementAssociation) es
+
+-- function calls
+function :: Identifier -> [Expression] -> Primary
+function i [] = PrimFun $ FunctionCall (NSimple i) Nothing
+function i xs = PrimFun
+  . FunctionCall (NSimple i) . Just . AssociationList
+  $ fmap (AssociationElement Nothing . APDesignator . ADExpression) xs
+
+-- qualified expressions
+qualified :: SubtypeIndication -> Expression -> Primary
+qualified (SubtypeIndication _ t _) = PrimQual . QualExp t
+
+-- type conversions
+cast :: SubtypeIndication -> Expression -> Primary
+cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion t
 
 --------------------------------------------------------------------------------
--- * Record things
---------------------------------------------------------------------------------
+-- ** Utility
 
-aggregate' :: [(Maybe Choices, Expression)] -> Primary
-aggregate' es = PrimAgg $ Aggregate $ map (uncurry ElementAssociation) es
+range :: SimpleExpression -> Direction -> SimpleExpression -> Range
+range = RSimple
 
-selected  :: Identifier -> Identifier -> Primary
-selected p s = PrimName $ NSelect $ SelectedName (PName $ NSimple p) (SSimple s)
+downto, to :: Direction
+downto = DownTo
+to     = To
 
 --------------------------------------------------------------------------------

@@ -1,15 +1,14 @@
 module Language.Embedded.VHDL.Monad.Type
   ( Type
   , Kind(..)
+
   , std_logic
-  , signed, usigned
-  , signed8, signed16, signed32, signed64
+  , signed8,  signed16,  signed32,  signed64
   , usigned8, usigned16, usigned32, usigned64
-  , resize
   ) where
 
 import Language.VHDL
-import Language.Embedded.VHDL.Expression.Hoist hiding (Kind) -- resize
+
 import Language.Embedded.VHDL.Monad.Expression (lit)
 
 --------------------------------------------------------------------------------
@@ -19,17 +18,17 @@ import Language.Embedded.VHDL.Monad.Expression (lit)
 -- | Type indication for signals/variables/..
 type Type = SubtypeIndication
 
--- | The different kinds of signals/variables/.. that exist in VHDL
+-- | The different kinds of signals/variables/.. that exist in VHDL.
 data Kind = Constant | Signal | Variable | File
 
 --------------------------------------------------------------------------------
--- ** Standard logic types
+-- ** Standard logic types.
 
 std_logic :: Type
 std_logic = SubtypeIndication Nothing (TMType (NSimple (Ident "std_logic"))) Nothing
 
 --------------------------------------------------------------------------------
--- ** Signed / Unsigned
+-- ** Signed & unsigned numbers.
 
 arith :: String -> Int -> Type
 arith typ range = SubtypeIndication Nothing
@@ -58,18 +57,4 @@ usigned32 = usigned 32
 usigned64 = usigned 64
 
 -- .. add more ..
-
---------------------------------------------------------------------------------
--- ** Type conversion (and other stuff)
-
-resize :: Int -> Term -> Primary
-resize size exp =
-  PrimFun (FunctionCall
-    (NSimple (Ident "resize"))
-    (Just (AssociationList
-      [ AssociationElement Nothing (APDesignator (ADExpression (lift exp)))
-      , AssociationElement Nothing (APDesignator (ADExpression (lift (lit (show size)))))
-      ])
-    ))
-
 --------------------------------------------------------------------------------
