@@ -49,6 +49,7 @@ module Language.Embedded.VHDL.Command
     -- ^ Loops.
   , LoopCMD(..)
   , for
+  , while
     
     -- ^ Entities.
   , EntityCMD(..)
@@ -86,6 +87,8 @@ import Control.Arrow (second)
 import Control.Monad.Identity           hiding (when)
 import Control.Monad.Operational.Higher hiding (when)
 import Control.Applicative
+import qualified Control.Monad as M
+
 import Data.Array.IO (IOArray)
 import Data.IORef    (IORef)
 import Data.List     (genericTake)
@@ -594,7 +597,8 @@ data LoopCMD (exp :: * -> *) (prog :: * -> *) a
       -> LoopCMD exp prog ()
 
     While
-      :: prog (exp Bool)
+      :: (PredicateExp exp Bool)
+      => prog (exp Bool)
       -> prog ()
       -> LoopCMD exp prog ()
 
@@ -612,6 +616,7 @@ instance HFunctor (LoopCMD exp)
 instance CompileExp  exp => Interp (LoopCMD exp) VHDL where interp = compileLoop
 instance EvaluateExp exp => Interp (LoopCMD exp) IO   where interp = runLoop
 
+-- | ...
 compileLoop :: forall exp a. CompileExp exp => LoopCMD exp VHDL a -> VHDL a
 compileLoop (For r step) =
   do range  <- compE r
@@ -627,12 +632,15 @@ runLoop (For r step) = loop (evalE r)
   where
     loop i | i > 0     = step (litE i) >> loop (i - 1)
            | otherwise = return ()
-runLoop (While b step) =
-  do undefined
+runLoop (While b step) = loop
+  where
+    loop = do cond <- b
+              M.when (evalE cond) $ step >> loop
 
 --------------------------------------------------------------------------------
 -- **
 
+-- | ...
 for
   :: ( LoopCMD (IExp instr) :<: instr
      , PredicateExp (IExp instr) n
@@ -641,6 +649,15 @@ for
   -> (IExp instr n -> ProgramT instr m ())
   -> ProgramT instr m ()
 for range = singleE . For range
+
+-- | ...
+while
+  :: ( LoopCMD (IExp instr) :<: instr
+     , PredicateExp (IExp instr) Bool )
+  => ProgramT instr m (IExp instr Bool)
+  -> ProgramT instr m ()
+  -> ProgramT instr m ()
+while cond = singleE . While cond
 
 --------------------------------------------------------------------------------
 -- * ... Entities
