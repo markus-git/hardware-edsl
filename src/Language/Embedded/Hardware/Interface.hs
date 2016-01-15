@@ -1,46 +1,38 @@
-{-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE TypeFamilies   #-}
 
-module Language.Embedded.VHDL.Interface where
+module Language.Embedded.Hardware.Interface where
 
-import Language.VHDL (Expression, Identifier(..))
-import qualified Language.VHDL as V
-
-import Language.Embedded.VHDL.Monad (VHDL)
-import Language.Embedded.VHDL.Monad.Type (Type)
-import qualified Language.Embedded.VHDL.Monad as M
-
-import Control.Applicative ((<$>))
+import Language.VHDL          (Expression)
+import Language.Embedded.VHDL (VHDL, Type)
 import Data.Constraint
-import Data.Typeable (Typeable)
 
 --------------------------------------------------------------------------------
--- *
+-- * Interface for evaluation and compilation of pure expressions into VHDL.
 --------------------------------------------------------------------------------
 
+-- | Constraint on the types of variables in a given expression language.
 type family PredicateExp (exp :: * -> *) :: * -> Constraint
 
--- | General interface for evaluating expressions
+-- | General interface for evaluating expressions.
 class EvaluateExp exp
   where
-    -- | Literal expressions
+    -- | Literal expressions.
     litE  :: PredicateExp exp a => a -> exp a
 
-    -- | Evaluation of (closed) expressions
+    -- | Evaluation of (closed) expressions.
     evalE :: PredicateExp exp a => exp a -> a
 
-
--- | General interface for compiling expressions
+-- | General interface for compiling expressions.
 class CompileExp exp
   where
-    -- | Variable expressions
+    -- | Variable expressions.
     varE  :: PredicateExp exp a => Integer -> exp a
 
-    -- | Compilation of type kind
+    -- | Compilation of type kind.
     compT :: PredicateExp exp a => exp a -> VHDL Type
 
-    -- | Compilation of expressions
+    -- | Compilation of expressions.
     compE :: PredicateExp exp a => exp a -> VHDL Expression
 
 --------------------------------------------------------------------------------
