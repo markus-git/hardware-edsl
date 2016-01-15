@@ -1,6 +1,23 @@
-module Language.Embedded.VHDL.Monad.Expression where
+module Language.Embedded.VHDL.Monad.Expression
+  ( and, or, xor, xnor, nand, nor
+  , eq, neq, lt, lte, gt, gte
+  , sll, srl, sla, sra, rol, ror
+  , add, sub, cat, neg
+  , mul, div, mod, rem
+  , exp, abs, not
+  , string, indexed, selected, slice
+  , lit, null
+  , aggregate, associate
+  , function
+  , qualified
+  , cast
+  , resize
+  , range, downto, to
+  ) where
 
 import Language.VHDL
+
+import Prelude hiding (and, or, div, mod, rem, exp, abs, not, null)
 
 --------------------------------------------------------------------------------
 -- * Expressions and their sub-layers.
@@ -100,8 +117,8 @@ slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
 slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
 
 -- literals
-lit :: Show i => i -> Primary
-lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident . show
+lit :: Integral i => i -> Primary
+lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident . show . toInteger
 
 null :: Primary
 null = PrimLit LitNull
@@ -130,6 +147,12 @@ cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion t
 
 --------------------------------------------------------------------------------
 -- ** Utility
+
+resize :: Expression -> Expression -> Primary
+resize size exp = PrimFun $ FunctionCall name $ Just $ AssociationList [assoc size, assoc exp]
+  where
+    name  = NSimple $ Ident "resize"
+    assoc = AssociationElement Nothing . APDesignator . ADExpression
 
 range :: SimpleExpression -> Direction -> SimpleExpression -> Range
 range = RSimple

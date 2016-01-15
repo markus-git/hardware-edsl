@@ -38,7 +38,7 @@ arith typ range = SubtypeIndication Nothing
     (Nothing)
   where
     point :: Int -> SimpleExpression
-    point i = SimpleExpression Nothing (Term (FacPrim (lit (show i)) (Nothing)) []) []
+    point i = SimpleExpression Nothing (Term (FacPrim (lit i) (Nothing)) []) []
 
 signed, usigned :: Int -> Type
 signed  = arith "signed"
