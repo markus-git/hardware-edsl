@@ -19,7 +19,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 
 --------------------------------------------------------------------------------
--- * Kludge - until I come up with a better solution
+-- * Representable types (until I come up with a solution free of VHDL stuff).
 --------------------------------------------------------------------------------
 
 -- | Tag a value with some (possibly) interesting information
