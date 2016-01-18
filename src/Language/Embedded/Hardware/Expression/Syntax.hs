@@ -44,6 +44,17 @@ data T sig
   where
     T :: HType (DenResult sig) => { unT :: Dom sig } -> T sig
 
+-- | Specialized sugarSym for T.
+sugarT
+  :: ( Signature (SmartSig fi), sub :<: Dom
+     , T :<: SmartSym fi
+     , SyntacticN f fi
+     , SmartFun (SmartSym fi) (SmartSig fi) ~ fi
+     , HType (DenResult (SmartSig fi)))
+  => sub (SmartSig fi)
+  -> f
+sugarT sym = sugarSym (T $ inj sym)
+
 -- | Hardware expressions.
 newtype HExp a = HExp { unHExp :: ASTF T a }
 
@@ -54,8 +65,6 @@ instance Syntactic (HExp a)
 
     desugar = unHExp
     sugar   = HExp
-
-instance CompArrayIx HExp
 
 --------------------------------------------------------------------------------
 -- ** Syntax.
@@ -126,12 +135,27 @@ data Primary sig
     Allocator  :: (HType a) => Primary (Full a)
 
 --------------------------------------------------------------------------------
--- ** ...
-
-
-
---------------------------------------------------------------------------------
 -- ** Syntactic instances.
+
+instance CompArrayIx HExp
+
+instance Equality T
+  where
+    equal (T s) (T t) = equal s t
+    hash  (T s)       = hash s
+
+instance StringTree T
+  where
+    stringTreeSym as (T s) = stringTreeSym as (T s)
+
+instance Symbol T
+  where
+    symSig (T s) = symSig s
+
+instance Render T
+  where
+    renderSym     (T s) = renderSym s
+    renderArgs as (T s) = renderArgs as s
 
 instance Equality   Expression
 instance StringTree Expression
