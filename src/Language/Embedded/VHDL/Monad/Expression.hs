@@ -5,7 +5,7 @@ module Language.Embedded.VHDL.Monad.Expression
   , add, sub, cat, neg
   , mul, div, mod, rem
   , exp, abs, not
-  , string, indexed, selected, slice
+  , name, string, indexed, selected, slice
   , lit, null
   , aggregate, associate
   , function
@@ -104,6 +104,9 @@ not = FacNot
 -- ** Primaries
 
 -- names
+name :: String -> Primary
+name = PrimName . NSimple . Ident
+
 string :: String -> Primary
 string = PrimLit . LitString . SLit
 

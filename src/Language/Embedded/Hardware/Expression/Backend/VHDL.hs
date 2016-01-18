@@ -57,8 +57,6 @@ compHExp  e = Hoist.lift <$> compSimple e
     compLoop   = compSimple . HExp
 
     compDomain :: forall sig. HType (DenResult sig) => Dom sig -> Args (AST T) sig -> VHDL Kind
-    compDomain var args
-      | Just (Name v) <- prj var = return $ Hoist.P $ VHDL.string v
     compDomain expr (x :* y :* _)
       | Just And  <- prj expr = go $ \a b -> VHDL.and  [a, b]
       | Just Or   <- prj expr = go $ \a b -> VHDL.or   [a, b]
@@ -148,7 +146,7 @@ compHExp  e = Hoist.lift <$> compSimple e
           x' <- Hoist.lift <$> compLoop x
           return $ Hoist.P $ VHDL.cast t x'
     compDomain primary args
-      | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.string n
+      | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i
       | Just (Aggregate xs) <- prj primary =
           let maps = fmap (Hoist.lift . VHDL.lit . format)

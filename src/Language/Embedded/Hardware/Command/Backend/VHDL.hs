@@ -51,8 +51,7 @@ freshVar = do
   where
     -- diggity dig!
     dig :: V.Expression -> V.Identifier
-    dig (V.ENand (V.Relation (V.ShiftExpression (V.SimpleExpression _
-                 (V.Term (V.FacPrim (V.PrimName (V.NSimple i)) _)_)_)_)_)_) = i
+    dig (V.ENand (V.Relation (V.ShiftExpression (V.SimpleExpression _ (V.Term (V.FacPrim (V.PrimName (V.NSimple i)) _)_)_)_)_)_) = i
 
 --------------------------------------------------------------------------------
 -- ** Signals.
