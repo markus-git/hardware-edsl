@@ -117,8 +117,8 @@ slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
 slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
 
 -- literals
-lit :: Integral i => i -> Primary
-lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident . show . toInteger
+lit :: Show i => i -> Primary
+lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident . show
 
 null :: Primary
 null = PrimLit LitNull
