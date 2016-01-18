@@ -14,17 +14,25 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
---    Language.Embedded.VHDL.Command,
---    Language.Embedded.VHDL.Expression,
---    Language.Embedded.VHDL.Interface,
---    Language.Embedded.VHDL.Expression.Represent,
---    Language.Embedded.VHDL.Expression.Hoist
+    Language.Embedded.Hardware,
+    Language.Embedded.Hardware.Expression,
+    Language.Embedded.Hardware.Expression.Syntax,
+    Language.Embedded.Hardware.Expression.Represent,
+    Language.Embedded.Hardware.Expression.Frontend,
+    Language.Embedded.Hardware.Command,
+    Language.Emdedded.Hardware.Command.CMD,
+    Language.Embedded.Hardware.Command.Frontend,
+    Language.Embedded.Hardware.Interface
     Language.Embedded.VHDL,
     Language.Embedded.VHDL.Monad,
     Language.Embedded.VHDL.Monad.Type,
     Language.Embedded.VHDL.Monad.Expression
 
-  -- other-modules:       
+  other-modules:
+    Language.Embedded.Hardware.Expression.Hoist,
+    Language.Embedded.Hardware.Expression.Backend.VHDL,
+    Language.Embedded.Hardware.Command.Backend.VHDL
+    
   other-extensions:
     GADTs,
     KindSignatures,
