@@ -192,12 +192,6 @@ runArray (UnsafeGetArray i a)      = runArray (GetArray i a)
 
 --------------------------------------------------------------------------------
 
--- | Expression types that support compilation of array indexing.
-class CompArrayIx exp
-  where
-    compArrayIx :: PredicateExp exp a => exp i -> Array i a -> Maybe (exp a)
-    compArrayIx _ _ = Nothing
-
 -- | Fresh array type identifier
 freshA :: VHDL V.Identifier
 freshA = toIdent . ('t' :) . show <$> V.freshUnique

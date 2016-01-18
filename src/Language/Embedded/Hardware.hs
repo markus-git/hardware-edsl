@@ -1,12 +1,8 @@
-module Language.Embedded.VHDL
-  ( Mode(..)
-  , module Language.Embedded.VHDL.Interface
-  , module Language.Embedded.VHDL.Expression
-  , module Language.Embedded.VHDL.Command
+module Language.Embedded.Hardware
+  ( module Language.Embedded.Hardware.Command
+  , module Language.Embedded.Hardware.Interface
   ) where
 
-import Language.VHDL (Mode(..))
+import Language.Embedded.Hardware.Command
+import Language.Embedded.Hardware.Interface
 
-import Language.Embedded.VHDL.Interface
-import Language.Embedded.VHDL.Expression
-import Language.Embedded.VHDL.Command
