@@ -20,7 +20,7 @@ library
     Language.Embedded.Hardware.Expression.Represent,
     Language.Embedded.Hardware.Expression.Frontend,
     Language.Embedded.Hardware.Command,
-    Language.Emdedded.Hardware.Command.CMD,
+    Language.Embedded.Hardware.Command.CMD,
     Language.Embedded.Hardware.Command.Frontend,
     Language.Embedded.Hardware.Interface
     Language.Embedded.VHDL,
