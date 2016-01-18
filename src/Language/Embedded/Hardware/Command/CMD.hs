@@ -85,6 +85,13 @@ instance HFunctor (VariableCMD exp)
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
+-- | Expression types that support compilation of array indexing
+class CompArrayIx exp
+  where
+    -- | Generate code for an array indexing operation
+    compArrayIx :: PredicateExp exp a => exp i -> Array i a -> Maybe (exp a)
+    compArrayIx _ _ = Nothing
+
 -- | Array reprensentation.
 data Array i a = ArrayC Integer | ArrayE (IOArray i a)
 
