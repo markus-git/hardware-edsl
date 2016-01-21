@@ -54,6 +54,7 @@ instance HFunctor (SignalCMD exp)
     hfmap _ (NewSignal c s m e) = NewSignal c s m e
     hfmap _ (GetSignal s)       = GetSignal s
     hfmap _ (SetSignal s e)     = SetSignal s e
+    hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -81,6 +82,7 @@ instance HFunctor (VariableCMD exp)
     hfmap _ (NewVariable e)   = NewVariable e
     hfmap _ (GetVariable s)   = GetVariable s
     hfmap _ (SetVariable s e) = SetVariable s e
+    hfmap _ (UnsafeFreezeVariable s) = UnsafeFreezeVariable s
 
 --------------------------------------------------------------------------------
 -- ** Arrays.
