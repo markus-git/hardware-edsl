@@ -60,10 +60,14 @@ testLoops = do
             y <- newPort_ Out :: Prog (Signal Word8)
             return (x, y)
   architecture "loops" "behavioural" $
-    process [hideSig i] $
+    process [hideSig i] $ do
       for (litE 3) $ \n ->
         do y <- getSignal i
-           o <== (n + y) 
+           o <== (n + y)
+      while
+        (do y <- getSignal i
+            return $ y `gt` 3)
+        (do setSignal o 2)
 
 testConditionals :: Prog ()
 testConditionals = do

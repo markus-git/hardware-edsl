@@ -1,16 +1,21 @@
 name:                hardware-edsl
 version:             0.1.0.0
 synopsis:            Deep embedding of hardware descriptions with code generation.
--- description:         
+description:         Deep embedding of hardware descriptions with code generation.
 license:             BSD3
 license-file:        LICENSE
-author:              Markus Aronsson
+author:              Markus Aronsson <mararon@chalmers.se>
 maintainer:          mararon@chalmers.se
--- copyright:           
+-- copyright:
+homepage:            https://github.com/markus-git/hardware-edsl
 category:            Language
 build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
+
+source-repository head
+  type:              git
+  location:          git://github.com/markus-git/hardware-edsl
 
 library
   exposed-modules:

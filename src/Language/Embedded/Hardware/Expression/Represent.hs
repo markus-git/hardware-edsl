@@ -44,6 +44,11 @@ declareNumeric =
      newImport  "IEEE.std_logic_1164"
      newImport  "IEEE.numeric_std"
 
+declareFloating :: VHDL ()
+declareFloating =
+  do newLibrary "IEEE"
+     newImport  "IEEE.float_pkg"
+
 --------------------------------------------------------------------------------
 -- ** Boolean
 
@@ -107,6 +112,21 @@ instance Rep Word64 where
   typed     = Tag usigned64
   declare _ = declareNumeric
   format    = convert
+
+--------------------------------------------------------------------------------
+-- ** Floating point.
+
+instance Rep Float where
+  width     = Tag 32
+  typed     = Tag float
+  declare _ = declareFloating
+  format    = error "todo: format float."
+
+instance Rep Double where
+  width     = Tag 64
+  typed     = Tag double
+  declare _ = declareFloating
+  format    = error "todo: format double."
 
 --------------------------------------------------------------------------------
 -- * Converting Integers to their Binrary representation

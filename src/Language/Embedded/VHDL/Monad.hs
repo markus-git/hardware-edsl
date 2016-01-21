@@ -31,6 +31,7 @@ module Language.Embedded.VHDL.Monad (
 
     -- ^ statements
   , inProcess, inFor, inWhile, inConditional, inCase
+  , exit
 
     -- ^ structures
   , entity, architecture, package
@@ -244,18 +245,25 @@ inFor i r m =
          (newSequential)
 
 -- | Run program inside while loop.
-inWhile :: MonadV m => Expression -> m () -> m (LoopStatement)
-inWhile cont m =
+inWhile :: MonadV m => Label -> Maybe Expression -> m () -> m (LoopStatement)
+inWhile l cont m =
   do oldSequential <- CMS.gets _sequential
      CMS.modify $ \e -> e { _sequential = [] }
      m
      newSequential <- reverse <$> CMS.gets _sequential
      CMS.modify $ \e -> e { _sequential = oldSequential }
-     return $
+     return $ 
        LoopStatement
-         (Nothing)
-         (Just (IterWhile cont))
+         (Just l)
+         (iter cont)
          (newSequential)
+  where
+    iter :: Maybe Expression -> Maybe IterationScheme
+    iter = maybe (Nothing) (Just . IterWhile)
+
+-- | Exit loop.
+exit :: MonadV m => Label -> Expression -> m ()
+exit label e = addSequential $ SExit $ ExitStatement (Nothing) (Just label) (Just e)
 
 -- | Conditional statements.
 inConditional :: MonadV m => (Condition, m ()) -> [(Condition, m ())] -> m () -> m (IfStatement)

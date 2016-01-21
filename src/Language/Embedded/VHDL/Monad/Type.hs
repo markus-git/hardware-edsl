@@ -5,6 +5,7 @@ module Language.Embedded.VHDL.Monad.Type
   , std_logic
   , signed8,  signed16,  signed32,  signed64
   , usigned8, usigned16, usigned32, usigned64
+  , float, double
   ) where
 
 import Language.VHDL
@@ -55,6 +56,18 @@ usigned8  = usigned 8
 usigned16 = usigned 16
 usigned32 = usigned 32
 usigned64 = usigned 64
+
+--------------------------------------------------------------------------------
+-- ** Floating point.
+
+floating :: Int -> Type
+floating size = SubtypeIndication Nothing
+  (TMType (NSimple (Ident ("float" ++ show size))))
+  (Nothing)
+
+float, double :: Type
+float  = floating 32
+double = floating 64
 
 -- .. add more ..
 --------------------------------------------------------------------------------

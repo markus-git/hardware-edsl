@@ -226,8 +226,14 @@ compileLoop (For r step) =
      (v, i) <- freshVar
      loop   <- V.inFor i (V.range zero V.to (lift hi)) (step v)
      V.addSequential $ V.SLoop $ loop
-compileLoop (While b step) =
-  do error "todo: compile while loops"
+compileLoop (While cont step) =
+  do l    <- V.newLabel
+     loop <- V.inWhile l (Nothing) $
+       do b    <- cont
+          exit <- compE b
+          V.exit l exit
+          step
+     V.addSequential $ V.SLoop $ loop
 
 runLoop :: forall exp prog a. EvaluateExp exp => LoopCMD exp IO a -> IO a
 runLoop (For r step) = loop (evalE r)
