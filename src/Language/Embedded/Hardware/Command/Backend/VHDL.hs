@@ -183,10 +183,10 @@ compileArray (UnsafeGetArray ix arr) =
         return v
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
-runArray (NewArray len)            = fmap ArrayE $ IA.newArray_ $ (,) 0 $ evalE len
-runArray (InitArray is)            = fmap ArrayE $ IA.newListArray (0, fromIntegral $ length is) is
-runArray (GetArray i (ArrayE a))   = fmap litE $ IA.readArray a $ evalE i
-runArray (SetArray i e (ArrayE a)) = IA.writeArray a (evalE i) (evalE e)
+runArray (NewArray len)            = fmap ArrayE . IR.newIORef =<< IA.newArray_ (0, evalE len)
+runArray (InitArray is)            = fmap ArrayE . IR.newIORef =<< IA.newListArray (0, fromIntegral $ length is) is
+runArray (GetArray i (ArrayE a))   = do r <- IR.readIORef a; fmap litE $ IA.readArray r (evalE i)
+runArray (SetArray i e (ArrayE a)) = do r <- IR.readIORef a; IA.writeArray r (evalE i) (evalE e)
 runArray (UnsafeGetArray i a)      = runArray (GetArray i a)
 
 --------------------------------------------------------------------------------

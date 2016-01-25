@@ -95,7 +95,7 @@ class CompArrayIx exp
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array i a = ArrayC Integer | ArrayE (IOArray i a)
+data Array i a = ArrayC Integer | ArrayE (IORef (IOArray i a))
 
 -- | Commands for arrays.
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
