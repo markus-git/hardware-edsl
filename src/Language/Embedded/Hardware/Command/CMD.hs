@@ -14,6 +14,7 @@ import Control.Monad.Operational.Higher
 import Data.Ix       (Ix)
 import Data.IORef    (IORef)
 import Data.Array.IO (IOArray)
+import qualified Data.Array as Arr
 
 --------------------------------------------------------------------------------
 -- * Hardware commands.
@@ -95,7 +96,10 @@ class CompArrayIx exp
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array i a = ArrayC Integer | ArrayE (IORef (IOArray i a))
+data Array  i a = ArrayC Integer  | ArrayE (IORef (IOArray i a))
+
+-- | Immutable arrays.
+data IArray i a = IArrayC Integer | IArrayE (Arr.Array i a)
 
 -- | Commands for arrays.
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
@@ -128,24 +132,31 @@ data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
          , Integral i
          , Ix i )
       => exp i -> exp a -> Array i a -> ArrayCMD exp prog ()
-    -- ^ Unsafe version of fetching an array's value.
-    UnsafeGetArray
+    CopyArray
       :: ( PredicateExp exp a
          , PredicateExp exp i
          , Integral i
          , Ix i )
-      => exp i -> Array i a -> ArrayCMD exp prog (exp a)
+      => Array i a -> Array i a -> exp i -> ArrayCMD exp prog ()
+    -- ^ Unsafe version of fetching an array's value.
+    UnsafeFreezeArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i )
+      => Array i a -> ArrayCMD exp prog (IArray i a)
 
 type instance IExp (ArrayCMD e)       = e
 type instance IExp (ArrayCMD e :+: i) = e
 
 instance HFunctor (ArrayCMD exp)
   where
-    hfmap _ (NewArray i)         = NewArray i
-    hfmap _ (InitArray is)       = InitArray is
-    hfmap _ (GetArray i a)       = GetArray i a
-    hfmap _ (SetArray i e a)     = SetArray i e a
-    hfmap _ (UnsafeGetArray i a) = UnsafeGetArray i a
+    hfmap _ (NewArray i)     = NewArray i
+    hfmap _ (InitArray is)   = InitArray is
+    hfmap _ (GetArray i a)   = GetArray i a
+    hfmap _ (SetArray i e a) = SetArray i e a
+    hfmap _ (CopyArray a b l)     = CopyArray a b l
+    hfmap _ (UnsafeFreezeArray a) = UnsafeFreezeArray a
 
 --------------------------------------------------------------------------------
 -- ** Looping.

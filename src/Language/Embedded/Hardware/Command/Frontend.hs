@@ -4,12 +4,15 @@
 module Language.Embedded.Hardware.Command.Frontend where
 
 import Language.Embedded.VHDL               (Mode(..))
-import Language.Embedded.Hardware.Interface (PredicateExp)
+import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Command.CMD
 
 import Control.Monad.Operational.Higher
 
-import Data.Ix (Ix)
+import Data.Ix    (Ix)
+import Data.IORef (readIORef)
+
+import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 
 --------------------------------------------------------------------------------
 -- ** Signals.
@@ -74,8 +77,15 @@ setVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable
 setVariable v = singleE . SetVariable v
 
 -- | Unsafe version of fetching the contents of a variable.
-unsafeFreezeVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> ProgramT i m (IExp i a)
+unsafeFreezeVariable
+  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> ProgramT i m (IExp i a)
 unsafeFreezeVariable = singleE . UnsafeFreezeVariable
+
+-- | Read the value of a reference without the monad in a very unsafe fashion.
+veryUnsafeFreezeVariable
+  :: (PredicateExp exp a, EvaluateExp exp, CompileExp exp) => Variable a -> exp a
+veryUnsafeFreezeVariable (VariableE r) = litE $! unsafePerformIO $! readIORef r
+veryUnsafeFreezeVariable (VariableC v) = varE v
 
 -- | Short-hand for 'setVariable'.
 (==:) :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> IExp i a -> ProgramT i m ()
@@ -120,14 +130,27 @@ setArray
   => IExp instr i -> IExp instr a -> Array i a -> ProgramT instr m ()
 setArray i a = singleE . SetArray i a
 
+-- | Freeze a mutable array into an immutable one by copying.
+freezeArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , Monad m
+     , ArrayCMD (IExp instr) :<: instr )
+  => Array i a -> IExp instr i -> ProgramT instr m (IArray i a)
+freezeArray array len =
+  do copy <- newArray len
+     
+     unsafeFreezeArray copy
+
 -- | Unsafe version of fetching the contents of an array's index.
-unsafeGetArray
+unsafeFreezeArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
      , ArrayCMD (IExp instr) :<: instr )
-  => IExp instr i -> Array i a -> ProgramT instr m (IExp instr a)
-unsafeGetArray i = singleE . UnsafeGetArray i
+  => Array i a -> ProgramT instr m (IArray i a)
+unsafeFreezeArray = singleE . UnsafeFreezeArray
 
 --------------------------------------------------------------------------------
 -- ** Looping.

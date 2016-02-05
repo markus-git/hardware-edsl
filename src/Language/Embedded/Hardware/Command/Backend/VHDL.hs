@@ -16,6 +16,9 @@ import Language.Embedded.VHDL (VHDL)
 import qualified Language.VHDL          as V
 import qualified Language.Embedded.VHDL as V
 
+import Data.Array.IO (freeze)
+import Data.List     (genericTake)
+import Data.Word     (Word8)
 import qualified Data.IORef    as IR
 import qualified Data.Array.IO as IA
 
@@ -31,6 +34,7 @@ instance ToIdent String       where toIdent               = V.Ident
 instance ToIdent (Signal a)   where toIdent (SignalC i)   = V.Ident $ 's' : show i
 instance ToIdent (Variable a) where toIdent (VariableC i) = V.Ident $ 'v' : show i
 instance ToIdent (Array i a)  where toIdent (ArrayC i)    = V.Ident $ 'a' : show i
+instance ToIdent (IArray i a) where toIdent (IArrayC i)   = V.Ident $ 'a' : show i
 
 compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe V.Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
@@ -173,21 +177,28 @@ compileArray (SetArray i e arr) =
      e' <- compE e
      -- this could be concurrent as well.
      V.addSequential $ V.assignArray (V.indexed (toIdent arr) i') e'
-compileArray (UnsafeGetArray ix arr) =
-  case compArrayIx ix arr of
-      Just e  -> return e
-      Nothing -> do
-        (v, i) <- freshVar :: VHDL (a, V.Identifier)
-        e <- compE ix
-        V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.indexed (toIdent arr) e)
-        return v
+compileArray (CopyArray a b l) =
+  do len <- compE l
+     let zero = lift $ V.lit (0 :: Word8)
+         src  = V.slice (toIdent a) (zero, lift len)
+         dest = V.slice (toIdent b) (zero, lift len)
+     V.addSequential $ V.assignArray src (lift $ V.PrimName dest)
+compileArray (UnsafeFreezeArray (ArrayC a)) =
+  return $ IArrayC a
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
 runArray (NewArray len)            = fmap ArrayE . IR.newIORef =<< IA.newArray_ (0, evalE len)
 runArray (InitArray is)            = fmap ArrayE . IR.newIORef =<< IA.newListArray (0, fromIntegral $ length is) is
 runArray (GetArray i (ArrayE a))   = do r <- IR.readIORef a; fmap litE $ IA.readArray r (evalE i)
 runArray (SetArray i e (ArrayE a)) = do r <- IR.readIORef a; IA.writeArray r (evalE i) (evalE e)
-runArray (UnsafeGetArray i a)      = runArray (GetArray i a)
+runArray (UnsafeFreezeArray (ArrayE a))      = fmap IArrayE . freeze =<< IR.readIORef a
+runArray (CopyArray (ArrayE a) (ArrayE b) l) =
+  do arr <- IR.readIORef a
+     brr <- IR.readIORef b
+     sequence_
+       [ IA.readArray brr i >>= IA.writeArray arr i
+       | i <- genericTake (evalE l) [0..]
+       ]
 
 --------------------------------------------------------------------------------
 

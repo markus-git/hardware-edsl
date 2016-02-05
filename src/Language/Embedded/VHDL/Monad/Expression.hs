@@ -113,11 +113,11 @@ string = PrimLit . LitString . SLit
 indexed :: Identifier -> Expression -> Name
 indexed i l = NIndex $ IndexedName (PName $ NSimple i) [l]
 
-selected  :: Identifier -> Identifier -> Primary
-selected p s = PrimName $ NSelect $ SelectedName (PName $ NSimple p) (SSimple s)
+selected  :: Identifier -> Identifier -> Name
+selected p s = NSelect $ SelectedName (PName $ NSimple p) (SSimple s)
 
-slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Primary
-slice i (f, t) = PrimName $ NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
+slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Name
+slice i (f, t) = NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
 
 -- literals
 lit :: Show i => i -> Primary
