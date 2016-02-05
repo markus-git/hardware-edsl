@@ -179,12 +179,11 @@ compileArray (SetArray i e arr) =
      V.addSequential $ V.assignArray (V.indexed (toIdent arr) i') e'
 compileArray (CopyArray a b l) =
   do len <- compE l
-     let zero = lift $ V.lit (0 :: Word8)
-         src  = V.slice (toIdent a) (zero, lift len)
-         dest = V.slice (toIdent b) (zero, lift len)
+     let slice = (lift (V.lit (0 :: Word8)), lift len)
+         dest  = V.slice (toIdent a) slice
+         src   = V.slice (toIdent b) slice
      V.addSequential $ V.assignArray src (lift $ V.PrimName dest)
-compileArray (UnsafeFreezeArray (ArrayC a)) =
-  return $ IArrayC a
+compileArray (UnsafeFreezeArray (ArrayC a)) = return $ IArrayC a
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
 runArray (NewArray len)            = fmap ArrayE . IR.newIORef =<< IA.newArray_ (0, evalE len)

@@ -130,6 +130,15 @@ setArray
   => IExp instr i -> IExp instr a -> Array i a -> ProgramT instr m ()
 setArray i a = singleE . SetArray i a
 
+-- | Copy a slice of one array to another.
+copyArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , ArrayCMD (IExp instr) :<: instr )
+  => Array i a -> Array i a -> IExp instr i -> ProgramT instr m ()
+copyArray dest src = singleE . CopyArray dest src
+
 -- | Freeze a mutable array into an immutable one by copying.
 freezeArray
   :: ( PredicateExp (IExp instr) a
@@ -140,7 +149,7 @@ freezeArray
   => Array i a -> IExp instr i -> ProgramT instr m (IArray i a)
 freezeArray array len =
   do copy <- newArray len
-     
+     copyArray copy array len
      unsafeFreezeArray copy
 
 -- | Unsafe version of fetching the contents of an array's index.
