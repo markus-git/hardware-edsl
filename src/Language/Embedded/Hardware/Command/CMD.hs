@@ -197,6 +197,35 @@ instance HFunctor (ConditionalCMD exp)
     hfmap f (If a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
 
 --------------------------------------------------------------------------------
+-- ** Stand-alone processes.
+
+-- | Process type signatures.
+data Sig m a
+  where
+    Unit :: m () -> Sig m ()
+    Lam  :: (Signal a -> Sig m b) -> Sig m (Signal a -> b)
+
+-- | ...
+type family Result sig where
+  Result (a -> b) = Result b
+  Result a        = a
+
+-- | ...
+data Arg a
+  where
+    Empty  :: (Result a ~ a) => Arg a
+    Input  :: Signal a -> Arg b -> Arg (Signal a -> b)
+    Output :: Signal a -> Arg b -> Arg (Signal a -> b)
+
+-- | Commands for generating stand-alone processes.
+data ProcessCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    -- ^ ...
+    MakeProcess :: [SignalX] -> prog () -> ProcessCMD exp prog ()
+    -- ^ ...
+    BindProcess :: ProcessCMD exp prog ()
+
+--------------------------------------------------------------------------------
 -- ** Structural entities.
 
 -- | Untyped signals.
