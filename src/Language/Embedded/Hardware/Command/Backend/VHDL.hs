@@ -281,15 +281,14 @@ runConditional (If (a, b) cs em) = if (evalE a) then b else loop cs
     loop ((c, p):xs) = if (evalE c) then p else (loop xs)
 
 --------------------------------------------------------------------------------
--- ** Processes.
+-- ** Components.
 
-instance CompileExp exp => Interp (ProcessCMD exp) VHDL
+instance CompileExp exp => Interp (ComponentCMD exp) VHDL
   where
-    interp = compileProcess
+    interp = compileComponent
 
-compileProcess :: forall exp a. CompileExp exp => ProcessCMD exp VHDL a -> VHDL a
-compileProcess (MakeProcess s m) = undefined
-compileProcess (BindProcess) = undefined
+compileComponent :: forall exp a. CompileExp exp => ComponentCMD exp VHDL a -> VHDL a
+compileComponent = undefined
 
 --------------------------------------------------------------------------------
 -- ** Structural.

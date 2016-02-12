@@ -197,9 +197,9 @@ instance HFunctor (ConditionalCMD exp)
     hfmap f (If a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
 
 --------------------------------------------------------------------------------
--- ** Stand-alone processes.
+-- ** Components.
 
--- | Process type signatures.
+-- | ...
 data Sig m a
   where
     Unit :: m () -> Sig m ()
@@ -217,13 +217,13 @@ data Arg a
     Input  :: Signal a -> Arg b -> Arg (Signal a -> b)
     Output :: Signal a -> Arg b -> Arg (Signal a -> b)
 
--- | Commands for generating stand-alone processes.
-data ProcessCMD (exp :: * -> *) (prog :: * -> *) a
+-- | Commands for generating stand-alone components and calling them.
+data ComponentCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ ...
-    MakeProcess :: [SignalX] -> prog () -> ProcessCMD exp prog ()
+    Component :: ComponentCMD exp prog ()
     -- ^ ...
-    BindProcess :: ProcessCMD exp prog ()
+    PortMap   :: ComponentCMD exp prog ()
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
