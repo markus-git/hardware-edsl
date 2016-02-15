@@ -25,6 +25,7 @@ type CMD =
   :+: ArrayCMD        HExp
   :+: LoopCMD         HExp
   :+: ConditionalCMD  HExp
+  :+: ComponentCMD    HExp
   :+: StructuralCMD   HExp
 
 type Prog = Program CMD
@@ -82,7 +83,30 @@ testConditionals = do
            (setSignal o false)
            (setSignal o true)
 
+testComponents :: Prog ()
+testComponents = do
+  let -- we define our signal function.
+      function :: Signal Bool -> Prog (Signal Bool)
+      function inp = do
+        out <- newSignal_
+        y   <- getSignal inp
+        setSignal out (y `xor` true)
+        return out
 
+      -- translate its signature into a 'pointer-passing' style.
+      signature :: Sig HExp Prog (Signal Bool -> Signal Bool -> ())
+      signature = Lam In $ \i -> Lam Out $ \o -> Unit $ do
+        s <- function i
+        v <- unsafeFreezeSignal s
+        setSignal o v
+
+  p      <- process signature
+  (i, o) <- structEntity "portmap" $
+         do x <- newPort_ In  :: Prog (Signal Bool)
+            y <- newPort_ Out :: Prog (Signal Bool)
+            return (x, y)
+  structArchitecture "portmap" "structural" $
+    portmap p (i :> o :> Nill)
 
 --------------------------------------------------------------------------------
 
@@ -96,5 +120,7 @@ printTests = do
   putStrLn $ compile $ testLoops
   putStrLn "\n### Conditionals ###\n"
   putStrLn $ compile $ testConditionals
+  putStrLn "\n### Components ###\n"
+  putStrLn $ compile $ testComponents
 
 --------------------------------------------------------------------------------
