@@ -200,16 +200,20 @@ instance HFunctor (ConditionalCMD exp)
 -- ** Components.
 
 -- | Processes.
-data Process m a = Process (Maybe String) (Sig m a)
-
--- | Signals with a specific mode.
-data Directed a = Directed Mode (Signal a)
+data Process exp m a = Process (Maybe String) (Sig exp m a)
 
 -- | Signature declaring type of processes.
-data Sig m a
+data Sig exp m a
   where
-    Unit :: m () -> Sig m ()
-    Lam  :: (Directed a -> Sig m b) -> Sig m (Signal a -> b)
+    -- ^ Fully applied program, all signals are passed in a 'pointer' style.
+    --   The monad `m` is implicit on all returns.
+    Unit :: m () -> Sig exp m ()
+    
+    -- ^ Application of signal.
+    Lam  :: PredicateExp exp a
+         => Mode
+         -> (Signal a -> Sig exp m b)
+         -> Sig exp m (Signal a -> b)
 
 -- | Arguments for a signature.
 data Arg a
@@ -217,13 +221,28 @@ data Arg a
     Nill :: Arg ()
     (:>) :: Signal a -> Arg b -> Arg (Signal a -> b)
 
+infixr :>
+
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ ...
-    Component :: Sig prog a -> ComponentCMD exp prog (Maybe String)
+    Component :: Sig exp prog a -> ComponentCMD exp prog (Maybe String)
     -- ^ ...
-    PortMap   :: Process prog a -> Arg a -> ComponentCMD exp prog ()
+    PortMap   :: Process exp prog a -> Arg a -> ComponentCMD exp prog ()
+
+type instance IExp (ComponentCMD e)       = e
+type instance IExp (ComponentCMD e :+: i) = e
+
+instance HFunctor (Sig exp)
+  where
+    hfmap f (Unit m)  = Unit $ f m
+    hfmap f (Lam m g) = Lam m (hfmap f . g)
+
+instance HFunctor (ComponentCMD exp)
+  where
+    hfmap f (Component sig)              = Component (hfmap f sig)
+    hfmap f (PortMap (Process m sig) as) = PortMap (Process m (hfmap f sig)) as
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
