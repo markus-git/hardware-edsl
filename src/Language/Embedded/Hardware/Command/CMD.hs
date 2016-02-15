@@ -199,31 +199,31 @@ instance HFunctor (ConditionalCMD exp)
 --------------------------------------------------------------------------------
 -- ** Components.
 
--- | ...
+-- | Processes.
+data Process m a = Process (Maybe String) (Sig m a)
+
+-- | Signals with a specific mode.
+data Directed a = Directed Mode (Signal a)
+
+-- | Signature declaring type of processes.
 data Sig m a
   where
     Unit :: m () -> Sig m ()
-    Lam  :: (Signal a -> Sig m b) -> Sig m (Signal a -> b)
+    Lam  :: (Directed a -> Sig m b) -> Sig m (Signal a -> b)
 
--- | ...
-type family Result sig where
-  Result (a -> b) = Result b
-  Result a        = a
-
--- | ...
+-- | Arguments for a signature.
 data Arg a
   where
-    Empty  :: (Result a ~ a) => Arg a
-    Input  :: Signal a -> Arg b -> Arg (Signal a -> b)
-    Output :: Signal a -> Arg b -> Arg (Signal a -> b)
+    Nill :: Arg ()
+    (:>) :: Signal a -> Arg b -> Arg (Signal a -> b)
 
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ ...
-    Component :: ComponentCMD exp prog ()
+    Component :: Sig prog a -> ComponentCMD exp prog (Maybe String)
     -- ^ ...
-    PortMap   :: ComponentCMD exp prog ()
+    PortMap   :: Process prog a -> Arg a -> ComponentCMD exp prog ()
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
@@ -235,19 +235,22 @@ data SignalX = forall a. SignalX (Signal a)
 data StructuralCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Wraps the program in an entity.
-    Entity       :: String -> prog a -> StructuralCMD exp prog a
+    StructEntity
+      :: String -> prog a -> StructuralCMD exp prog a
     -- ^ Wraps the program in an architecture.
-    Architecture :: String -> String -> prog a -> StructuralCMD exp prog a
+    StructArchitecture
+      :: String -> String -> prog a -> StructuralCMD exp prog a
     -- ^ Wraps the program in a process.
-    Process      :: [SignalX] -> prog () -> StructuralCMD exp prog ()
+    StructProcess
+      :: [SignalX] -> prog () -> StructuralCMD exp prog ()
 
 type instance IExp (StructuralCMD e)       = e
 type instance IExp (StructuralCMD e :+: i) = e
 
 instance HFunctor (StructuralCMD exp)
   where
-    hfmap f (Entity e p)         = Entity e (f p)
-    hfmap f (Architecture e a p) = Architecture e a (f p)
-    hfmap f (Process xs p)       = Process xs (f p)
+    hfmap f (StructEntity e p)         = StructEntity e (f p)
+    hfmap f (StructArchitecture e a p) = StructArchitecture e a (f p)
+    hfmap f (StructProcess xs p)       = StructProcess xs (f p)
 
 --------------------------------------------------------------------------------
