@@ -62,6 +62,7 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 
 import Text.PrettyPrint (Doc)
+import qualified Text.PrettyPrint as Text
 
 import Prelude hiding (null, not, abs, exp, rem, mod, div, and, or)
 import qualified Prelude as P
@@ -73,7 +74,8 @@ import qualified Prelude as P
 -- | Code generation state
 data VHDLEnv = VHDLEnv
   { _unique        :: !Integer
-  , _designs       :: [DesignUnit]
+  , _designs       :: [DesignFile]
+  , _units         :: [DesignUnit]
   , _context       :: Set ContextItem
   , _types         :: Set TypeDeclaration
   , _ports         :: [InterfaceDeclaration]
@@ -89,6 +91,7 @@ data VHDLEnv = VHDLEnv
 emptyVHDLEnv = VHDLEnv
   { _unique        = 0
   , _designs       = []
+  , _units         = []
   , _context       = Set.empty
   , _types         = Set.empty
   , _components    = Set.empty
@@ -312,19 +315,23 @@ contain m = do
 -- * Design units
 --------------------------------------------------------------------------------
 
--- ... design unit with context
-addDesign :: MonadV m => LibraryUnit -> m ()
-addDesign lib =
+-- | Design file.
+addDesign :: MonadV m => DesignFile -> m ()
+addDesign d = CMS.modify $ \s -> s { _designs = d : (_designs s) }
+
+-- | Design unit with context.
+addUnit :: MonadV m => LibraryUnit -> m ()
+addUnit lib =
   do ctxt <- CMS.gets _context
-     dsig <- CMS.gets _designs
+     dsig <- CMS.gets _units
      let item = DesignUnit (ContextClause (Set.toList ctxt)) lib
-     CMS.modify $ \s -> s { _designs = item : dsig
+     CMS.modify $ \s -> s { _units   = item : dsig
                           , _context = Set.empty
                           }
 
--- .. design unit ignoring context
-addDesign_ :: MonadV m => LibraryUnit -> m ()
-addDesign_ lib = CMS.modify $ \s -> s { _designs = (DesignUnit (ContextClause []) lib) : (_designs s)}
+-- | Design unit ignoring context.
+addUnit_ :: MonadV m => LibraryUnit -> m ()
+addUnit_ lib = CMS.modify $ \s -> s { _units = (DesignUnit (ContextClause []) lib) : (_units s)}
 
 --------------------------------------------------------------------------------
 -- ** Architectures
@@ -341,7 +348,7 @@ architecture entity name m =
      result        <- m
      newGlobal     <- reverse <$> CMS.gets _global
      newConcurrent <- reverse <$> CMS.gets _concurrent
-     addDesign_ $ LibrarySecondary $ SecondaryArchitecture $
+     addUnit_ $ LibrarySecondary $ SecondaryArchitecture $
            ArchitectureBody
              (name)
              (NSimple entity)
@@ -365,7 +372,7 @@ entity name m =
      result      <- m
      newPorts    <- reverse <$> CMS.gets _ports
      newGenerics <- reverse <$> CMS.gets _generics
-     addDesign  $ LibraryPrimary $ PrimaryEntity $
+     addUnit  $ LibraryPrimary $ PrimaryEntity $
            EntityDeclaration
              (name)
              (EntityHeader
@@ -392,12 +399,29 @@ package name m =
      CMS.modify $ \e -> e { _types = Set.empty }
      result   <- m
      newTypes <- CMS.gets _types
-     addDesign  $ LibraryPrimary $ PrimaryPackage $
+     addUnit  $ LibraryPrimary $ PrimaryPackage $
            PackageDeclaration
              (Ident name)
              (fmap PHDIType $ Set.toList newTypes)
      CMS.modify $ \e -> e { _types = oldTypes }
      return result
+
+--------------------------------------------------------------------------------
+-- ** Component.
+
+-- | Declares an entire component, with entity declaration and a body.
+component :: MonadV m => Identifier -> m () -> m () -> m ()
+component (Ident name) e a =
+  do oldEnv <- CMS.get
+     CMS.put emptyVHDLEnv
+     entity       en    e
+     architecture en an a
+     units <- CMS.gets _units
+     CMS.put oldEnv
+     addDesign $ DesignFile units
+  where
+    en = Ident $ "entity_"      ++ name
+    an = Ident $ "behavioural_" ++ name
 
 --------------------------------------------------------------------------------
 -- * Pretty printing VHDL programs
@@ -414,13 +438,11 @@ prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
 --------------------------------------------------------------------------------
 
 -- | Pretty print a VHDL environment.
---
--- *** Shouldn't use revers to fix ordering issues! Pair architectures/bodies
---     with their respective entities.
 prettyVEnv :: VHDLEnv -> Doc
-prettyVEnv env = pp (DesignFile $ types ++ archi)
+prettyVEnv env = Text.vcat $ pp main : (fmap pp $ _designs env)
   where
-    archi = reverse $ _designs env
+    main  = DesignFile $ types ++ archi
+    archi = reverse $ _units env
     types = reverse $ designTypes (_types env)
 
 -- *** Scan type declarations for necessary imports instead.
@@ -428,7 +450,7 @@ prettyVEnv env = pp (DesignFile $ types ++ archi)
 designTypes :: Set TypeDeclaration -> [DesignUnit]
 designTypes set
   | Set.null set = []
-  | otherwise    = _designs . snd $ runVHDL pack emptyVHDLEnv
+  | otherwise    = _units . snd $ runVHDL pack emptyVHDLEnv
   where
     pack :: MonadV m => m ()
     pack = package "types" $ do
