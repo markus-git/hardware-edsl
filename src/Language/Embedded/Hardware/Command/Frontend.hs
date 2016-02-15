@@ -1,5 +1,6 @@
-{-# LANGUAGE TypeOperators    #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Embedded.Hardware.Command.Frontend where
 
@@ -210,22 +211,55 @@ iff
 iff b t e = conditional (b, t) [] (Just e)
 
 --------------------------------------------------------------------------------
+-- ** Processes.
+
+-- | Wrap a signed program in a new component.
+process
+  :: forall i m a.
+     ( ComponentCMD (IExp i) :<: i
+     , Monad m)
+  => Sig (ProgramT i m) a
+  -> ProgramT i m (Process (ProgramT i m) a)
+process sig =
+  do n <- proc
+     return $ Process n sig
+  where
+    proc :: ProgramT i m (Maybe String)
+    proc = singleE $ Component sig
+
+-- | Map signals to some component.
+portmap
+  :: forall i m a. (ComponentCMD (IExp i) :<: i)
+  => Process (ProgramT i m) a
+  -> Arg a
+  -> ProgramT i m ()
+portmap pro arg = singleE $ PortMap pro arg
+
+-- | Mark signal as an input signal.
+input    :: Signal a -> Directed a
+input    = Directed In
+
+-- | Mark signal as an output signal.
+output   :: Signal a -> Directed a
+output   = Directed Out
+
+-- | Mark signal as an input/output signal.
+inoutput :: Signal a -> Directed a
+inoutput = Directed InOut
+
+--------------------------------------------------------------------------------
 -- ** Structural entities.
 
 -- | Declare a new entity by wrapping the program to declare ports & generics.
-entity :: (StructuralCMD (IExp i) :<: i) => String -> ProgramT i m a -> ProgramT i m a
-entity e = singleE . Entity e
+structEntity :: (StructuralCMD (IExp i) :<: i) => String -> ProgramT i m a -> ProgramT i m a
+structEntity e = singleE . StructEntity e
 
 -- | Declare a new architecture for some entity by wrapping the given program.
-architecture :: (StructuralCMD (IExp i) :<: i) => String -> String -> ProgramT i m a -> ProgramT i m a
-architecture e a = singleE . Architecture e a
+structArchitecture :: (StructuralCMD (IExp i) :<: i) => String -> String -> ProgramT i m a -> ProgramT i m a
+structArchitecture e a = singleE . StructArchitecture e a
 
 -- | Declare a new process listening to some signals by wrapping the given program.
-process :: (StructuralCMD (IExp i) :<: i) => [SignalX] -> ProgramT i m () -> ProgramT i m ()
-process is = singleE . Process is
-
--- | ...
-hideSig :: Signal a -> SignalX
-hideSig = SignalX
+structProcess :: (StructuralCMD (IExp i) :<: i) => [SignalX] -> ProgramT i m () -> ProgramT i m ()
+structProcess is = singleE . StructProcess is
 
 --------------------------------------------------------------------------------
