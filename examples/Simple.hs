@@ -34,33 +34,33 @@ type Prog = Program CMD
 
 testSimple :: Prog ()
 testSimple = do
-  i <- entity "simple" $
+  i <- structEntity "simple" $
          do x <- newPort     InOut true :: Prog (Signal Bool)
             y <- newPort_    In         :: Prog (Signal Word8)
             z <- newGeneric_ In         :: Prog (Signal Int16)
             return x
-  architecture "simple" "behavioural" $
-    process [hideSig i] $
+  structArchitecture "simple" "behavioural" $
+    structProcess [SignalX i] $
       i <== (true `and` false)
 
 testArrays :: Prog ()
 testArrays = do
-  i <- entity "arrays" $
+  i <- structEntity "arrays" $
          newPort Out true :: Prog (Signal Bool)
-  architecture "arrays" "behavioural" $
-    process [hideSig i] $
+  structArchitecture "arrays" "behavioural" $
+    structProcess [SignalX i] $
       do a <- newArray (litE 4) :: Prog (Array Int8 Bool)
          v <- getArray (litE 2) a
          i <== v
 
 testLoops :: Prog ()
 testLoops = do
-  (i, o) <- entity "loops" $
+  (i, o) <- structEntity "loops" $
          do x <- newPort_ In  :: Prog (Signal Word8)
             y <- newPort_ Out :: Prog (Signal Word8)
             return (x, y)
-  architecture "loops" "behavioural" $
-    process [hideSig i] $ do
+  structArchitecture "loops" "behavioural" $
+    structProcess [SignalX i] $ do
       for (litE 3) $ \n ->
         do y <- getSignal i
            o <== (n + y)
@@ -71,16 +71,18 @@ testLoops = do
 
 testConditionals :: Prog ()
 testConditionals = do
-  (i, o) <- entity "cond" $
+  (i, o) <- structEntity "cond" $
          do x <- newPort_ In  :: Prog (Signal Bool)
             y <- newPort_ Out :: Prog (Signal Bool)
             return (x, y)
-  architecture "cond" "behavioural" $
-    process [hideSig i] $
+  structArchitecture "cond" "behavioural" $
+    structProcess [SignalX i] $
       do v <- getSignal i
          iff (v)
            (setSignal o false)
            (setSignal o true)
+
+
 
 --------------------------------------------------------------------------------
 
