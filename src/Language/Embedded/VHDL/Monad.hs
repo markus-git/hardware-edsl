@@ -29,17 +29,20 @@ module Language.Embedded.VHDL.Monad (
   , addConcurrent, addSequential
   , addType,       addComponent
 
+  , declareComponent
+
     -- ^ statements
   , inProcess, inFor, inWhile, inConditional, inCase
   , exit
 
     -- ^ structures
-  , entity, architecture, package
+  , entity, architecture, package, component
 
     -- ^ common things
   , interfaceConstant, interfaceSignal, interfaceVariable
   , declareConstant,   declareSignal,   declareVariable
   , assignSignal,      assignSignalS,   assignVariable,   assignArray
+  , portMap
 
   , unconstrainedArray, constrainedArray
   ) where
@@ -343,19 +346,22 @@ architecture :: MonadV m => Identifier -> Identifier -> m a -> m a
 architecture entity name m =
   do oldGlobal     <- CMS.gets _global
      oldConcurrent <- CMS.gets _concurrent
+     oldComponents <- CMS.gets _components
      CMS.modify $ \e -> e { _global     = []
                           , _concurrent = [] }
      result        <- m
      newGlobal     <- reverse <$> CMS.gets _global
      newConcurrent <- reverse <$> CMS.gets _concurrent
+     newComponents <- fmap BDIComp . Set.toList <$> CMS.gets _components
      addUnit_ $ LibrarySecondary $ SecondaryArchitecture $
            ArchitectureBody
              (name)
              (NSimple entity)
-             (merge newGlobal)
+             (merge newGlobal ++ newComponents)
              (newConcurrent)
      CMS.modify $ \e -> e { _global     = oldGlobal
-                          , _concurrent = oldConcurrent }
+                          , _concurrent = oldConcurrent
+                          , _components = oldComponents }
      return result
 
 --------------------------------------------------------------------------------
@@ -373,8 +379,7 @@ entity name m =
      newPorts    <- reverse <$> CMS.gets _ports
      newGenerics <- reverse <$> CMS.gets _generics
      addUnit  $ LibraryPrimary $ PrimaryEntity $
-           EntityDeclaration
-             (name)
+           EntityDeclaration name
              (EntityHeader
                (GenericClause <$> maybeNull newGenerics)
                (PortClause    <$> maybeNull newPorts))
@@ -383,10 +388,10 @@ entity name m =
      CMS.modify $ \e -> e { _ports    = oldPorts
                           , _generics = oldGenerics }
      return result
-  where
-    maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
-    maybeNull [] = Nothing
-    maybeNull xs = Just $ InterfaceList $ merge xs
+  
+maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
+maybeNull [] = Nothing
+maybeNull xs = Just $ InterfaceList $ merge xs
 
 --------------------------------------------------------------------------------
 -- ** Packages
@@ -410,18 +415,32 @@ package name m =
 -- ** Component.
 
 -- | Declares an entire component, with entity declaration and a body.
-component :: MonadV m => Identifier -> m () -> m () -> m ()
-component (Ident name) e a =
+component :: MonadV m => m () -> m ()
+component m =
   do oldEnv <- CMS.get
      CMS.put emptyVHDLEnv
-     entity       en    e
-     architecture en an a
-     units <- CMS.gets _units
+     m
+     units <- reverse <$> CMS.gets _units
      CMS.put oldEnv
      addDesign $ DesignFile units
-  where
-    en = Ident $ "entity_"      ++ name
-    an = Ident $ "behavioural_" ++ name
+
+declareComponent :: MonadV m => Identifier -> m a -> m a
+declareComponent name m =
+  do oldPorts    <- CMS.gets _ports
+     oldGenerics <- CMS.gets _generics
+     CMS.modify $ \e -> e { _ports    = []
+                          , _generics = [] }
+     result      <- m
+     newPorts    <- reverse <$> CMS.gets _ports
+     newGenerics <- reverse <$> CMS.gets _generics
+     addComponent $
+           ComponentDeclaration name
+             (GenericClause <$> maybeNull newGenerics)
+             (PortClause    <$> maybeNull newPorts)
+             (Nothing)
+     CMS.modify $ \e -> e { _ports    = oldPorts
+                          , _generics = oldGenerics }
+     return result
 
 --------------------------------------------------------------------------------
 -- * Pretty printing VHDL programs
@@ -539,6 +558,16 @@ assignArray i e = SSignalAss $
     (TargetName i)
     (Nothing)
     (WaveElem [WaveEExp e Nothing])
+
+--------------------------------------------------------------------------------
+-- Portmap.
+
+portMap :: Label -> Identifier -> [Identifier] -> ConcurrentStatement
+portMap l c is = ConComponent $ ComponentInstantiationStatement l
+  (IUComponent $ NSimple c)
+  (Nothing)
+  (Just $ PortMapAspect $ AssociationList $
+    fmap (AssociationElement Nothing . APDesignator . ADSignal . NSimple) is)
 
 --------------------------------------------------------------------------------
 -- Some helper classes and their instances
