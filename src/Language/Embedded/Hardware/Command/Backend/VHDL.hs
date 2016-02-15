@@ -30,11 +30,12 @@ class ToIdent a
   where
     toIdent :: a -> V.Identifier
 
-instance ToIdent String       where toIdent               = V.Ident
-instance ToIdent (Signal a)   where toIdent (SignalC i)   = V.Ident $ 's' : show i
-instance ToIdent (Variable a) where toIdent (VariableC i) = V.Ident $ 'v' : show i
-instance ToIdent (Array i a)  where toIdent (ArrayC i)    = V.Ident $ 'a' : show i
-instance ToIdent (IArray i a) where toIdent (IArrayC i)   = V.Ident $ 'a' : show i
+instance ToIdent String        where toIdent                      = V.Ident
+instance ToIdent (Signal a)    where toIdent (SignalC i)          = V.Ident $ 's' : show i
+instance ToIdent (Variable a)  where toIdent (VariableC i)        = V.Ident $ 'v' : show i
+instance ToIdent (Array i a)   where toIdent (ArrayC i)           = V.Ident $ 'a' : show i
+instance ToIdent (IArray i a)  where toIdent (IArrayC i)          = V.Ident $ 'a' : show i
+instance ToIdent (Process m a) where toIdent (Process (Just i) _) = V.Ident i
 
 compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe V.Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
@@ -287,8 +288,20 @@ instance CompileExp exp => Interp (ComponentCMD exp) VHDL
   where
     interp = compileComponent
 
+instance EvaluateExp exp => Interp (ComponentCMD exp) IO
+  where
+    interp = runComponent
+
 compileComponent :: forall exp a. CompileExp exp => ComponentCMD exp VHDL a -> VHDL a
-compileComponent = undefined
+compileComponent (Component sig) =
+  do u <- V.freshUnique
+     let process = Process (Just $ 'c' : show u) sig
+     undefined
+
+runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
+runComponent (Component _)                  = return Nothing
+runComponent (PortMap (Process _ sig) args) =
+  do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
 --------------------------------------------------------------------------------
 -- ** Structural.
@@ -302,9 +315,9 @@ instance EvaluateExp exp => Interp (StructuralCMD exp) IO
     interp = runStructural
 
 compileStructural :: forall exp a. CompileExp exp => StructuralCMD exp VHDL a -> VHDL a
-compileStructural (Entity e prog)         = V.entity (toIdent e) prog
-compileStructural (Architecture e a prog) = V.architecture (toIdent e) (toIdent a) prog
-compileStructural (Process xs prog)       =
+compileStructural (StructEntity e prog)         = V.entity (toIdent e) prog
+compileStructural (StructArchitecture e a prog) = V.architecture (toIdent e) (toIdent a) prog
+compileStructural (StructProcess xs prog)       =
   do label  <- V.newLabel
      (a, c) <- V.inProcess label (fmap reveal xs) prog
      V.addConcurrent (V.ConProcess c)
@@ -314,8 +327,9 @@ compileStructural (Process xs prog)       =
     reveal (SignalX s) = toIdent s
 
 runStructural :: forall exp a. EvaluateExp exp => StructuralCMD exp IO a -> IO a
-runStructural (Entity _ prog)         = prog
-runStructural (Architecture _ _ prog) = prog
-runStructural (Process xs prog)       = error "todo: run process"
+runStructural (StructEntity _ prog)         = prog
+runStructural (StructArchitecture _ _ prog) = prog
+runStructural (StructProcess xs prog)       =
+  do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
 --------------------------------------------------------------------------------
