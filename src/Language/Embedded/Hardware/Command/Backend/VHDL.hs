@@ -30,12 +30,12 @@ class ToIdent a
   where
     toIdent :: a -> V.Identifier
 
-instance ToIdent String        where toIdent                      = V.Ident
-instance ToIdent (Signal a)    where toIdent (SignalC i)          = V.Ident $ 's' : show i
-instance ToIdent (Variable a)  where toIdent (VariableC i)        = V.Ident $ 'v' : show i
-instance ToIdent (Array i a)   where toIdent (ArrayC i)           = V.Ident $ 'a' : show i
-instance ToIdent (IArray i a)  where toIdent (IArrayC i)          = V.Ident $ 'a' : show i
-instance ToIdent (Process m a) where toIdent (Process (Just i) _) = V.Ident i
+instance ToIdent String          where toIdent                      = V.Ident
+instance ToIdent (Signal a)      where toIdent (SignalC i)          = V.Ident $ 's' : show i
+instance ToIdent (Variable a)    where toIdent (VariableC i)        = V.Ident $ 'v' : show i
+instance ToIdent (Array i a)     where toIdent (ArrayC i)           = V.Ident $ 'a' : show i
+instance ToIdent (IArray i a)    where toIdent (IArrayC i)          = V.Ident $ 'a' : show i
+instance ToIdent (Process e m a) where toIdent (Process (Just i) _) = V.Ident i
 
 compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe V.Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
@@ -294,9 +294,41 @@ instance EvaluateExp exp => Interp (ComponentCMD exp) IO
 
 compileComponent :: forall exp a. CompileExp exp => ComponentCMD exp VHDL a -> VHDL a
 compileComponent (Component sig) =
-  do u <- V.freshUnique
-     let process = Process (Just $ 'c' : show u) sig
-     undefined
+  do u <- ('c' :)  . show <$> V.freshUnique
+     let ename = V.Ident $ "e_" ++ u
+         aname = V.Ident $ "a_" ++ u
+         pname = V.Ident $ "p_" ++ u
+     V.component $
+       do (is, m) <- V.entity ename $ declarations [] sig
+          V.architecture ename aname $
+            do (_, p) <- V.inProcess pname is m
+               V.addConcurrent (V.ConProcess p)
+     return (Just u)
+  where
+    -- go over the sig and declare expected signals, keep inputs and program.
+    declarations :: [V.Identifier] -> Sig exp VHDL b -> VHDL ([V.Identifier], VHDL ())
+    declarations is (Unit m) = return (is, m)
+    declarations is (Lam  m (f :: Signal c -> Sig exp VHDL d)) =
+      do t <- compT (undefined :: exp c)
+         i <- SignalC <$> V.freshUnique
+         V.addPort $ V.interfaceSignal (toIdent i) m t Nothing
+         case m of
+           V.In -> declarations (toIdent i : is) $ f i
+           _    -> declarations is $ f i
+compileComponent (PortMap (Process (Just name) sig) as) =
+  do let comp = V.Ident name
+     l  <- V.Ident . show <$> V.freshUnique
+     is <- V.declareComponent comp $ applications [] sig as
+     V.addConcurrent $ V.portMap l comp (reverse is)
+  where
+    -- go over the sig and apply each argument, saving their idents.
+    applications :: [V.Identifier] -> Sig exp VHDL b -> Arg b -> VHDL [V.Identifier]
+    applications is (Unit  _) (Nill)   = return is
+    applications is (Lam m (f :: Signal c -> Sig exp VHDL d)) (s :> g) = do
+      t <- compT (undefined :: exp c)
+      i <- SignalC <$> V.freshUnique
+      V.addPort $ V.interfaceSignal (toIdent i) m t Nothing
+      applications (toIdent s : is) (f s) g
 
 runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
 runComponent (Component _)                  = return Nothing
