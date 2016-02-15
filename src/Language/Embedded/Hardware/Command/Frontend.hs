@@ -214,38 +214,24 @@ iff b t e = conditional (b, t) [] (Just e)
 -- ** Processes.
 
 -- | Wrap a signed program in a new component.
-process
+process 
   :: forall i m a.
      ( ComponentCMD (IExp i) :<: i
      , Monad m)
-  => Sig (ProgramT i m) a
-  -> ProgramT i m (Process (ProgramT i m) a)
+  => Sig (IExp i) (ProgramT i m) a
+  -> ProgramT i m (Process (IExp i) (ProgramT i m) a)
 process sig =
-  do n <- proc
+  do n <- singleE $ Component sig
      return $ Process n sig
-  where
-    proc :: ProgramT i m (Maybe String)
-    proc = singleE $ Component sig
 
 -- | Map signals to some component.
 portmap
   :: forall i m a. (ComponentCMD (IExp i) :<: i)
-  => Process (ProgramT i m) a
+  => Process (IExp i) (ProgramT i m) a
   -> Arg a
   -> ProgramT i m ()
 portmap pro arg = singleE $ PortMap pro arg
 
--- | Mark signal as an input signal.
-input    :: Signal a -> Directed a
-input    = Directed In
-
--- | Mark signal as an output signal.
-output   :: Signal a -> Directed a
-output   = Directed Out
-
--- | Mark signal as an input/output signal.
-inoutput :: Signal a -> Directed a
-inoutput = Directed InOut
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
