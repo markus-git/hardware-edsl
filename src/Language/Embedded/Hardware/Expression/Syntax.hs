@@ -27,8 +27,6 @@ import qualified Data.Bits as Bits
 class    (Typeable a, Rep a, Eq a) => HType a
 instance (Typeable a, Rep a, Eq a) => HType a
 
-type instance PredicateExp HExp = HType
-
 -- | Domain of expressions.
 type Dom =
       Expression
@@ -64,7 +62,7 @@ instance Syntactic (HExp a)
     type Internal (HExp a) = a
 
     desugar = unHExp
-    sugar   = HExp
+    sugar   = HExp 
 
 --------------------------------------------------------------------------------
 -- ** Syntax.
@@ -126,11 +124,11 @@ data Factor sig
 -- | ...
 data Primary sig
   where
-    Name       :: (HType a) => String   -> Primary (Full a)
-    Literal    :: (HType a) => a        -> Primary (Full a)
-    Aggregate  :: (HType a) => [a]      -> Primary (Full [a])
+    Name       :: (HType a) => VarId   -> Primary (Full a)
+    Literal    :: (HType a) => a -> Primary (Full a)
+    Aggregate  :: (HType a) => [a] -> Primary (Full [a])
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
-    Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
+    Qualified  :: (HType a, HType b) => b -> Primary (a :-> Full a)
     Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)
     Allocator  :: (HType a) => Primary (Full a)
 

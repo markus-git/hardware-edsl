@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -24,9 +25,16 @@ import Control.Applicative
 -- * Compilation and evaluation of hardware expressions for VHDL.
 --------------------------------------------------------------------------------
 
+instance FreeExp HExp
+  where
+    type PredicateExp HExp = HType
+    litE = value
+    varE = variable
+
+--------------------------------------------------------------------------------
+
 instance EvaluateExp HExp
   where
-    litE  = value
     evalE = evalHExp
 
 evalHExp :: HExp a -> a
@@ -40,7 +48,6 @@ evalHExp = go . unHExp
 
 instance CompileExp HExp
   where
-    varE v = variable ('v' : show v)
     compT  = compHType
     compE  = compHExp
 

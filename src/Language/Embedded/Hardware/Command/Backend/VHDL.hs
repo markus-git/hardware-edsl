@@ -26,16 +26,8 @@ import qualified Data.Array.IO as IA
 -- * Translation of hardware commands into VHDL.
 --------------------------------------------------------------------------------
 
-class ToIdent a
-  where
-    toIdent :: a -> V.Identifier
-
-instance ToIdent String          where toIdent                      = V.Ident
-instance ToIdent (Signal a)      where toIdent (SignalC i)          = V.Ident $ 's' : show i
-instance ToIdent (Variable a)    where toIdent (VariableC i)        = V.Ident $ 'v' : show i
-instance ToIdent (Array i a)     where toIdent (ArrayC i)           = V.Ident $ 'a' : show i
-instance ToIdent (IArray i a)    where toIdent (IArrayC i)          = V.Ident $ 'a' : show i
-instance ToIdent (Process e m a) where toIdent (Process (Just i) _) = V.Ident i
+ident :: VarId -> V.Identifier
+ident = V.Ident
 
 compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe V.Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
@@ -46,14 +38,17 @@ compTM _ = compT (undefined :: exp a)
 evalEM :: forall exp a. (PredicateExp exp a, EvaluateExp exp) => Maybe (exp a) -> a
 evalEM e = maybe (error "empty value") (id) $ fmap evalE e
 
-freshVar :: forall exp a. (CompileExp exp, PredicateExp exp a) => VHDL (exp a, V.Identifier)
-freshVar = do
-  i <- varE <$> V.freshUnique :: VHDL (exp a)
-  n <- dig  <$> compE i
+freshVar :: forall exp a. (CompileExp exp, PredicateExp exp a) => String -> VHDL (exp a, V.Identifier)
+freshVar prefix = do
+  i <- var <$> V.freshUnique
+  n <- dig <$> compE i
   t <- compT (undefined :: exp a)
   V.addLocal $ V.declareVariable n t Nothing
   return (i, n)
   where
+    var :: Integer -> exp a
+    var v = varE $ prefix ++ show v
+    
     -- diggity dig!
     dig :: V.Expression -> V.Identifier
     dig (V.ENand (V.Relation (V.ShiftExpression (V.SimpleExpression _ (V.Term (V.FacPrim (V.PrimName (V.NSimple i)) _)_)_)_)_)_) = i
@@ -70,34 +65,34 @@ instance EvaluateExp exp => Interp (SignalCMD exp) IO
     interp = runSignal
 
 compileSignal :: forall exp a. CompileExp exp => SignalCMD exp VHDL a -> VHDL a
-compileSignal (NewSignal clause scope mode exp) =
+compileSignal (NewSignal base clause scope mode exp) =
   do v <- compEM exp
      t <- compTM exp
-     i <- SignalC <$> V.freshUnique
-     let block     = V.declareSignal   (toIdent i)      t v
-         interface = V.interfaceSignal (toIdent i) mode t v
+     i <- V.newSym base
+     let block     = V.declareSignal   (ident i)      t v
+         interface = V.interfaceSignal (ident i) mode t v
      case scope of
        SProcess      -> V.addLocal  block
        SArchitecture -> V.addGlobal block
        SEntity       -> case clause of
          Port    -> V.addPort    interface
          Generic -> V.addGeneric interface
-     return i
-compileSignal (GetSignal s) =
-  do (v, i) <- freshVar :: VHDL (a, V.Identifier)
+     return (SignalC i)
+compileSignal (GetSignal (SignalC s)) =
+  do (v, i) <- freshVar "s" :: VHDL (a, V.Identifier)
      e <- compE v
-     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.NSimple $ toIdent s)
+     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident s)
      return v
-compileSignal (SetSignal s exp) =
-  do V.addSequential =<< V.assignSignalS (toIdent s) <$> compE exp
+compileSignal (SetSignal (SignalC s) exp) =
+  do V.addSequential =<< V.assignSignalS (ident s) <$> compE exp
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ varE s
 
 runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
-runSignal (NewSignal _ _ _ exp)        = fmap SignalE $ IR.newIORef $ evalEM exp
-runSignal (GetSignal (SignalE r))      = fmap litE $ IR.readIORef r
-runSignal (SetSignal (SignalE r) exp)  = IR.writeIORef r $ evalE exp
-runSignal (UnsafeFreezeSignal r)       = runSignal (GetSignal r)
+runSignal (NewSignal _ _ _ _ exp)     = fmap SignalE $ IR.newIORef $ evalEM exp
+runSignal (GetSignal (SignalE r))     = fmap litE $ IR.readIORef r
+runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r $ evalE exp
+runSignal (UnsafeFreezeSignal r)      = runSignal (GetSignal r)
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -111,24 +106,24 @@ instance EvaluateExp exp => Interp (VariableCMD exp) IO
     interp = runVariable
 
 compileVariable :: forall exp a. CompileExp exp => VariableCMD exp VHDL a -> VHDL a
-compileVariable (NewVariable exp) =
+compileVariable (NewVariable base exp) =
   do v <- compEM exp
      t <- compTM exp
-     i <- VariableC <$> V.freshUnique
-     V.addLocal $ V.declareVariable (toIdent i) t v
-     return i
-compileVariable (GetVariable var) =
-  do (v, i) <- freshVar :: VHDL (a, V.Identifier)
+     i <- V.newSym base
+     V.addLocal $ V.declareVariable (ident i) t v
+     return (VariableC i)
+compileVariable (GetVariable (VariableC var)) =
+  do (v, i) <- freshVar "v" :: VHDL (a, V.Identifier)
      e <- compE v
-     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.NSimple $ toIdent var)
+     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident var)
      return v
-compileVariable (SetVariable var exp) =
-  do V.addSequential =<< V.assignVariable (toIdent var) <$> compE exp
+compileVariable (SetVariable (VariableC var) exp) =
+  do V.addSequential =<< V.assignVariable (ident var) <$> compE exp
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ varE v
 
 runVariable :: forall exp prog a. EvaluateExp exp => VariableCMD exp prog a -> IO a
-runVariable (NewVariable exp)               = fmap VariableE $ IR.newIORef $ evalEM exp
+runVariable (NewVariable _ exp)             = fmap VariableE $ IR.newIORef $ evalEM exp
 runVariable (GetVariable (VariableE v))     = fmap litE $ IR.readIORef v
 runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v $ evalE exp
 runVariable (UnsafeFreezeVariable v)        = runVariable (GetVariable v)
@@ -147,48 +142,48 @@ instance EvaluateExp exp => Interp (ArrayCMD exp) IO
 -- *** Signal commands can be both sequential and parallel and I shouldn't
 --     depend on them always being sequential.
 compileArray :: forall exp a. (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => ArrayCMD exp VHDL a -> VHDL a
-compileArray (NewArray len) =
+compileArray (NewArray base len) =
   do n <- compE  len
      t <- compTA len (undefined :: a)
-     a <- freshA
-     i <- ArrayC <$> V.freshUnique
+     a <- freshA   base
+     i <- V.newSym base
      let range = V.range (lift n) V.downto zero
          array = V.constrainedArray a t range
      V.addType array
-     V.addLocal $ V.declareVariable (toIdent i) (typed array) Nothing
-     return i
-compileArray (InitArray is) =
+     V.addLocal $ V.declareVariable (ident i) (typed array) Nothing
+     return (ArrayC i)
+compileArray (InitArray base is) =
   do t <- compTA (undefined :: exp i) (undefined :: a)
-     a <- freshA
-     i <- ArrayC <$> V.freshUnique
+     a <- freshA   base
+     i <- V.newSym base
      x <- sequence [compE (litE a :: exp b) | (a :: b) <- is]
      let len   = V.lit (length is)
          range = V.range (lift len) V.downto zero
          array = V.constrainedArray a t range
      V.addType array
-     V.addLocal $ V.declareVariable (toIdent i) (typed array) (Just $ lift $ V.aggregate x)
-     return i
-compileArray (GetArray ix arr) =
-  do (v, i) <- freshVar :: VHDL (a, V.Identifier)
+     V.addLocal $ V.declareVariable (ident i) (typed array) (Just $ lift $ V.aggregate x)
+     return (ArrayC i)
+compileArray (GetArray ix (ArrayC arr)) =
+  do (v, i) <- freshVar "a" :: VHDL (a, V.Identifier)
      e <- compE ix
-     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.indexed (toIdent arr) e)
+     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.indexed (ident arr) e)
      return v
-compileArray (SetArray i e arr) =
+compileArray (SetArray i e (ArrayC arr)) =
   do i' <- compE i
      e' <- compE e
      -- this could be concurrent as well.
-     V.addSequential $ V.assignArray (V.indexed (toIdent arr) i') e'
-compileArray (CopyArray a b l) =
+     V.addSequential $ V.assignArray (V.indexed (ident arr) i') e'
+compileArray (CopyArray (ArrayC a) (ArrayC b) l) =
   do len <- compE l
      let slice = (lift (V.lit (0 :: Word8)), lift len)
-         dest  = V.slice (toIdent a) slice
-         src   = V.slice (toIdent b) slice
+         dest  = V.slice (ident a) slice
+         src   = V.slice (ident b) slice
      V.addSequential $ V.assignArray src (lift $ V.PrimName dest)
 compileArray (UnsafeFreezeArray (ArrayC a)) = return $ IArrayC a
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
-runArray (NewArray len)            = fmap ArrayE . IR.newIORef =<< IA.newArray_ (0, evalE len)
-runArray (InitArray is)            = fmap ArrayE . IR.newIORef =<< IA.newListArray (0, fromIntegral $ length is) is
+runArray (NewArray _ len)          = fmap ArrayE . IR.newIORef =<< IA.newArray_ (0, evalE len)
+runArray (InitArray _ is)          = fmap ArrayE . IR.newIORef =<< IA.newListArray (0, fromIntegral $ length is) is
 runArray (GetArray i (ArrayE a))   = do r <- IR.readIORef a; fmap litE $ IA.readArray r (evalE i)
 runArray (SetArray i e (ArrayE a)) = do r <- IR.readIORef a; IA.writeArray r (evalE i) (evalE e)
 runArray (UnsafeFreezeArray (ArrayE a))      = fmap IArrayE . freeze =<< IR.readIORef a
@@ -203,8 +198,8 @@ runArray (CopyArray (ArrayE a) (ArrayE b) l) =
 --------------------------------------------------------------------------------
 
 -- | Fresh array type identifier
-freshA :: VHDL V.Identifier
-freshA = toIdent . ('t' :) . show <$> V.freshUnique
+freshA :: String -> VHDL V.Identifier
+freshA prefix = ident . ('t' :) . show <$> V.newSym prefix
 
 -- | Compile type of array.
 compTA :: forall exp i a. (PredicateExp exp a, CompileExp exp) => exp i -> Array i a -> VHDL V.Type
@@ -234,7 +229,7 @@ instance EvaluateExp exp => Interp (LoopCMD exp) IO
 compileLoop :: forall exp a. CompileExp exp => LoopCMD exp VHDL a -> VHDL a
 compileLoop (For r step) =
   do hi     <- compE r
-     (v, i) <- freshVar
+     (v, i) <- freshVar "l"
      loop   <- V.inFor i (V.range zero V.to (lift hi)) (step v)
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
@@ -294,10 +289,10 @@ instance EvaluateExp exp => Interp (ComponentCMD exp) IO
 
 compileComponent :: forall exp a. CompileExp exp => ComponentCMD exp VHDL a -> VHDL a
 compileComponent (Component sig) =
-  do u <- ('c' :)  . show <$> V.freshUnique
-     let ename = V.Ident $ "e_" ++ u
-         aname = V.Ident $ "a_" ++ u
-         pname = V.Ident $ "p_" ++ u
+  do u <- V.newSym "c"
+     let ename = ident $ "e_" ++ u
+         aname = ident $ "a_" ++ u
+         pname = ident $ "p_" ++ u
      V.component $
        do (is, m) <- V.entity ename $ declarations [] sig
           V.architecture ename aname $
@@ -310,25 +305,25 @@ compileComponent (Component sig) =
     declarations is (Unit m) = return (is, m)
     declarations is (Lam  m (f :: Signal c -> Sig exp VHDL d)) =
       do t <- compT (undefined :: exp c)
-         i <- SignalC <$> V.freshUnique
-         V.addPort $ V.interfaceSignal (toIdent i) m t Nothing
+         i <- V.newSym "s"
+         V.addPort $ V.interfaceSignal (ident i) m t Nothing
          case m of
-           V.In -> declarations (toIdent i : is) $ f i
-           _    -> declarations is $ f i
+           V.In -> declarations (ident i : is) $ f (SignalC i)
+           _    -> declarations is $ f (SignalC i)
 compileComponent (PortMap (Process (Just name) sig) as) =
   do let comp = V.Ident name
-     l  <- V.Ident . show <$> V.freshUnique
+     l  <- V.newSym "s"
      is <- V.declareComponent comp $ applications [] sig as
-     V.addConcurrent $ V.portMap l comp (reverse is)
+     V.addConcurrent $ V.portMap (ident l) comp (reverse is)
   where
     -- go over the sig and apply each argument, saving their idents.
     applications :: [V.Identifier] -> Sig exp VHDL b -> Arg b -> VHDL [V.Identifier]
     applications is (Unit  _) (Nill)   = return is
-    applications is (Lam m (f :: Signal c -> Sig exp VHDL d)) (s :> g) = do
+    applications is (Lam m (f :: Signal c -> Sig exp VHDL d)) (s@(SignalC n) :> g) = do
       t <- compT (undefined :: exp c)
-      i <- SignalC <$> V.freshUnique
-      V.addPort $ V.interfaceSignal (toIdent i) m t Nothing
-      applications (toIdent s : is) (f s) g
+      i <- V.newSym "s"
+      V.addPort $ V.interfaceSignal (ident i) m t Nothing
+      applications (ident n : is) (f s) g
 
 runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
 runComponent (Component _)                  = return Nothing
@@ -347,8 +342,8 @@ instance EvaluateExp exp => Interp (StructuralCMD exp) IO
     interp = runStructural
 
 compileStructural :: forall exp a. CompileExp exp => StructuralCMD exp VHDL a -> VHDL a
-compileStructural (StructEntity e prog)         = V.entity (toIdent e) prog
-compileStructural (StructArchitecture e a prog) = V.architecture (toIdent e) (toIdent a) prog
+compileStructural (StructEntity e prog)         = V.entity (ident e) prog
+compileStructural (StructArchitecture e a prog) = V.architecture (ident e) (ident a) prog
 compileStructural (StructProcess xs prog)       =
   do label  <- V.newLabel
      (a, c) <- V.inProcess label (fmap reveal xs) prog
@@ -356,7 +351,7 @@ compileStructural (StructProcess xs prog)       =
      return a
   where
     reveal :: SignalX -> V.Identifier
-    reveal (SignalX s) = toIdent s
+    reveal (SignalX (SignalC s)) = ident s
 
 runStructural :: forall exp a. EvaluateExp exp => StructuralCMD exp IO a -> IO a
 runStructural (StructEntity _ prog)         = prog

@@ -7,7 +7,7 @@
 module Language.Embedded.Hardware.Command.CMD where
 
 import Language.Embedded.VHDL               (Mode)
-import Language.Embedded.Hardware.Interface (PredicateExp)
+import Language.Embedded.Hardware.Interface (PredicateExp, VarId)
 
 import Control.Monad.Operational.Higher
 
@@ -33,13 +33,14 @@ data Scope    = SProcess | SArchitecture | SEntity
   deriving (Show)
 
 -- | Signal representation.
-data Signal a = SignalC Integer | SignalE (IORef a)
+data Signal a = SignalC VarId | SignalE (IORef a)
 
 -- | Commands for signals.
 data SignalCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Create a new signal.
-    NewSignal :: PredicateExp exp a => Clause -> Scope -> Mode  -> Maybe (exp a) -> SignalCMD exp prog (Signal a)
+    NewSignal :: PredicateExp exp a =>
+      VarId -> Clause -> Scope -> Mode  -> Maybe (exp a) -> SignalCMD exp prog (Signal a)
     -- ^ Fetch the contents of a signal.
     GetSignal :: PredicateExp exp a => Signal a          -> SignalCMD exp prog (exp a)
     -- ^ Write the value to a signal.
@@ -52,22 +53,23 @@ type instance IExp (SignalCMD e :+: i) = e
 
 instance HFunctor (SignalCMD exp)
   where
-    hfmap _ (NewSignal c s m e) = NewSignal c s m e
-    hfmap _ (GetSignal s)       = GetSignal s
-    hfmap _ (SetSignal s e)     = SetSignal s e
+    hfmap _ (NewSignal n c s m e)  = NewSignal n c s m e
+    hfmap _ (GetSignal s)          = GetSignal s
+    hfmap _ (SetSignal s e)        = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
 
 --------------------------------------------------------------------------------
 -- ** Variables.
 
 -- | Variable representation.
-data Variable a = VariableC Integer | VariableE (IORef a)
+data Variable a = VariableC VarId | VariableE (IORef a)
 
 -- | Commands for variables.
 data VariableCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Create a new variable.
-    NewVariable :: PredicateExp exp a => Maybe (exp a) -> VariableCMD exp prog (Variable a)
+    NewVariable :: PredicateExp exp a =>
+      VarId -> Maybe (exp a) -> VariableCMD exp prog (Variable a)
     -- ^ Fetch the contents of a variable.
     GetVariable :: PredicateExp exp a => Variable a          -> VariableCMD exp prog (exp a)
     -- ^ Write the value to a variable.
@@ -80,9 +82,9 @@ type instance IExp (VariableCMD e :+: i) = e
 
 instance HFunctor (VariableCMD exp)
   where
-    hfmap _ (NewVariable e)   = NewVariable e
-    hfmap _ (GetVariable s)   = GetVariable s
-    hfmap _ (SetVariable s e) = SetVariable s e
+    hfmap _ (NewVariable n e)        = NewVariable n e
+    hfmap _ (GetVariable s)          = GetVariable s
+    hfmap _ (SetVariable s e)        = SetVariable s e
     hfmap _ (UnsafeFreezeVariable s) = UnsafeFreezeVariable s
 
 --------------------------------------------------------------------------------
@@ -96,10 +98,10 @@ class CompArrayIx exp
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array  i a = ArrayC Integer  | ArrayE (IORef (IOArray i a))
+data Array  i a = ArrayC VarId  | ArrayE (IORef (IOArray i a))
 
 -- | Immutable arrays.
-data IArray i a = IArrayC Integer | IArrayE (Arr.Array i a)
+data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
 
 -- | Commands for arrays.
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
@@ -110,14 +112,14 @@ data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
          , PredicateExp exp i
          , Integral i
          , Ix i )
-      => exp i -> ArrayCMD exp prog (Array i a)
+      => VarId -> exp i -> ArrayCMD exp prog (Array i a)
     -- ^ Creates an array from the given list of elements.
     InitArray
       :: ( PredicateExp exp a
          , PredicateExp exp i
          , Integral i
          , Ix i )
-      => [a] -> ArrayCMD exp prog (Array i a)
+      => VarId -> [a] -> ArrayCMD exp prog (Array i a)
     -- ^ Fetches the array's value at a specified index.
     GetArray
       :: ( PredicateExp exp a
@@ -151,10 +153,10 @@ type instance IExp (ArrayCMD e :+: i) = e
 
 instance HFunctor (ArrayCMD exp)
   where
-    hfmap _ (NewArray i)     = NewArray i
-    hfmap _ (InitArray is)   = InitArray is
-    hfmap _ (GetArray i a)   = GetArray i a
-    hfmap _ (SetArray i e a) = SetArray i e a
+    hfmap _ (NewArray n i)        = NewArray n i
+    hfmap _ (InitArray n is)      = InitArray n is
+    hfmap _ (GetArray i a)        = GetArray i a
+    hfmap _ (SetArray i e a)      = SetArray i e a
     hfmap _ (CopyArray a b l)     = CopyArray a b l
     hfmap _ (UnsafeFreezeArray a) = UnsafeFreezeArray a
 

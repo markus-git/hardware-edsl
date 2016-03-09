@@ -35,30 +35,34 @@ type Prog = Program CMD
 
 testSimple :: Prog ()
 testSimple = do
-  i <- structEntity "simple" $
-         do x <- newPort     InOut true :: Prog (Signal Bool)
-            y <- newPort_    In         :: Prog (Signal Word8)
-            z <- newGeneric_ In         :: Prog (Signal Int16)
-            return x
+  (o, i1, i2) <- structEntity "simple" $
+         do x <- newPort "o"  Out :: Prog (Signal Int16)
+            y <- newPort "i" In  :: Prog (Signal Int16)
+            z <- newPort "i" In  :: Prog (Signal Int16)
+            return (x, y, z)
   structArchitecture "simple" "behavioural" $
-    structProcess [SignalX i] $
-      i <== (true `and` false)
+    structProcess [SignalX i1, SignalX i2] $
+      do e1 <- getSignal i1 :: Prog (HExp Int16)
+         e2 <- getSignal i2 :: Prog (HExp Int16)
+         setSignal o (e1 + e2)
 
+{-
 testArrays :: Prog ()
 testArrays = do
-  i <- structEntity "arrays" $
-         newPort Out true :: Prog (Signal Bool)
+  o <- structEntity "arrays" $
+         newPort_ Out :: Prog (Signal Int8)
   structArchitecture "arrays" "behavioural" $
-    structProcess [SignalX i] $
-      do a <- newArray (litE 4) :: Prog (Array Int8 Bool)
-         v <- getArray (litE 2) a
-         i <== v
+    structProcess [] $
+      do a <- newArray (litE 4)  :: Prog (Array Int8 Int8)
+         b <- newArray (litE 20) :: Prog (Array Int8 Int8)
+         
+-}
 
 testLoops :: Prog ()
 testLoops = do
   (i, o) <- structEntity "loops" $
-         do x <- newPort_ In  :: Prog (Signal Word8)
-            y <- newPort_ Out :: Prog (Signal Word8)
+         do x <- newPort "i" In  :: Prog (Signal Word8)
+            y <- newPort "o" Out :: Prog (Signal Word8)
             return (x, y)
   structArchitecture "loops" "behavioural" $
     structProcess [SignalX i] $ do
@@ -73,8 +77,8 @@ testLoops = do
 testConditionals :: Prog ()
 testConditionals = do
   (i, o) <- structEntity "cond" $
-         do x <- newPort_ In  :: Prog (Signal Bool)
-            y <- newPort_ Out :: Prog (Signal Bool)
+         do x <- newPort "i" In  :: Prog (Signal Bool)
+            y <- newPort "o" Out :: Prog (Signal Bool)
             return (x, y)
   structArchitecture "cond" "behavioural" $
     structProcess [SignalX i] $
@@ -88,7 +92,7 @@ testComponents = do
   let -- we define our signal function.
       function :: Signal Bool -> Prog (Signal Bool)
       function inp = do
-        out <- newSignal_
+        out <- newSignal
         y   <- getSignal inp
         setSignal out (y `xor` true)
         return out
@@ -102,8 +106,8 @@ testComponents = do
 
   p      <- process signature
   (i, o) <- structEntity "portmap" $
-         do x <- newPort_ In  :: Prog (Signal Bool)
-            y <- newPort_ Out :: Prog (Signal Bool)
+         do x <- newPort "i" In  :: Prog (Signal Bool)
+            y <- newPort "o" Out :: Prog (Signal Bool)
             return (x, y)
   structArchitecture "portmap" "structural" $
     portmap p (i :> o :> Nill)
@@ -114,8 +118,8 @@ printTests :: IO ()
 printTests = do
   putStrLn "\n### Simple ###\n"
   putStrLn $ compile $ testSimple
-  putStrLn "\n### Arrays ###\n"
-  putStrLn $ compile $ testArrays
+--  putStrLn "\n### Arrays ###\n"
+--  putStrLn $ compile $ testArrays
   putStrLn "\n### Loops ###\n"
   putStrLn $ compile $ testLoops
   putStrLn "\n### Conditionals ###\n"

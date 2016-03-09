@@ -151,8 +151,8 @@ freshUnique =
      return u
 
 -- | Generates a fresh and unique identifier.
-newSym :: MonadV m => m Identifier
-newSym = do i <- freshUnique; return (Ident $ 'v' : show i)
+newSym :: MonadV m => String -> m String
+newSym n = do i <- freshUnique; return (n ++ show i)
 
 -- | Generates a fresh and unique label.
 newLabel :: MonadV m => m Label
