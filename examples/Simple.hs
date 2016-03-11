@@ -46,17 +46,16 @@ testSimple = do
          e2 <- getSignal i2 :: Prog (HExp Int16)
          setSignal o (e1 + e2)
 
-{-
 testArrays :: Prog ()
 testArrays = do
   o <- structEntity "arrays" $
-         newPort_ Out :: Prog (Signal Int8)
+         newPort "o" Out :: Prog (Signal Int8)
   structArchitecture "arrays" "behavioural" $
     structProcess [] $
       do a <- newArray (litE 4)  :: Prog (Array Int8 Int8)
-         b <- newArray (litE 20) :: Prog (Array Int8 Int8)
+         v <- getArray (litE 0) a
+         setSignal o v
          
--}
 
 testLoops :: Prog ()
 testLoops = do
@@ -118,8 +117,8 @@ printTests :: IO ()
 printTests = do
   putStrLn "\n### Simple ###\n"
   putStrLn $ compile $ testSimple
---  putStrLn "\n### Arrays ###\n"
---  putStrLn $ compile $ testArrays
+  putStrLn "\n### Arrays ###\n"
+  putStrLn $ compile $ testArrays
   putStrLn "\n### Loops ###\n"
   putStrLn $ compile $ testLoops
   putStrLn "\n### Conditionals ###\n"

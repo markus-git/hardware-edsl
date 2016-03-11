@@ -52,7 +52,7 @@ instance CompileExp HExp
     compE  = compHExp
 
 compHType :: forall a. HType a => HExp a -> VHDL VHDL.Type
-compHType _ = declare (undefined :: a) >> return (unTag (typed :: Tagged a VHDL.Type))
+compHType _ = declare (undefined :: proxy a)
 
 compHExp  :: forall a. HType a => HExp a -> VHDL VHDL.Expression
 compHExp  e = Hoist.lift <$> compSimple e

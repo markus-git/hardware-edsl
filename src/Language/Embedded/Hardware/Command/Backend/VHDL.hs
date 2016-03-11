@@ -38,20 +38,22 @@ compTM _ = compT (undefined :: exp a)
 evalEM :: forall exp a. (PredicateExp exp a, EvaluateExp exp) => Maybe (exp a) -> a
 evalEM e = maybe (error "empty value") (id) $ fmap evalE e
 
+--------------------------------------------------------------------------------
+
 freshVar :: forall exp a. (CompileExp exp, PredicateExp exp a) => String -> VHDL (exp a, V.Identifier)
-freshVar prefix = do
-  i <- var <$> V.freshUnique
-  n <- dig <$> compE i
-  t <- compT (undefined :: exp a)
-  V.addLocal $ V.declareVariable n t Nothing
-  return (i, n)
+freshVar prefix =
+  do i <- varE <$> V.newSym prefix
+     p <- dig  <$> compE i
+     t <- compT (undefined :: exp a)
+     V.addLocal $ V.declareVariable p t Nothing
+     return (i, p)
   where
-    var :: Integer -> exp a
-    var v = varE $ prefix ++ show v
-    
     -- diggity dig!
     dig :: V.Expression -> V.Identifier
     dig (V.ENand (V.Relation (V.ShiftExpression (V.SimpleExpression _ (V.Term (V.FacPrim (V.PrimName (V.NSimple i)) _)_)_)_)_)_) = i
+
+range :: Integral a => a -> V.Direction -> a -> V.Range
+range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
 
 --------------------------------------------------------------------------------
 -- ** Signals.
@@ -143,25 +145,15 @@ instance EvaluateExp exp => Interp (ArrayCMD exp) IO
 --     depend on them always being sequential.
 compileArray :: forall exp a. (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => ArrayCMD exp VHDL a -> VHDL a
 compileArray (NewArray base len) =
-  do n <- compE  len
-     t <- compTA len (undefined :: a)
-     a <- freshA   base
+  do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
      i <- V.newSym base
-     let range = V.range (lift n) V.downto zero
-         array = V.constrainedArray a t range
-     V.addType array
-     V.addLocal $ V.declareVariable (ident i) (typed array) Nothing
+     V.addLocal $ V.declareVariable (ident i) a Nothing
      return (ArrayC i)
 compileArray (InitArray base is) =
-  do t <- compTA (undefined :: exp i) (undefined :: a)
-     a <- freshA   base
+  do a <- compTA (range (length is) V.downto 0) (undefined :: exp i) (undefined :: a)
      i <- V.newSym base
      x <- sequence [compE (litE a :: exp b) | (a :: b) <- is]
-     let len   = V.lit (length is)
-         range = V.range (lift len) V.downto zero
-         array = V.constrainedArray a t range
-     V.addType array
-     V.addLocal $ V.declareVariable (ident i) (typed array) (Just $ lift $ V.aggregate x)
+     V.addLocal $ V.declareVariable (ident i) a (Just $ lift $ V.aggregate x)
      return (ArrayC i)
 compileArray (GetArray ix (ArrayC arr)) =
   do (v, i) <- freshVar "a" :: VHDL (a, V.Identifier)
@@ -197,13 +189,21 @@ runArray (CopyArray (ArrayE a) (ArrayE b) l) =
 
 --------------------------------------------------------------------------------
 
--- | Fresh array type identifier
-freshA :: String -> VHDL V.Identifier
-freshA prefix = ident . ('t' :) . show <$> V.newSym prefix
-
 -- | Compile type of array.
-compTA :: forall exp i a. (PredicateExp exp a, CompileExp exp) => exp i -> Array i a -> VHDL V.Type
-compTA _ _ = compT (undefined :: exp a)
+compTA
+  :: forall exp i a.
+     ( PredicateExp exp a
+     , PredicateExp exp i
+     , CompileExp   exp
+     , EvaluateExp  exp
+     )
+  => V.Range -> exp i -> Array i a -> VHDL V.Type
+compTA r _ _ =
+  do typ  <- compT (undefined :: exp a)
+     name <- ident <$> V.newSym "type"
+     let array = V.constrainedArray name typ r
+     V.addType array
+     return (typed array)
 
 zero :: V.SimpleExpression
 zero = lift (V.lit 0)
@@ -218,7 +218,7 @@ named i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
 --------------------------------------------------------------------------------
 -- ** Loops.
 
-instance CompileExp exp => Interp (LoopCMD exp) VHDL
+instance (CompileExp exp, EvaluateExp exp) => Interp (LoopCMD exp) VHDL
   where
     interp = compileLoop
 
@@ -226,11 +226,10 @@ instance EvaluateExp exp => Interp (LoopCMD exp) IO
   where
     interp = runLoop
 
-compileLoop :: forall exp a. CompileExp exp => LoopCMD exp VHDL a -> VHDL a
+compileLoop :: forall exp a. (CompileExp exp, EvaluateExp exp) => LoopCMD exp VHDL a -> VHDL a
 compileLoop (For r step) =
-  do hi     <- compE r
-     (v, i) <- freshVar "l"
-     loop   <- V.inFor i (V.range zero V.to (lift hi)) (step v)
+  do (v, i) <- freshVar "l"
+     loop   <- V.inFor i (range 0 V.to (evalE r)) (step v)
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel

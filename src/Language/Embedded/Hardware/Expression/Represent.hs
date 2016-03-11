@@ -1,10 +1,13 @@
 module Language.Embedded.Hardware.Expression.Represent
   ( Tagged (..)
   , Rep    (..)
+  , sized
   ) where
 
+import qualified Language.VHDL as V
+
 import Language.Embedded.VHDL            (VHDL)
-import Language.Embedded.VHDL.Monad      (newLibrary, newImport)
+import Language.Embedded.VHDL.Monad      (newSym, newLibrary, newImport, constrainedArray)
 import Language.Embedded.VHDL.Monad.Type
 
 import Data.Int
@@ -28,10 +31,72 @@ newtype Tagged s b = Tag { unTag :: b }
 -- | A 'rep'resentable value.
 class Rep a
   where
-    width   :: Tagged a Int
-    typed   :: Tagged a Type
-    declare :: a -> VHDL ()
-    format  :: a -> String
+    declare :: proxy a -> VHDL Type
+    format  :: a       -> String
+
+sized :: Type -> Int
+sized (V.SubtypeIndication _ tm Nothing) = 1 -- todo: check tm
+sized (V.SubtypeIndication _ _ (Just (V.CRange (V.RangeConstraint (V.RSimple a V.DownTo b))))) =
+  literal a - literal b
+
+--------------------------------------------------------------------------------
+-- ** Boolean
+
+instance Rep Bool where
+  declare _    = declareBoolean >> return std_logic
+  format True  = "1"
+  format False = "0"
+
+--------------------------------------------------------------------------------
+-- ** Signed
+
+instance Rep Int8 where
+  declare _ = declareNumeric >> return signed8
+  format    = convert
+
+instance Rep Int16 where
+  declare _ = declareNumeric >> return signed16
+  format    = convert
+
+instance Rep Int32 where
+  declare _ = declareNumeric >> return signed32
+  format    = convert
+
+instance Rep Int64 where
+  declare _ = declareNumeric >> return signed64
+  format    = convert
+
+--------------------------------------------------------------------------------
+-- ** Unsigned
+
+instance Rep Word8 where
+  declare _ = declareNumeric >> return usigned8
+  format    = convert
+
+instance Rep Word16 where
+  declare _ = declareNumeric >> return usigned16
+  format    = convert
+
+instance Rep Word32 where
+  declare _ = declareNumeric >> return usigned32
+  format    = convert
+
+instance Rep Word64 where
+  declare _ = declareNumeric >> return usigned64
+  format    = convert
+
+--------------------------------------------------------------------------------
+-- ** Floating point.
+
+instance Rep Float where
+  declare _ = declareFloating >> return float
+  format    = error "todo: format float."
+
+instance Rep Double where
+  declare _ = declareFloating >> return double
+  format    = error "todo: format double."
+
+--------------------------------------------------------------------------------
 
 declareBoolean :: VHDL ()
 declareBoolean =
@@ -48,85 +113,6 @@ declareFloating :: VHDL ()
 declareFloating =
   do newLibrary "IEEE"
      newImport  "IEEE.float_pkg"
-
---------------------------------------------------------------------------------
--- ** Boolean
-
-instance Rep Bool where
-  width        = Tag 1
-  typed        = Tag std_logic
-  declare _    = declareBoolean
-  format True  = "1"
-  format False = "0"
-
---------------------------------------------------------------------------------
--- ** Signed
-
-instance Rep Int8 where
-  width     = Tag 8
-  typed     = Tag signed8
-  declare _ = declareNumeric
-  format    = convert
-
-instance Rep Int16 where
-  width     = Tag 16
-  typed     = Tag signed16
-  declare _ = declareNumeric
-  format    = convert
-
-instance Rep Int32 where
-  width     = Tag 32
-  typed     = Tag signed32
-  declare _ = declareNumeric
-  format    = convert
-
-instance Rep Int64 where
-  width     = Tag 64
-  typed     = Tag signed64
-  declare _ = declareNumeric
-  format    = convert
-
---------------------------------------------------------------------------------
--- ** Unsigned
-
-instance Rep Word8 where
-  width     = Tag 8
-  typed     = Tag usigned8
-  declare _ = declareNumeric
-  format    = convert
-
-instance Rep Word16 where
-  width     = Tag 16
-  typed     = Tag usigned16
-  declare _ = declareNumeric
-  format    = convert
-
-instance Rep Word32 where
-  width     = Tag 32
-  typed     = Tag usigned32
-  declare _ = declareNumeric
-  format    = convert
-
-instance Rep Word64 where
-  width     = Tag 64
-  typed     = Tag usigned64
-  declare _ = declareNumeric
-  format    = convert
-
---------------------------------------------------------------------------------
--- ** Floating point.
-
-instance Rep Float where
-  width     = Tag 32
-  typed     = Tag float
-  declare _ = declareFloating
-  format    = error "todo: format float."
-
-instance Rep Double where
-  width     = Tag 64
-  typed     = Tag double
-  declare _ = declareFloating
-  format    = error "todo: format double."
 
 --------------------------------------------------------------------------------
 -- * Converting Integers to their Binrary representation

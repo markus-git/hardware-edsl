@@ -2,10 +2,12 @@ module Language.Embedded.VHDL.Monad.Type
   ( Type
   , Kind(..)
 
-  , std_logic
+  , std_logic, std_logic_vector
   , signed8,  signed16,  signed32,  signed64
   , usigned8, usigned16, usigned32, usigned64
   , float, double
+
+  , literal, point
   ) where
 
 import Language.VHDL
@@ -28,18 +30,22 @@ data Kind = Constant | Signal | Variable | File
 std_logic :: Type
 std_logic = SubtypeIndication Nothing (TMType (NSimple (Ident "std_logic"))) Nothing
 
+std_logic_vector :: Int -> Type
+std_logic_vector range = SubtypeIndication Nothing
+  (TMType (NSlice (SliceName
+    (PName (NSimple (Ident "std_logic_vector")))
+    (DRRange (RSimple (upper range) DownTo zero)))))
+  (Nothing)
+
 --------------------------------------------------------------------------------
 -- ** Signed & unsigned numbers.
 
 arith :: String -> Int -> Type
 arith typ range = SubtypeIndication Nothing
-    (TMType (NSlice (SliceName
-      (PName (NSimple (Ident typ)))
-      (DRRange (RSimple (point (range - 1)) DownTo (point 0))))))
-    (Nothing)
-  where
-    point :: Int -> SimpleExpression
-    point i = SimpleExpression Nothing (Term (FacPrim (lit i) (Nothing)) []) []
+  (TMType (NSlice (SliceName
+    (PName (NSimple (Ident typ)))
+    (DRRange (RSimple (upper range) DownTo zero)))))
+  (Nothing)
 
 signed, usigned :: Int -> Type
 signed  = arith "signed"
@@ -69,5 +75,27 @@ float, double :: Type
 float  = floating 32
 double = floating 64
 
--- .. add more ..
+--------------------------------------------------------------------------------
+-- ** Helpers.
+
+width :: Type -> Int
+width (SubtypeIndication _ _ (Nothing)) = 1
+width (SubtypeIndication _ _ (Just r))  = range r
+  where
+    range :: Constraint -> Int
+    range (CRange (RangeConstraint (RSimple a DownTo b))) = literal a - literal b
+
+literal :: SimpleExpression -> Int
+literal (SimpleExpression Nothing (Term (FacPrim i (Nothing)) []) []) = unlit i
+  where
+    unlit :: Primary -> Int
+    unlit (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = read i
+
+point :: Show i => i -> SimpleExpression
+point i = SimpleExpression Nothing (Term (FacPrim (lit i) (Nothing)) []) []
+
+upper 0 = point 0
+upper n = point (n-1)
+zero    = point 0
+
 --------------------------------------------------------------------------------

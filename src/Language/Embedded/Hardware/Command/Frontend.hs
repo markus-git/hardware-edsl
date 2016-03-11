@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -8,10 +9,14 @@ import Language.Embedded.VHDL               (Mode(..))
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Command.CMD
 
+import Language.Embedded.Hardware.Expression.Represent
+
 import Control.Monad.Operational.Higher
 
 import Data.Ix    (Ix)
 import Data.IORef (readIORef)
+import Data.Int
+import Data.Word
 
 import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 
@@ -128,7 +133,7 @@ newNamedArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => String -> IExp instr i -> ProgramT instr m (Array i a)
 newNamedArray name = singleE . NewArray name
 
@@ -137,7 +142,7 @@ initNamedArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => String -> [a] -> ProgramT instr m (Array i a)  
 initNamedArray name = singleE . InitArray name
 
@@ -145,7 +150,7 @@ newArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => IExp instr i -> ProgramT instr m (Array i a) 
 newArray = newNamedArray "a"
 
@@ -153,7 +158,7 @@ initArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => [a] -> ProgramT instr m (Array i a)
 initArray = initNamedArray "a"
 
@@ -162,7 +167,7 @@ getArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => IExp instr i -> Array i a -> ProgramT instr m (IExp instr a)
 getArray i = singleE . GetArray i
 
@@ -171,7 +176,7 @@ setArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => IExp instr i -> IExp instr a -> Array i a -> ProgramT instr m ()
 setArray i a = singleE . SetArray i a
 
@@ -180,7 +185,7 @@ copyArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => Array i a -> Array i a -> IExp instr i -> ProgramT instr m ()
 copyArray dest src = singleE . CopyArray dest src
 
@@ -190,7 +195,7 @@ freezeArray
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
      , Monad m
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => Array i a -> IExp instr i -> ProgramT instr m (IArray i a)
 freezeArray array len =
   do copy <- newArray len
@@ -202,7 +207,7 @@ unsafeFreezeArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr )
+     , ArrayCMD (IExp instr) :<: instr)
   => Array i a -> ProgramT instr m (IArray i a)
 unsafeFreezeArray = singleE . UnsafeFreezeArray
 
