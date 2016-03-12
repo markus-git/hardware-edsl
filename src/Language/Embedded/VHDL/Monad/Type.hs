@@ -7,6 +7,7 @@ module Language.Embedded.VHDL.Monad.Type
   , usigned8, usigned16, usigned32, usigned64
   , float, double
 
+  , width
   , literal, point
   ) where
 
@@ -79,11 +80,18 @@ double = floating 64
 -- ** Helpers.
 
 width :: Type -> Int
-width (SubtypeIndication _ _ (Nothing)) = 1
-width (SubtypeIndication _ _ (Just r))  = range r
+width (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)
   where
-    range :: Constraint -> Int
-    range (CRange (RangeConstraint (RSimple a DownTo b))) = literal a - literal b
+    unrange :: TypeMark -> Int
+    unrange (TMType (NSlice (SliceName _ (DRRange (RSimple u DownTo l))))) =
+      literal u - literal l
+    unrange (TMType (NSlice (SliceName _ (DRRange (RSimple l To     u))))) =
+      literal u - literal l
+
+range :: Constraint -> Int
+range (CRange (RangeConstraint (RSimple a DownTo b))) = literal a - literal b
+
+--------------------------------------------------------------------------------
 
 literal :: SimpleExpression -> Int
 literal (SimpleExpression Nothing (Term (FacPrim i (Nothing)) []) []) = unlit i

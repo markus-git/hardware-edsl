@@ -24,8 +24,8 @@ module Language.Embedded.VHDL.Monad (
   , newLibrary, newImport
 
     -- ^ declarations
-  , addPort,       addGeneric
-  , addGlobal,     addLocal
+--, addPort,       addGeneric
+  , addSignal,     addVariable
   , addConcurrent, addSequential
   , addType,       addComponent
 
@@ -39,8 +39,8 @@ module Language.Embedded.VHDL.Monad (
   , entity, architecture, package, component
 
     -- ^ common things
-  , interfaceConstant, interfaceSignal, interfaceVariable
-  , declareConstant,   declareSignal,   declareVariable
+  , constant, signal, variable
+-- , declareConstant,   declareSignal,   declareVariable
   , assignSignal,      assignSignalS,   assignVariable,   assignArray
   , portMap
 
@@ -81,11 +81,9 @@ data VHDLEnv = VHDLEnv
   , _units         :: [DesignUnit]
   , _context       :: Set ContextItem
   , _types         :: Set TypeDeclaration
-  , _ports         :: [InterfaceDeclaration]
-  , _generics      :: [InterfaceDeclaration]
   , _components    :: Set ComponentDeclaration
-  , _global        :: [BlockDeclarativeItem]
-  , _local         :: [BlockDeclarativeItem]
+  , _signals       :: [InterfaceDeclaration]
+  , _variables     :: [InterfaceDeclaration]
   , _concurrent    :: [ConcurrentStatement]
   , _sequential    :: [SequentialStatement]
   }
@@ -98,10 +96,8 @@ emptyVHDLEnv = VHDLEnv
   , _context       = Set.empty
   , _types         = Set.empty
   , _components    = Set.empty
-  , _ports         = []
-  , _generics      = []
-  , _global        = []
-  , _local         = []
+  , _signals       = []
+  , _variables     = []
   , _concurrent    = []
   , _sequential    = []
   }
@@ -175,14 +171,6 @@ newImport i = CMS.modify $ \s -> s { _context = Set.insert item (_context s) }
     item :: ContextItem
     item = ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) (SAll)])
 
--- | Adds a port declaration to the entity.
-addPort :: MonadV m => InterfaceDeclaration -> m ()
-addPort p = CMS.modify $ \s -> s { _ports = p : (_ports s) }
-
--- | Adds a generic declaration to the entity.
-addGeneric :: MonadV m => InterfaceDeclaration -> m ()
-addGeneric g = CMS.modify $ \s -> s { _generics = g : (_generics s) }
-
 -- | Adds a type declaration.
 addType :: MonadV m => TypeDeclaration -> m ()
 addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
@@ -192,12 +180,14 @@ addComponent :: MonadV m => ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
 
 -- | Adds a global declaration.
-addGlobal :: MonadV m => BlockDeclarativeItem -> m ()
-addGlobal g = CMS.modify $ \s -> s { _global = g : (_global s) }
+--addSignal :: MonadV m => BlockDeclarativeItem -> m ()
+addSignal :: MonadV m => InterfaceDeclaration -> m ()
+addSignal v = CMS.modify $ \s -> s { _signals = v : (_signals s) }
 
 -- | Adds a local declaration.
-addLocal :: MonadV m => BlockDeclarativeItem -> m ()
-addLocal l = CMS.modify $ \s -> s { _local = l : (_local s) }
+--addVariable :: MonadV m => BlockDeclarativeItem -> m ()
+addVariable :: MonadV m => InterfaceDeclaration -> m ()
+addVariable v = CMS.modify $ \s -> s { _variables = v : (_variables s) }
 
 -- | Adds a concurrent statement.
 addConcurrent :: MonadV m => ConcurrentStatement -> m ()
@@ -211,28 +201,52 @@ addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 -- * Concurrent and sequential statements
 --------------------------------------------------------------------------------
 
+-- | Extract block declaration from interface declaration.
+translateInterface :: InterfaceDeclaration -> BlockDeclarativeItem
+translateInterface (InterfaceConstantDeclaration is t e) =
+  BDIConstant (ConstantDeclaration is t e)
+translateInterface (InterfaceSignalDeclaration is m t b e) =
+  BDISignal (SignalDeclaration is t (Just (if b then Bus else Register)) e)
+translateInterface (InterfaceVariableDeclaration is m t e) =
+  BDIShared (VariableDeclaration False is t e)
+translateInterface (InterfaceFileDeclaration is t) =
+  BDIFile (FileDeclaration is t Nothing)
+
+-- | Run monadic actions in a contained environment.
+contain :: MonadV m => m () -> m [SequentialStatement]
+contain m = do
+  m                                          -- do
+  new <- reverse <$> CMS.gets _sequential    -- get
+  CMS.modify $ \e -> e { _sequential = [] }  -- reset
+  return new                                 -- return
+
+-- | Exit loop.
+exit :: MonadV m => Label -> Expression -> m ()
+exit label e = addSequential $ SExit $ ExitStatement (Nothing) (Just label) (Just e)
+
+--------------------------------------------------------------------------------
+
 -- | Runs the given action inside a process.
 inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, ProcessStatement)
 inProcess l is m =
-  do oldLocals     <- CMS.gets _local
+  do oldLocals     <- CMS.gets _variables
      oldSequential <- CMS.gets _sequential
-     CMS.modify $ \e -> e { _local      = []
+     CMS.modify $ \e -> e { _variables  = []
                           , _sequential = [] }
      result        <- m
-     newLocals     <- reverse <$> CMS.gets _local
+     newLocals     <- reverse <$> CMS.gets _variables
      newSequential <- reverse <$> CMS.gets _sequential
-     CMS.modify $ \e -> e { _local      = oldLocals
+     CMS.modify $ \e -> e { _variables  = oldLocals
                           , _sequential = oldSequential }
      return ( result
-            , ProcessStatement
-                (Just l)                        -- label
-                (False)                         -- postponed
-                (sensitivity)                   -- sensitivitylist
-                (translate $ merge $ newLocals) -- declarativepart
-                (newSequential))                -- statementpart
+            , ProcessStatement (Just l) (False)
+                (sensitivity is)
+                (fmap (translate . translateInterface) $ merge $ newLocals)
+                (newSequential))
   where
-    sensitivity | P.null is = Nothing
-                | otherwise = Just $ SensitivityList $ fmap NSimple is
+    sensitivity :: [Identifier] -> Maybe SensitivityList
+    sensitivity [] = Nothing
+    sensitivity xs = Just $ SensitivityList $ fmap NSimple xs
 
 -- | Run program in for loop.
 inFor :: MonadV m => Identifier -> Range -> m () -> m (LoopStatement)
@@ -267,10 +281,6 @@ inWhile l cont m =
     iter :: Maybe Expression -> Maybe IterationScheme
     iter = maybe (Nothing) (Just . IterWhile)
 
--- | Exit loop.
-exit :: MonadV m => Label -> Expression -> m ()
-exit label e = addSequential $ SExit $ ExitStatement (Nothing) (Just label) (Just e)
-
 -- | Conditional statements.
 inConditional :: MonadV m => (Condition, m ()) -> [(Condition, m ())] -> m () -> m (IfStatement)
 inConditional (c, m) os e =
@@ -289,9 +299,8 @@ inConditional (c, m) os e =
          (maybeList e')
   where
     maybeList :: [SequentialStatement] -> Maybe [SequentialStatement]
-    maybeList xs
-      | P.null xs = Nothing
-      | otherwise = Just xs
+    maybeList [] = Nothing
+    maybeList xs = Just xs
 
 -- | Case statements.
 inCase :: MonadV m => Expression -> [(Choices, m ())] -> m (CaseStatement)
@@ -306,13 +315,6 @@ inCase e choices =
          (Nothing)
          (e)
          (zipWith CaseStatementAlternative cs ns')
-
-contain :: MonadV m => m () -> m [SequentialStatement]
-contain m = do
-  m                                          -- do
-  new <- reverse <$> CMS.gets _sequential    -- get
-  CMS.modify $ \e -> e { _sequential = [] }  -- reset
-  return new                                 -- return
 
 --------------------------------------------------------------------------------
 -- * Design units
@@ -344,22 +346,21 @@ addUnit_ lib = CMS.modify $ \s -> s { _units = (DesignUnit (ContextClause []) li
 --   and architecture names, respectively.
 architecture :: MonadV m => Identifier -> Identifier -> m a -> m a
 architecture entity name m =
-  do oldGlobal     <- CMS.gets _global
+  do oldGlobal     <- CMS.gets _signals
      oldConcurrent <- CMS.gets _concurrent
      oldComponents <- CMS.gets _components
-     CMS.modify $ \e -> e { _global     = []
+     CMS.modify $ \e -> e { _signals    = []
                           , _concurrent = [] }
      result        <- m
-     newGlobal     <- reverse <$> CMS.gets _global
+     newGlobal     <- reverse <$> CMS.gets _signals
      newConcurrent <- reverse <$> CMS.gets _concurrent
      newComponents <- fmap BDIComp . Set.toList <$> CMS.gets _components
      addUnit_ $ LibrarySecondary $ SecondaryArchitecture $
-           ArchitectureBody
-             (name)
+           ArchitectureBody (name)
              (NSimple entity)
-             (merge newGlobal ++ newComponents)
+             (newComponents ++ (fmap translateInterface newGlobal)) -- merge ...
              (newConcurrent)
-     CMS.modify $ \e -> e { _global     = oldGlobal
+     CMS.modify $ \e -> e { _signals    = oldGlobal
                           , _concurrent = oldConcurrent
                           , _components = oldComponents }
      return result
@@ -371,13 +372,13 @@ architecture entity name m =
 --   declaraions and context items produced by running the monadic action.
 entity :: MonadV m => Identifier -> m a -> m a
 entity name m =
-  do oldPorts    <- CMS.gets _ports
-     oldGenerics <- CMS.gets _generics
-     CMS.modify $ \e -> e { _ports    = []
-                          , _generics = [] }
+  do oldPorts    <- CMS.gets _signals
+     oldGenerics <- CMS.gets _variables
+     CMS.modify $ \e -> e { _signals   = []
+                          , _variables = [] }
      result      <- m
-     newPorts    <- reverse <$> CMS.gets _ports
-     newGenerics <- reverse <$> CMS.gets _generics
+     newPorts    <- reverse <$> CMS.gets _signals
+     newGenerics <- reverse <$> CMS.gets _variables
      addUnit  $ LibraryPrimary $ PrimaryEntity $
            EntityDeclaration name
              (EntityHeader
@@ -385,13 +386,13 @@ entity name m =
                (PortClause    <$> maybeNull newPorts))
              ([])
              (Nothing)
-     CMS.modify $ \e -> e { _ports    = oldPorts
-                          , _generics = oldGenerics }
+     CMS.modify $ \e -> e { _signals   = oldPorts
+                          , _variables = oldGenerics }
      return result
   
 maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
 maybeNull [] = Nothing
-maybeNull xs = Just $ InterfaceList $ merge xs
+maybeNull xs = Just $ InterfaceList $ xs --merge ...
 
 --------------------------------------------------------------------------------
 -- ** Packages
@@ -425,21 +426,21 @@ component m =
      addDesign $ DesignFile units
 
 declareComponent :: MonadV m => Identifier -> m a -> m a
-declareComponent name m =
-  do oldPorts    <- CMS.gets _ports
-     oldGenerics <- CMS.gets _generics
-     CMS.modify $ \e -> e { _ports    = []
-                          , _generics = [] }
+declareComponent name m = 
+  do oldPorts    <- CMS.gets _signals
+     oldGenerics <- CMS.gets _variables
+     CMS.modify $ \e -> e { _signals   = []
+                          , _variables = [] }
      result      <- m
-     newPorts    <- reverse <$> CMS.gets _ports
-     newGenerics <- reverse <$> CMS.gets _generics
+     newPorts    <- reverse <$> CMS.gets _signals
+     newGenerics <- reverse <$> CMS.gets _variables
      addComponent $
            ComponentDeclaration name
              (GenericClause <$> maybeNull newGenerics)
              (PortClause    <$> maybeNull newPorts)
              (Nothing)
-     CMS.modify $ \e -> e { _ports    = oldPorts
-                          , _generics = oldGenerics }
+     CMS.modify $ \e -> e { _signals   = oldPorts
+                          , _variables = oldGenerics }
      return result
 
 --------------------------------------------------------------------------------
@@ -487,14 +488,14 @@ designTypes set
 --------------------------------------------------------------------------------
 -- ** Ports/Generic declarations
 
-interfaceConstant :: Identifier -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
-interfaceConstant i t e = InterfaceConstantDeclaration [i] t e
+constant :: Identifier -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
+constant i t e = InterfaceConstantDeclaration [i] t e
 
-interfaceSignal   :: Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
-interfaceSignal i m t e = InterfaceSignalDeclaration [i] (Just m) t False e
+signal   :: Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
+signal i m t e = InterfaceSignalDeclaration [i] (Just m) t False e
 
-interfaceVariable :: Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
-interfaceVariable i m t e = InterfaceVariableDeclaration [i] (Just m) t e
+variable :: Identifier -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
+variable i t e = InterfaceVariableDeclaration [i] Nothing t e
 
 --------------------------------------------------------------------------------
 -- ** Array Declarations.
@@ -510,18 +511,6 @@ constrainedArray :: Identifier -> SubtypeIndication -> Range -> TypeDeclaration
 constrainedArray name typ range = compositeTypeDeclaration name $
   CTDArray (ArrC (ConstrainedArrayDefinition
     (IndexConstraint [DRRange range]) typ))
-
---------------------------------------------------------------------------------
--- ** Global/Local Declarations.
-
-declareConstant :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
-declareConstant i t e = BDIConstant $ ConstantDeclaration [i] t e
-
-declareSignal :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
-declareSignal i t e = BDISignal $ SignalDeclaration [i] t Nothing e
-
-declareVariable :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
-declareVariable i t e = BDIShared $ VariableDeclaration False [i] t e
 
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable.
@@ -558,6 +547,19 @@ assignArray i e = SSignalAss $
     (TargetName i)
     (Nothing)
     (WaveElem [WaveEExp e Nothing])
+
+--------------------------------------------------------------------------------
+-- ** Global/Local Declarations.
+{-
+declareConstant :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
+declareConstant i t e = BDIConstant $ ConstantDeclaration [i] t e
+
+declareSignal :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
+declareSignal i t e = BDISignal $ SignalDeclaration [i] t Nothing e
+
+declareVariable :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
+declareVariable i t e = BDIShared $ VariableDeclaration False [i] t e
+-}
 
 --------------------------------------------------------------------------------
 -- Portmap.
@@ -600,6 +602,23 @@ instance Merge InterfaceDeclaration
 
 --------------------------------------------------------------------------------
 
+class Declarative a
+  where
+    translate :: BlockDeclarativeItem -> a
+
+instance Declarative ProcessDeclarativeItem
+  where
+    translate = processBlock
+
+-- | Try to transform the declarative item into a process item
+processBlock :: BlockDeclarativeItem -> ProcessDeclarativeItem
+processBlock (BDIConstant c) = PDIConstant c
+processBlock (BDIShared   v) = PDIVariable v
+processBlock (BDIFile     f) = PDIFile     f
+processBlock b               = error $ "Unknown block item: " ++ show b
+
+--------------------------------------------------------------------------------
+
 setBlockIds :: BlockDeclarativeItem -> [Identifier] -> BlockDeclarativeItem
 setBlockIds (BDIConstant c) is = BDIConstant $ c { const_identifier_list  = is }
 setBlockIds (BDISignal   s) is = BDISignal   $ s { signal_identifier_list = is }
@@ -612,22 +631,6 @@ getBlockIds (BDIConstant c) = const_identifier_list c
 getBlockIds (BDISignal   s) = signal_identifier_list s
 getBlockIds (BDIShared   v) = var_identifier_list v
 getBlockIds (BDIFile     f) = fd_identifier_list f
-
-class Declarative a
-  where
-    -- lists are used so we can fail without having to throw errors
-    translate :: [BlockDeclarativeItem] -> [a]
-
-instance Declarative ProcessDeclarativeItem
-  where
-    translate = catMaybes . fmap tryProcess
-
--- | Try to transform the declarative item into a process item
-tryProcess :: BlockDeclarativeItem -> Maybe (ProcessDeclarativeItem)
-tryProcess (BDIConstant c) = Just $ PDIConstant c
-tryProcess (BDIShared   v) = Just $ PDIVariable v
-tryProcess (BDIFile     f) = Just $ PDIFile     f
-tryProcess _                 = Nothing
 
 --------------------------------------------------------------------------------
 -- Ord instance for use in sets

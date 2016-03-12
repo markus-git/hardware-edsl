@@ -146,7 +146,13 @@ qualified (SubtypeIndication _ t _) = PrimQual . QualExp t
 
 -- type conversions
 cast :: SubtypeIndication -> Expression -> Primary
-cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion t
+cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion (unrange t)
+  where
+    unrange :: TypeMark -> TypeMark
+    unrange (TMType (NSlice (SliceName (PName (NSimple (Ident typ))) _))) =
+      TMType (NSimple (Ident typ))
+    unrange (TMType (NSimple (Ident typ))) =
+      TMType (NSimple (Ident typ))
 
 --------------------------------------------------------------------------------
 -- ** Utility
