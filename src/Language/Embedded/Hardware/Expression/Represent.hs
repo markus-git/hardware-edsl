@@ -1,4 +1,5 @@
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Language.Embedded.Hardware.Expression.Represent
   ( Rep (..)
@@ -16,7 +17,7 @@ import Language.Embedded.VHDL.Monad.Type
 
 import Data.Int
 import Data.Word
-
+import Data.Ix
 import Data.Char   (intToDigit)
 import Data.Bits   (shiftR)
 import Text.Printf (printf)
@@ -34,31 +35,41 @@ import qualified Data.ByteString as B
 
 type Bit = Bool
 
-data Bit2
+newtype Bit2  = B2  { unB2  :: Word2 }
+ deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
 
-data Bit4
+newtype Bit4  = B4  { unB4  :: Word4 }
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+           
+newtype Bit8  = B8  { unB8  :: Word8 }
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
 
-data Bit8
+newtype Bit16 = B16 { unB16 :: Word16 }
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
 
-data Bit16
+newtype Bit32 = B32 { unB32 :: Word32 }
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
 
-data Bit32
-
-data Bit64
-
+newtype Bit64 = B64 { unB64 :: Word64 }
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+  
 --------------------------------------------------------------------------------
 -- ** Signed.
 
-data Int2
+data Int2 = I2 Int
+  deriving (Eq, Ord, Show)
 
-data Int4
-
+data Int4 = I4 Int
+  deriving (Eq, Ord, Show)
+  
 --------------------------------------------------------------------------------
 -- ** Unsigned.
 
-data Word2
+data Word2 = W2 Word
+  deriving (Eq, Ord, Show)
 
-data Word4
+data Word4 = W4 Word
+  deriving (Eq, Ord, Show)
 
 --------------------------------------------------------------------------------
 -- * Representation of types.
@@ -186,8 +197,7 @@ declareFloating =
      newImport  "IEEE.float_pkg"
 
 --------------------------------------------------------------------------------
--- * Converting Integers to their Binrary representation
---------------------------------------------------------------------------------
+-- ** Converting Integers to their Binrary representation
 
 -- | Convert an Integral to its binary representation
 convert :: Integral a => a -> String
@@ -214,5 +224,117 @@ i2bs x = B.reverse . B.unfoldr (fmap chunk) . Just $ sign x
 -- I assum the negative numbers to already be padded with ones
 w2s :: Word8 -> String
 w2s w = printf "%08s" $ showIntAtBase 2 intToDigit w ""
+
+--------------------------------------------------------------------------------
+-- ...
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+instance Enum Int2 where
+  toEnum   i = error "todo"
+  fromEnum i = error "todo"
+
+instance Num Int2 where
+  (I2 w) + (I2 v) = I2 (w + v `mod` 4)
+  (I2 w) - (I2 v) = I2 (w - v `mod` 4)
+  (I2 w) * (I2 v) = I2 (w * v `mod` 4)
+  abs      (I2 w) = I2 (abs w)
+  signum   (I2 w) = I2 (signum w)
+  fromInteger i   = I2 (fromInteger i)
+
+instance Real Int2 where
+  toRational (I2 w) = toRational w
+
+instance Integral Int2 where
+  quotRem   (I2 w) (I2 v) = error "todo"
+  toInteger (I2 w)        = toInteger w
+
+instance Ix Int2 where
+  range   = error "todo"
+  index   = error "todo"
+  inRange = error "todo"
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+instance Enum Int4 where
+  toEnum   i = error "todo"
+  fromEnum i = error "todo"
+
+instance Num Int4 where
+  (I4 w) + (I4 v) = I4 (w + v `mod` 16)
+  (I4 w) - (I4 v) = I4 (w - v `mod` 16)
+  (I4 w) * (I4 v) = I4 (w * v `mod` 16)
+  abs      (I4 w) = I4 (abs w)
+  signum   (I4 w) = I4 (signum w)
+  fromInteger i   = I4 (fromInteger i)
+
+instance Real Int4 where
+  toRational (I4 w) = toRational w
+
+instance Integral Int4 where
+  quotRem   (I4 w) (I4 v) = error "todo"
+  toInteger (I4 w)        = toInteger w
+
+instance Ix Int4 where
+  range   = error "todo"
+  index   = error "todo"
+  inRange = error "todo"
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+instance Enum Word2 where
+  toEnum   i = error "todo"
+  fromEnum i = error "todo"
+
+instance Num Word2 where
+  (W2 w) + (W2 v) = W2 (w + v `mod` 4)
+  (W2 w) - (W2 v) = W2 (w - v `mod` 4)
+  (W2 w) * (W2 v) = W2 (w * v `mod` 4)
+  abs      (W2 w) = W2 (abs w)
+  signum   (W2 w) = W2 (signum w)
+  fromInteger i   = W2 (fromInteger i)
+
+instance Real Word2 where
+  toRational (W2 w) = toRational w
+
+instance Integral Word2 where
+  quotRem   (W2 w) (W2 v) = error "todo"
+  toInteger (W2 w)        = toInteger w
+
+instance Ix Word2 where
+  range   = error "todo"
+  index   = error "todo"
+  inRange = error "todo"
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+instance Enum Word4 where
+  toEnum   i = error "todo"
+  fromEnum i = error "todo"
+
+instance Num Word4 where
+  (W4 w) + (W4 v) = W4 (w + v `mod` 16)
+  (W4 w) - (W4 v) = W4 (w - v `mod` 16)
+  (W4 w) * (W4 v) = W4 (w * v `mod` 16)
+  abs      (W4 w) = W4 (abs w)
+  signum   (W4 w) = W4 (signum w)
+  fromInteger i   = W4 (fromInteger i)
+
+instance Real Word4 where
+  toRational (W4 w) = toRational w
+
+instance Integral Word4 where
+  quotRem   (W4 w) (W4 v) = error "todo"
+  toInteger (W4 w)        = toInteger w
+
+instance Ix Word4 where
+  range   = error "todo"
+  index   = error "todo"
+  inRange = error "todo"
 
 --------------------------------------------------------------------------------
