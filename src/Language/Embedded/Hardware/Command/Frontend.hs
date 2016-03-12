@@ -304,7 +304,7 @@ component_
   => Sig (IExp i) (ProgramT i m) a
   -> ProgramT i m (Component (IExp i) (ProgramT i m) a)
 component_ sig =
-  do n <- singleE $ StructComponent (Base "c") sig
+  do n <- singleE $ StructComponent (Base "comp") sig
      return $ Component n sig
 
 -- | Map signals to some component.
