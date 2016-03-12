@@ -561,8 +561,8 @@ assignArray i e = addSequential $ SSignalAss $
 --------------------------------------------------------------------------------
 -- Portmap.
 
-portMap :: Label -> Identifier -> [Identifier] -> ConcurrentStatement
-portMap l c is = ConComponent $ ComponentInstantiationStatement l
+portMap :: MonadV m => Label -> Identifier -> [Identifier] -> m ()
+portMap l c is = addConcurrent $ ConComponent $ ComponentInstantiationStatement l
   (IUComponent $ NSimple c)
   (Nothing)
   (Just $ PortMapAspect $ AssociationList $

@@ -59,6 +59,9 @@ compTA r _ _ =
     named :: V.Identifier -> V.SubtypeIndication
     named i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
 
+compFT :: forall exp m a b. (CompileExp exp, PredicateExp exp a) => (Signal a -> Sig exp m b) -> VHDL V.Type
+compFT _ = compT (undefined :: exp a)
+
 --------------------------------------------------------------------------------
 
 newSym :: VarId -> VHDL VarId
@@ -330,46 +333,34 @@ instance EvaluateExp exp => Interp (ComponentCMD exp) IO
     interp = runComponent
 
 compileComponent :: forall exp a. CompileExp exp => ComponentCMD exp VHDL a -> VHDL a
-compileComponent (Component sig) =
-  do (Base u) <- newSym (Base "c")
-     let ename = ident $ Base $ "e_" ++ u
-         aname = ident $ Base $ "a_" ++ u
-         pname = ident $ Base $ "p_" ++ u
+compileComponent (StructComponent n sig) =
+  do comp <- newSym n
      V.component $
-       do (is, m) <- V.entity ename $ declarations [] sig
-          V.architecture ename aname $
-            do (_, p) <- V.inProcess pname is m
-               V.addConcurrent (V.ConProcess p)
-     return (Just u)
+       V.entity (ident comp) $ declare sig >>=
+       V.architecture (ident comp) (V.Ident "IMP")
+     return (Just comp)
   where
-    -- go over the sig and declare expected signals, keep inputs and program.
-    declarations :: [V.Identifier] -> Sig exp VHDL b -> VHDL ([V.Identifier], VHDL ())
-    declarations is (Unit m) = return (is, m)
-    declarations is (Lam  m (f :: Signal c -> Sig exp VHDL d)) =
-      do t <- compT  (undefined :: exp c)
-         i <- newSym (Base "s")
+    declare :: Sig exp VHDL b ->  VHDL (VHDL ())
+    declare (Unit m)     = return m
+    declare (Lam  n m f) =
+      do t <- compFT f
+         i <- newSym n
          V.signal (ident i) m t Nothing
-         case m of
-           V.In -> declarations (ident i : is) $ f (SignalC i)
-           _    -> declarations is $ f (SignalC i)
-compileComponent (PortMap (Process (Just name) sig) as) =
-  do let comp = V.Ident name
-     l  <- newSym (Base "s")
-     is <- V.declareComponent comp $ applications [] sig as
-     V.addConcurrent $ V.portMap (ident l) comp (reverse is)
+         declare (f (SignalC i))
+compileComponent (PortMap (Component (Just n) sig) as) =
+  do l  <- newSym (Base "l")
+     vs <- V.declareComponent (ident n) (apply sig as)
+     V.portMap (ident l) (ident n) (fmap ident $ reverse vs)
   where
-    -- go over the sig and apply each argument, saving their idents.
-    applications :: [V.Identifier] -> Sig exp VHDL b -> Arg b -> VHDL [V.Identifier]
-    applications is (Unit  _) (Nill)   = return is
-    applications is (Lam m (f :: Signal c -> Sig exp VHDL d)) (s@(SignalC n) :> g) = do
-      t <- compT (undefined :: exp c)
-      i <- newSym (Base "s")
-      V.signal (ident i) m t Nothing
-      applications (ident n : is) (f s) g
+     -- todo: associate 'n' with 'i'
+    apply :: Sig exp VHDL b -> Arg b -> VHDL [VarId]
+    apply (Unit _)     (Nill)               = return []
+    apply (Lam  n m f) (s@(SignalC i) :> v) =
+      (i :) <$> apply (f s) v
 
 runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
-runComponent (Component _)                  = return Nothing
-runComponent (PortMap (Process _ sig) args) =
+runComponent (StructComponent _ _)            = return Nothing
+runComponent (PortMap (Component _ sig) args) =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
 --------------------------------------------------------------------------------

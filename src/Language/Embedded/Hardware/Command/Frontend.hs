@@ -286,24 +286,45 @@ iff b t e = conditional (b, t) [] (Just e)
 -- ** Processes.
 
 -- | Wrap a signed program in a new component.
-process 
+component
+  :: forall i m a.
+     ( ComponentCMD (IExp i) :<: i
+     , Monad m)
+  => String
+  -> Sig (IExp i) (ProgramT i m) a
+  -> ProgramT i m (Component (IExp i) (ProgramT i m) a)
+component name sig =
+  do n <- singleE $ StructComponent (Unique name) sig
+     return $ Component n sig
+
+component_
   :: forall i m a.
      ( ComponentCMD (IExp i) :<: i
      , Monad m)
   => Sig (IExp i) (ProgramT i m) a
-  -> ProgramT i m (Process (IExp i) (ProgramT i m) a)
-process sig =
-  do n <- singleE $ Component sig
-     return $ Process n sig
+  -> ProgramT i m (Component (IExp i) (ProgramT i m) a)
+component_ sig =
+  do n <- singleE $ StructComponent (Base "c") sig
+     return $ Component n sig
 
 -- | Map signals to some component.
 portmap
   :: forall i m a. (ComponentCMD (IExp i) :<: i)
-  => Process (IExp i) (ProgramT i m) a
+  => Component (IExp i) (ProgramT i m) a
   -> Arg a
   -> ProgramT i m ()
 portmap pro arg = singleE $ PortMap pro arg
 
+--------------------------------------------------------------------------------
+
+output :: PredicateExp exp a => String -> (Signal a -> Sig exp m b) -> Sig exp m (Signal a -> b)
+output n = Lam (Unique n) Out
+
+input  :: PredicateExp exp a => String -> (Signal a -> Sig exp m b) -> Sig exp m (Signal a -> b)
+input  n = Lam (Unique n) In
+  
+ret :: m () -> Sig exp m ()
+ret = Unit
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
