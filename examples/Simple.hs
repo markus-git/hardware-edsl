@@ -23,6 +23,7 @@ type CMD =
       SignalCMD       HExp
   :+: VariableCMD     HExp
   :+: ArrayCMD        HExp
+  :+: VArrayCMD       HExp
   :+: LoopCMD         HExp
   :+: ConditionalCMD  HExp
   :+: ComponentCMD    HExp
@@ -36,7 +37,7 @@ type Prog = Program CMD
 testSimple :: Prog ()
 testSimple = do
   (o, i1, i2) <- structEntity "simple" $
-         do x <- newPort "o"  Out :: Prog (Signal Int16)
+         do x <- newPort "o" Out :: Prog (Signal Int16)
             y <- newPort "i" In  :: Prog (Signal Int16)
             z <- newPort "i" In  :: Prog (Signal Int16)
             return (x, y, z)
@@ -52,8 +53,8 @@ testArrays = do
          newPort "o" Out :: Prog (Signal Int8)
   structArchitecture "arrays" "behavioural" $
     structProcess [] $
-      do a <- newArray (litE 4)  :: Prog (Array Int8 Int8)
-         v <- getArray (litE 0) a
+      do a <- newVArray (litE 4)  :: Prog (VArray Int8 Int8)
+         v <- getVArray (litE 0) a
          setSignal o v
          
 
