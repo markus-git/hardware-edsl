@@ -65,7 +65,7 @@ freshVar prefix =
   do i <- varE <$> V.newSym prefix
      p <- dig  <$> compE i
      t <- compT (undefined :: exp a)
-     V.addVariable $ V.variable p t Nothing
+     V.variable p t Nothing
      return (i, p)
   where
     -- diggity dig!
@@ -94,22 +94,22 @@ compileSignal (NewSignal base mode exp) =
   do v <- compEM exp
      t <- compTM exp
      i <- V.newSym base
-     V.addSignal $ V.signal (ident i) mode t v
+     V.signal (ident i) mode t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
   do (v, i) <- freshVar "s" :: VHDL (a, V.Identifier)
      e <- compE v
-     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident s)
+     V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident s)
      return v
 compileSignal (SetSignal (SignalC s) exp) =
-  do V.addSequential =<< V.assignSignal (ident s) <$> compE exp
+  do V.assignSignal (ident s) =<< compE exp
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ varE s
 compileSignal (PackSignal base (ArrayC n :: Array i Bool)) =
   do t <- compT (undefined :: exp i)
      i <- V.newSym base
-     V.addSignal $ V.signal (ident i) V.Out t Nothing
-     V.addSequential $ V.assignSignal (ident i) (lift $ V.cast t $ lift $ V.name n)
+     V.signal (ident i) V.Out t Nothing
+     V.assignSignal (ident i) (lift $ V.cast t $ lift $ V.name n)
      return (SignalC i)
 
 runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
@@ -136,15 +136,15 @@ compileVariable (NewVariable base exp) =
   do v <- compEM exp
      t <- compTM exp
      i <- V.newSym base
-     V.addVariable $ V.variable (ident i) t v
+     V.variable (ident i) t v
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
   do (v, i) <- freshVar "v" :: VHDL (a, V.Identifier)
      e <- compE v
-     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident var)
+     V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident var)
      return v
 compileVariable (SetVariable (VariableC var) exp) =
-  do V.addSequential =<< V.assignVariable (ident var) <$> compE exp
+  do V.assignVariable (ident var) =<< compE exp
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ varE v
 
@@ -175,13 +175,13 @@ compileArray
 compileArray (NewArray base (len :: exp i)) =
   do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
      i <- V.newSym base
-     V.addSignal $ V.signal (ident i) V.Out a Nothing
+     V.signal (ident i) V.Out a Nothing
      return (ArrayC i)
 compileArray (UnpackArray name (SignalC i :: Signal i)) =
   do t <- compT (undefined :: exp i)
      let typ = V.std_logic_vector (V.width t)
-     V.addSignal     $ V.signal       (ident name) V.Out typ Nothing
-     V.addSequential $ V.assignSignal (ident name) (lift $ V.cast typ $ lift $ V.name i)
+     V.signal       (ident name) V.Out typ Nothing
+     V.assignSignal (ident name) (lift $ V.cast typ $ lift $ V.name i)
      return (ArrayC name)
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
@@ -210,30 +210,30 @@ compileVArray
 compileVArray (NewVArray base len) =
   do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
      i <- V.newSym base
-     V.addVariable $ V.variable (ident i) a Nothing
+     V.variable (ident i) a Nothing
      return (VArrayC i)
 compileVArray (InitVArray base is) =
   do a <- compTA (range (length is) V.downto 0) (undefined :: exp i) (undefined :: a)
      i <- V.newSym base
      x <- sequence [compE (litE a :: exp b) | (a :: b) <- is]
-     V.addVariable $ V.variable (ident i) a (Just $ lift $ V.aggregate x)
+     V.variable (ident i) a (Just $ lift $ V.aggregate x)
      return (VArrayC i)
 compileVArray (GetVArray ix (VArrayC arr)) =
   do (v, i) <- freshVar "a" :: VHDL (a, V.Identifier)
      e <- compE ix
-     V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.indexed (ident arr) e)
+     V.assignVariable i (lift $ V.PrimName $ V.indexed (ident arr) e)
      return v
 compileVArray (SetVArray i e (VArrayC arr)) =
   do i' <- compE i
      e' <- compE e
      -- this could be concurrent as well.
-     V.addSequential $ V.assignArray (V.indexed (ident arr) i') e'
+     V.assignArray (V.indexed (ident arr) i') e'
 compileVArray (CopyVArray (VArrayC a) (VArrayC b) l) =
   do len <- compE l
      let slice = (lift (V.lit (0 :: Word8)), lift len)
          dest  = V.slice (ident a) slice
          src   = V.slice (ident b) slice
-     V.addSequential $ V.assignArray src (lift $ V.PrimName dest)
+     V.assignArray src (lift $ V.PrimName dest)
 compileVArray (UnsafeFreezeVArray (VArrayC a)) = return $ IArrayC a
 
 runVArray :: forall exp prog a. EvaluateExp exp => VArrayCMD exp prog a -> IO a
@@ -340,7 +340,7 @@ compileComponent (Component sig) =
     declarations is (Lam  m (f :: Signal c -> Sig exp VHDL d)) =
       do t <- compT (undefined :: exp c)
          i <- V.newSym "s"
-         V.addSignal $ V.signal (ident i) m t Nothing
+         V.signal (ident i) m t Nothing
          case m of
            V.In -> declarations (ident i : is) $ f (SignalC i)
            _    -> declarations is $ f (SignalC i)
@@ -356,7 +356,7 @@ compileComponent (PortMap (Process (Just name) sig) as) =
     applications is (Lam m (f :: Signal c -> Sig exp VHDL d)) (s@(SignalC n) :> g) = do
       t <- compT (undefined :: exp c)
       i <- V.newSym "s"
-      V.addSignal $ V.signal (ident i) m t Nothing
+      V.signal (ident i) m t Nothing
       applications (ident n : is) (f s) g
 
 runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a

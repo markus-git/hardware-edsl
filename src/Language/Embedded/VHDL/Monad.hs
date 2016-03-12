@@ -41,11 +41,9 @@ module Language.Embedded.VHDL.Monad (
     -- ^ common things
 --, declareConstant,   declareSignal,   declareVariable
 --, assignSignal,      assignSignalS,   assignVariable,   assignArray
-  , constant, signal, variable
+  , signal, variable, unconstrainedArray, constrainedArray
   , assignSignal, assignVariable, assignArray
   , portMap
-
-  , unconstrainedArray, constrainedArray
   ) where
 
 import Language.VHDL
@@ -509,15 +507,15 @@ designTypes set
 
 --------------------------------------------------------------------------------
 -- ** Ports/Generic declarations
+{-
+constant :: MonadV m => Identifier -> SubtypeIndication -> Maybe Expression -> m ()
+constant i t e = addConstant $ InterfaceConstantDeclaration [i] t e
+-}
+signal   :: MonadV m => Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> m ()
+signal i m t e = addSignal $ InterfaceSignalDeclaration [i] (Just m) t False e
 
-constant :: Identifier -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
-constant i t e = InterfaceConstantDeclaration [i] t e
-
-signal   :: Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
-signal i m t e = InterfaceSignalDeclaration [i] (Just m) t False e
-
-variable :: Identifier -> SubtypeIndication -> Maybe Expression -> InterfaceDeclaration
-variable i t e = InterfaceVariableDeclaration [i] Nothing t e
+variable :: MonadV m => Identifier -> SubtypeIndication -> Maybe Expression -> m ()
+variable i t e = addVariable $ InterfaceVariableDeclaration [i] Nothing t e
 
 --------------------------------------------------------------------------------
 -- ** Array Declarations.
@@ -547,23 +545,23 @@ assignSignal i e = ConSignalAss $ CSASCond Nothing False $
         ( WaveElem [WaveEExp e Nothing]
         , Nothing))
 -}
-assignSignal :: Identifier -> Expression -> SequentialStatement
-assignSignal i e = SSignalAss $
+assignSignal :: MonadV m => Identifier -> Expression -> m ()
+assignSignal i e = addSequential $ SSignalAss $
   SignalAssignmentStatement
     (Nothing)
     (TargetName (NSimple i))
     (Nothing)
     (WaveElem [WaveEExp e Nothing])
 
-assignVariable :: Identifier -> Expression -> SequentialStatement
-assignVariable i e = SVarAss $
+assignVariable :: MonadV m => Identifier -> Expression -> m ()
+assignVariable i e = addSequential $ SVarAss $
   VariableAssignmentStatement
     (Nothing)
     (TargetName (NSimple i))
     (e)
 
-assignArray :: Name -> Expression -> SequentialStatement
-assignArray i e = SSignalAss $
+assignArray :: MonadV m => Name -> Expression -> m ()
+assignArray i e = addSequential $ SSignalAss $
   SignalAssignmentStatement
     (Nothing)
     (TargetName i)
