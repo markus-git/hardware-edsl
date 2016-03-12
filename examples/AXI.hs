@@ -36,8 +36,8 @@ type Prog = Program CMD
 array_simple :: Prog ()
 array_simple = do
   (i, o) <- structEntity "simple" $
-    do i <- newPort "input"  In  :: Prog (Signal Word8)
-       o <- newPort "output" Out :: Prog (Signal Word8)
+    do i <- newPort "input"  In    :: Prog (Signal Word2)
+       o <- newPort "output" Out   :: Prog (Signal Word4)
        return (i, o)
   structArchitecture "simple" "behavioural" $
     structProcess [] $
