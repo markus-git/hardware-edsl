@@ -39,9 +39,10 @@ module Language.Embedded.VHDL.Monad (
   , entity, architecture, package, component
 
     -- ^ common things
+--, declareConstant,   declareSignal,   declareVariable
+--, assignSignal,      assignSignalS,   assignVariable,   assignArray
   , constant, signal, variable
--- , declareConstant,   declareSignal,   declareVariable
-  , assignSignal,      assignSignalS,   assignVariable,   assignArray
+  , assignSignal, assignVariable, assignArray
   , portMap
 
   , unconstrainedArray, constrainedArray
@@ -55,6 +56,7 @@ import Control.Monad.State    (StateT, MonadState, MonadIO)
 import qualified Control.Monad.Identity as CMI
 import qualified Control.Monad.State    as CMS
 
+import Data.Either   (partitionEithers)
 import Data.Maybe    (catMaybes)
 import Data.Foldable (toList)
 import Data.Functor  (fmap)
@@ -212,13 +214,23 @@ translateInterface (InterfaceVariableDeclaration is m t e) =
 translateInterface (InterfaceFileDeclaration is t) =
   BDIFile (FileDeclaration is t Nothing)
 
+-- | ...
+translateSequential :: SequentialStatement -> ConcurrentStatement
+translateSequential (SSignalAss (SignalAssignmentStatement _ name _ e)) =
+  ConSignalAss (CSASCond Nothing False (ConditionalSignalAssignment name (Options False Nothing) (ConditionalWaveforms [] (e, Nothing))))
+
+-- | ...
+translateConcurrent :: ConcurrentStatement -> SequentialStatement
+translateConcurrent (ConSignalAss (CSASCond _ _ (ConditionalSignalAssignment name _ (ConditionalWaveforms _ (e, _))))) =
+  SSignalAss (SignalAssignmentStatement Nothing name Nothing e)
+
 -- | Run monadic actions in a contained environment.
 contain :: MonadV m => m () -> m [SequentialStatement]
-contain m = do
-  m                                          -- do
-  new <- reverse <$> CMS.gets _sequential    -- get
-  CMS.modify $ \e -> e { _sequential = [] }  -- reset
-  return new                                 -- return
+contain m =
+  do m                                          -- do
+     new <- reverse <$> CMS.gets _sequential    -- get
+     CMS.modify $ \e -> e { _sequential = [] }  -- reset
+     return new                                 -- return
 
 -- | Exit loop.
 exit :: MonadV m => Label -> Expression -> m ()
@@ -348,22 +360,32 @@ architecture :: MonadV m => Identifier -> Identifier -> m a -> m a
 architecture entity name m =
   do oldGlobal     <- CMS.gets _signals
      oldConcurrent <- CMS.gets _concurrent
+     oldSequential <- CMS.gets _sequential
      oldComponents <- CMS.gets _components
      CMS.modify $ \e -> e { _signals    = []
-                          , _concurrent = [] }
+                          , _concurrent = []
+                          , _sequential = []
+                          , _components = Set.empty }
      result        <- m
      newGlobal     <- reverse <$> CMS.gets _signals
      newConcurrent <- reverse <$> CMS.gets _concurrent
+     newSequential <- reverse . filter isSignal <$> CMS.gets _sequential
      newComponents <- fmap BDIComp . Set.toList <$> CMS.gets _components
+     let signals   =  fmap translateSequential newSequential
      addUnit_ $ LibrarySecondary $ SecondaryArchitecture $
            ArchitectureBody (name)
              (NSimple entity)
              (newComponents ++ (fmap translateInterface newGlobal)) -- merge ...
-             (newConcurrent)
+             (signals ++ newConcurrent)
      CMS.modify $ \e -> e { _signals    = oldGlobal
                           , _concurrent = oldConcurrent
+                          , _sequential = oldSequential
                           , _components = oldComponents }
      return result
+  where
+    isSignal :: SequentialStatement -> Bool
+    isSignal (SSignalAss _) = True
+    isSignal _              = False
 
 --------------------------------------------------------------------------------
 -- ** Entities
@@ -514,7 +536,7 @@ constrainedArray name typ range = compositeTypeDeclaration name $
 
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable.
-
+{-
 assignSignal :: Identifier -> Expression -> ConcurrentStatement
 assignSignal i e = ConSignalAss $ CSASCond Nothing False $ 
     ConditionalSignalAssignment
@@ -524,9 +546,9 @@ assignSignal i e = ConSignalAss $ CSASCond Nothing False $
         ([])
         ( WaveElem [WaveEExp e Nothing]
         , Nothing))
-
-assignSignalS :: Identifier -> Expression -> SequentialStatement
-assignSignalS i e = SSignalAss $
+-}
+assignSignal :: Identifier -> Expression -> SequentialStatement
+assignSignal i e = SSignalAss $
   SignalAssignmentStatement
     (Nothing)
     (TargetName (NSimple i))

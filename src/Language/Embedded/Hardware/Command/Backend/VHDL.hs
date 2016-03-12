@@ -102,14 +102,14 @@ compileSignal (GetSignal (SignalC s)) =
      V.addSequential $ V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident s)
      return v
 compileSignal (SetSignal (SignalC s) exp) =
-  do V.addSequential =<< V.assignSignalS (ident s) <$> compE exp
+  do V.addSequential =<< V.assignSignal (ident s) <$> compE exp
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ varE s
 compileSignal (PackSignal base (ArrayC n :: Array i Bool)) =
   do t <- compT (undefined :: exp i)
      i <- V.newSym base
      V.addSignal $ V.signal (ident i) V.Out t Nothing
-     V.addSequential $ V.assignSignalS (ident i) (lift $ V.cast t $ lift $ V.name n)
+     V.addSequential $ V.assignSignal (ident i) (lift $ V.cast t $ lift $ V.name n)
      return (SignalC i)
 
 runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
@@ -180,8 +180,8 @@ compileArray (NewArray base (len :: exp i)) =
 compileArray (UnpackArray name (SignalC i :: Signal i)) =
   do t <- compT (undefined :: exp i)
      let typ = V.std_logic_vector (V.width t)
-     V.addSignal     $ V.signal        (ident name) V.Out typ Nothing
-     V.addSequential $ V.assignSignalS (ident name) (lift $ V.cast typ $ lift $ V.name i)
+     V.addSignal     $ V.signal       (ident name) V.Out typ Nothing
+     V.addSequential $ V.assignSignal (ident name) (lift $ V.cast typ $ lift $ V.name i)
      return (ArrayC name)
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
