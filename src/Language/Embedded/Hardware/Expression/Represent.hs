@@ -1,6 +1,11 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+
 module Language.Embedded.Hardware.Expression.Represent
-  ( Tagged (..)
-  , Rep    (..)
+  ( Rep (..)
+  , Bit, Bit2,  Bit4,  Bit8,  Bit16,  Bit32,  Bit64
+  ,      Int2,  Int4,  module Data.Int
+  ,      Word2, Word4, module Data.Word
+  
   ) where
 
 import qualified Language.VHDL as V
@@ -24,25 +29,89 @@ import qualified Data.ByteString as B
 -- * Representable types (until I come up with a solution free of VHDL stuff).
 --------------------------------------------------------------------------------
 
--- | Tag a value with some (possibly) interesting information
-newtype Tagged s b = Tag { unTag :: b }
+--------------------------------------------------------------------------------
+-- ** Std_logic.
+
+type Bit = Bool
+
+data Bit2
+
+data Bit4
+
+data Bit8
+
+data Bit16
+
+data Bit32
+
+data Bit64
+
+--------------------------------------------------------------------------------
+-- ** Signed.
+
+data Int2
+
+data Int4
+
+--------------------------------------------------------------------------------
+-- ** Unsigned.
+
+data Word2
+
+data Word4
+
+--------------------------------------------------------------------------------
+-- * Representation of types.
+--------------------------------------------------------------------------------
 
 -- | A 'rep'resentable value.
 class Rep a
   where
     declare :: proxy a -> VHDL Type
     format  :: a       -> String
-
+  
 --------------------------------------------------------------------------------
 -- ** Boolean
 
-instance Rep Bool where
+instance Rep Bit where
   declare _    = declareBoolean >> return std_logic
   format True  = "1"
   format False = "0"
 
+instance Rep Bit2 where
+  declare _ = declareBoolean >> return (std_logic_vector 2)
+  format    = undefined
+
+instance Rep Bit4 where
+  declare _ = declareBoolean >> return (std_logic_vector 4)
+  format    = undefined
+
+instance Rep Bit8 where
+  declare _ = declareBoolean >> return (std_logic_vector 8)
+  format    = undefined
+
+instance Rep Bit16 where
+  declare _ = declareBoolean >> return (std_logic_vector 16)
+  format    = undefined
+
+instance Rep Bit32 where
+  declare _ = declareBoolean >> return (std_logic_vector 32)
+  format    = undefined
+
+instance Rep Bit64 where
+  declare _ = declareBoolean >> return (std_logic_vector 64)
+  format    = undefined
+
 --------------------------------------------------------------------------------
 -- ** Signed
+
+instance Rep Int2 where
+  declare _ = declareNumeric >> return signed2
+  format    = undefined
+
+instance Rep Int4 where
+  declare _ = declareNumeric >> return signed4
+  format    = undefined
 
 instance Rep Int8 where
   declare _ = declareNumeric >> return signed8
@@ -62,6 +131,14 @@ instance Rep Int64 where
 
 --------------------------------------------------------------------------------
 -- ** Unsigned
+
+instance Rep Word2 where
+  declare _ = declareNumeric >> return usigned2
+  format    = undefined
+
+instance Rep Word4 where
+  declare _ = declareNumeric >> return usigned4
+  format    = undefined
 
 instance Rep Word8 where
   declare _ = declareNumeric >> return usigned8
