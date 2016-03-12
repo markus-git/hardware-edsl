@@ -1,5 +1,6 @@
 module Language.Embedded.Hardware.Expression.Frontend where
 
+import Language.Embedded.Hardware.Interface (VarId)
 import Language.Embedded.Hardware.Expression.Syntax
 
 import Data.Bits (Bits)
@@ -15,8 +16,8 @@ import qualified Prelude as P
 value :: HType a => a -> HExp a
 value i = sugarT (Literal i)
 
--- | Creates a variable from a string.
-variable :: HType a => String -> HExp a
+-- | Creates a variable from a name.
+variable :: HType a => VarId -> HExp a
 variable = sugarT . Name
 
 -- | Casts an expression using supplied conversion function.

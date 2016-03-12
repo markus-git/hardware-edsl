@@ -283,10 +283,10 @@ data StructuralCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Wraps the program in an entity.
     StructEntity
-      :: String -> prog a -> StructuralCMD exp prog a
+      :: VarId -> prog a -> StructuralCMD exp prog a
     -- ^ Wraps the program in an architecture.
     StructArchitecture
-      :: String -> String -> prog a -> StructuralCMD exp prog a
+      :: VarId -> VarId -> prog a -> StructuralCMD exp prog a
     -- ^ Wraps the program in a process.
     StructProcess
       :: [SignalX] -> prog () -> StructuralCMD exp prog ()

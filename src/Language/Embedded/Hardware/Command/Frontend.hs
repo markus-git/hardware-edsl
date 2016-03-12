@@ -26,12 +26,12 @@ import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 -- | Declare a named signal.
 initNamedSignal
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Signal a)
-initNamedSignal name = singleE . NewSignal name InOut . Just
+initNamedSignal name = singleE . NewSignal (Base name) InOut . Just
 
 -- | Declare an uninitialized named signal.
 newNamedSignal
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Signal a)
-newNamedSignal name = singleE $ NewSignal name InOut Nothing
+newNamedSignal name = singleE $ NewSignal (Base name) InOut Nothing
 
 -- | Declare a signal.
 initSignal  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Signal a)
@@ -59,19 +59,21 @@ packSignal
   => String
   -> Array a Bool
   -> ProgramT i m (Signal a)
-packSignal s = singleE . PackSignal s
+packSignal s = singleE . PackSignal (Base s)
 
 --------------------------------------------------------------------------------
 
 -- | Declare port signals of the given mode and assign it initial value.
-initPort
+initPort, initUniquePort
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> IExp i a -> ProgramT i m (Signal a)
-initPort name m = singleE . NewSignal name m . Just
+initPort       name m = singleE . NewSignal (Base   name) m . Just
+initUniquePort name m = singleE . NewSignal (Unique name) m . Just
 
 -- | Declare port signals of the given mode.
-newPort
+newPort, newUniquePort
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> ProgramT i m (Signal a)
-newPort name m = singleE $ NewSignal name m Nothing
+newPort       name m = singleE $ NewSignal (Base   name) m Nothing
+newUniquePort name m = singleE $ NewSignal (Unique name) m Nothing
 
 --------------------------------------------------------------------------------
 
@@ -85,12 +87,12 @@ newPort name m = singleE $ NewSignal name m Nothing
 -- | Declare a named variable.
 initNamedVariable
   :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Variable a)
-initNamedVariable name = singleE . NewVariable name . Just
+initNamedVariable name = singleE . NewVariable (Base name) . Just
 
 -- | Declare an uninitialized named variable.
 newNamedVariable
   :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Variable a)
-newNamedVariable name = singleE $ NewVariable name Nothing
+newNamedVariable name = singleE $ NewVariable (Base name) Nothing
 
 -- | Declare a variable.
 initVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Variable a)
@@ -134,7 +136,7 @@ newNamedArray
      , Integral i
      , Ix i)
   => String -> IExp instr i -> ProgramT instr m (Array i a)
-newNamedArray name = singleE . NewArray name
+newNamedArray name = singleE . NewArray (Base name)
 
 -- | ...
 unpackArray
@@ -144,7 +146,7 @@ unpackArray
      , Integral i
      , Ix i)
   => String -> Signal i -> ProgramT instr m (Array i Bool)
-unpackArray name = singleE . UnpackArray name
+unpackArray name = singleE . UnpackArray (Base name)
   
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -156,7 +158,7 @@ newNamedVArray
      , Integral i, Ix i
      , VArrayCMD (IExp instr) :<: instr)
   => String -> IExp instr i -> ProgramT instr m (VArray i a)
-newNamedVArray name = singleE . NewVArray name
+newNamedVArray name = singleE . NewVArray (Base name)
 
 -- | Create an initialized named array.
 initNamedVArray
@@ -165,7 +167,7 @@ initNamedVArray
      , Integral i, Ix i
      , VArrayCMD (IExp instr) :<: instr)
   => String -> [a] -> ProgramT instr m (VArray i a)  
-initNamedVArray name = singleE . InitVArray name
+initNamedVArray name = singleE . InitVArray (Base name)
 
 newVArray
   :: ( PredicateExp (IExp instr) a
@@ -308,11 +310,11 @@ portmap pro arg = singleE $ PortMap pro arg
 
 -- | Declare a new entity by wrapping the program to declare ports & generics.
 structEntity :: (StructuralCMD (IExp i) :<: i) => String -> ProgramT i m a -> ProgramT i m a
-structEntity e = singleE . StructEntity e
+structEntity e = singleE . StructEntity (Base e)
 
 -- | Declare a new architecture for some entity by wrapping the given program.
 structArchitecture :: (StructuralCMD (IExp i) :<: i) => String -> String -> ProgramT i m a -> ProgramT i m a
-structArchitecture e a = singleE . StructArchitecture e a
+structArchitecture e a = singleE . StructArchitecture (Base e) (Base a)
 
 -- | Declare a new process listening to some signals by wrapping the given program.
 structProcess :: (StructuralCMD (IExp i) :<: i) => [SignalX] -> ProgramT i m () -> ProgramT i m ()

@@ -6,13 +6,19 @@ module Language.Embedded.Hardware.Interface where
 import Language.VHDL          (Expression)
 import Language.Embedded.VHDL (VHDL, Type)
 import Data.Constraint
+import Data.String
 
 --------------------------------------------------------------------------------
 -- * Interface for evaluation and compilation of pure expressions into VHDL.
 --------------------------------------------------------------------------------
 
 -- | Variable identifier.
-type VarId = String
+data VarId
+  = Unique String
+  | Base   String
+
+-- | ...
+instance IsString VarId where fromString = Unique
 
 -- | Expressions that support injection of values and named variables.
 class FreeExp exp
