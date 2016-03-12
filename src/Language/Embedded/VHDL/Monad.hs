@@ -534,17 +534,7 @@ constrainedArray name typ range = compositeTypeDeclaration name $
 
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable.
-{-
-assignSignal :: Identifier -> Expression -> ConcurrentStatement
-assignSignal i e = ConSignalAss $ CSASCond Nothing False $ 
-    ConditionalSignalAssignment
-      (TargetName (NSimple i))
-      (Options False Nothing)
-      (ConditionalWaveforms
-        ([])
-        ( WaveElem [WaveEExp e Nothing]
-        , Nothing))
--}
+
 assignSignal :: MonadV m => Identifier -> Expression -> m ()
 assignSignal i e = addSequential $ SSignalAss $
   SignalAssignmentStatement
@@ -567,19 +557,6 @@ assignArray i e = addSequential $ SSignalAss $
     (TargetName i)
     (Nothing)
     (WaveElem [WaveEExp e Nothing])
-
---------------------------------------------------------------------------------
--- ** Global/Local Declarations.
-{-
-declareConstant :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
-declareConstant i t e = BDIConstant $ ConstantDeclaration [i] t e
-
-declareSignal :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
-declareSignal i t e = BDISignal $ SignalDeclaration [i] t Nothing e
-
-declareVariable :: Identifier -> SubtypeIndication -> Maybe Expression -> BlockDeclarativeItem
-declareVariable i t e = BDIShared $ VariableDeclaration False [i] t e
--}
 
 --------------------------------------------------------------------------------
 -- Portmap.

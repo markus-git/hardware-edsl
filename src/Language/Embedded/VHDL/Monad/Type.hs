@@ -3,8 +3,8 @@ module Language.Embedded.VHDL.Monad.Type
   , Kind(..)
 
   , std_logic, std_logic_vector
-  , signed8,  signed16,  signed32,  signed64
-  , usigned8, usigned16, usigned32, usigned64
+  , signed2,  signed4,  signed8,  signed16,  signed32,  signed64
+  , usigned2, usigned4, usigned8, usigned16, usigned32, usigned64
   , float, double
 
   , width
@@ -52,13 +52,17 @@ signed, usigned :: Int -> Type
 signed  = arith "signed"
 usigned = arith "unsigned"
 
-signed8, signed16, signed32, signed64 :: Type
+signed2, signed4, signed8, signed16, signed32, signed64 :: Type
+signed2  = signed 2
+signed4  = signed 4
 signed8  = signed 8
 signed16 = signed 16
 signed32 = signed 32
 signed64 = signed 64
 
-usigned8, usigned16, usigned32, usigned64 :: Type
+usigned2, usigned4, usigned8, usigned16, usigned32, usigned64 :: Type
+usigned2  = usigned 2
+usigned4  = usigned 4
 usigned8  = usigned 8
 usigned16 = usigned 16
 usigned32 = usigned 32
