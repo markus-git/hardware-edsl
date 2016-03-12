@@ -89,18 +89,66 @@ axi_light
   s_axi_awaddr s_axi_awvalid s_axi_awready
   s_axi_araddr s_axi_arvalid s_axi_arready
   s_axi_wdata  s_axi_wstrb   s_axi_wvalid  s_axi_wready
-  s_axi_rdata  s_axi_rresp   s_axi_rvalid s_axi_rready
+  s_axi_rdata  s_axi_rresp   s_axi_rvalid  s_axi_rready
   s_axi_bresp  s_axi_bvalid  s_axi_bready
    =
   do
-     undefined
+     return ()
 
 --------------------------------------------------------------------------------
+
+wrap :: P ()
+wrap = do
+  axi <- component "AXI" axi_light_signature
+  inp <- structEntity "controller" $ do
+    newPort "inp" In :: P (Signal Bit)
+  structArchitecture "controller" "behaviour" $ do
+    s_axi_aclk    <- newSignal :: P (Signal Bit) 
+    s_axi_aresetn <- newSignal :: P (Signal Bit) 
+    s_axi_awaddr  <- newSignal :: P (Signal Bit32) 
+    s_axi_awvalid <- newSignal :: P (Signal Bit) 
+    s_axi_awready <- newSignal :: P (Signal Bit)
+    s_axi_araddr  <- newSignal :: P (Signal Bit32) 
+    s_axi_arvalid <- newSignal :: P (Signal Bit)
+    s_axi_arready <- newSignal :: P (Signal Bit) 
+    s_axi_wdata   <- newSignal :: P (Signal Bit32) 
+    s_axi_wstrb   <- newSignal :: P (Signal Bit4) 
+    s_axi_wvalid  <- newSignal :: P (Signal Bit)
+    s_axi_wready  <- newSignal :: P (Signal Bit) 
+    s_axi_rdata   <- newSignal :: P (Signal Bit32)
+    s_axi_rresp   <- newSignal :: P (Signal Bit2)
+    s_axi_rvalid  <- newSignal :: P (Signal Bit)
+    s_axi_rready  <- newSignal :: P (Signal Bit)
+    s_axi_bresp   <- newSignal :: P (Signal Bit2) 
+    s_axi_bvalid  <- newSignal :: P (Signal Bit)
+    s_axi_bready  <- newSignal :: P (Signal Bit)
+    
+    portmap axi (
+      s_axi_aclk    :>  
+      s_axi_aresetn :>  
+      s_axi_awaddr  :>  
+      s_axi_awvalid :>  
+      s_axi_awready :> 
+      s_axi_araddr  :>  
+      s_axi_arvalid :> 
+      s_axi_arready :>  
+      s_axi_wdata   :>  
+      s_axi_wstrb   :>  
+      s_axi_wvalid  :> 
+      s_axi_wready  :>  
+      s_axi_rdata   :> 
+      s_axi_rresp   :> 
+      s_axi_rvalid  :> 
+      s_axi_rready  :> 
+      s_axi_bresp   :>  
+      s_axi_bvalid  :> 
+      s_axi_bready  :>
+      Nill )
 
 test :: IO ()
 test = do
   putStrLn "\n### Simple ###\n"
-  putStrLn $ undefined --compile $ axi_light
+  putStrLn $ compile $ wrap
 
 --------------------------------------------------------------------------------
 

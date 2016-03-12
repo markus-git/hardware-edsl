@@ -23,14 +23,15 @@ module Language.Embedded.VHDL.Monad (
     -- ^ imports
   , newLibrary, newImport
 
-    -- ^ declarations
+    -- ^ ...
 --, addPort,       addGeneric
   , addSignal,     addVariable
   , addConcurrent, addSequential
   , addType,       addComponent
 
+    -- ^ declarations
   , declareComponent
-
+                   
     -- ^ statements
   , inProcess, inFor, inWhile, inConditional, inCase
   , exit
@@ -441,27 +442,9 @@ component m =
   do oldEnv <- CMS.get
      CMS.put emptyVHDLEnv
      m
-     units <- reverse <$> CMS.gets _units
+     units <- CMS.gets _units
      CMS.put oldEnv
      addDesign $ DesignFile units
-
-declareComponent :: MonadV m => Identifier -> m a -> m a
-declareComponent name m = 
-  do oldPorts    <- CMS.gets _signals
-     oldGenerics <- CMS.gets _variables
-     CMS.modify $ \e -> e { _signals   = []
-                          , _variables = [] }
-     result      <- m
-     newPorts    <- reverse <$> CMS.gets _signals
-     newGenerics <- reverse <$> CMS.gets _variables
-     addComponent $
-           ComponentDeclaration name
-             (GenericClause <$> maybeNull newGenerics)
-             (PortClause    <$> maybeNull newPorts)
-             (Nothing)
-     CMS.modify $ \e -> e { _signals   = oldPorts
-                          , _variables = oldGenerics }
-     return result
 
 --------------------------------------------------------------------------------
 -- * Pretty printing VHDL programs
@@ -567,6 +550,11 @@ portMap l c is = addConcurrent $ ConComponent $ ComponentInstantiationStatement 
   (Nothing)
   (Just $ PortMapAspect $ AssociationList $
     fmap (AssociationElement Nothing . APDesignator . ADSignal . NSimple) is)
+
+declareComponent :: MonadV m => Identifier -> [InterfaceDeclaration] -> m ()
+declareComponent name is = addComponent $ ComponentDeclaration name Nothing
+  (Just (PortClause (InterfaceList is)))
+  (Nothing)
 
 --------------------------------------------------------------------------------
 -- Some helper classes and their instances

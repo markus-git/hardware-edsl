@@ -59,8 +59,8 @@ compTA r _ _ =
     named :: V.Identifier -> V.SubtypeIndication
     named i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
 
-compFT :: forall exp m a b. (CompileExp exp, PredicateExp exp a) => (Signal a -> Sig exp m b) -> VHDL V.Type
-compFT _ = compT (undefined :: exp a)
+compTF :: forall exp m a b. (CompileExp exp, PredicateExp exp a) => (Signal a -> Sig exp m b) -> VHDL V.Type
+compTF _ = compT (undefined :: exp a)
 
 --------------------------------------------------------------------------------
 
@@ -343,20 +343,26 @@ compileComponent (StructComponent n sig) =
     declare :: Sig exp VHDL b ->  VHDL (VHDL ())
     declare (Unit m)     = return m
     declare (Lam  n m f) =
-      do t <- compFT f
+      do t <- compTF f
          i <- newSym n
          V.signal (ident i) m t Nothing
          declare (f (SignalC i))
 compileComponent (PortMap (Component (Just n) sig) as) =
   do l  <- newSym (Base "l")
-     vs <- V.declareComponent (ident n) (apply sig as)
-     V.portMap (ident l) (ident n) (fmap ident $ reverse vs)
+     vs <- apply sig as
+     V.declareComponent  (ident n) vs
+     V.portMap (ident l) (ident n) (fmap idents vs)
   where
      -- todo: associate 'n' with 'i'
-    apply :: Sig exp VHDL b -> Arg b -> VHDL [VarId]
+    apply :: Sig exp VHDL b -> Arg b -> VHDL [V.InterfaceDeclaration]
     apply (Unit _)     (Nill)               = return []
-    apply (Lam  n m f) (s@(SignalC i) :> v) =
-      (i :) <$> apply (f s) v
+    apply (Lam  n m f) (s@(SignalC i) :> v) = do
+      t <- compTF f
+      (V.InterfaceSignalDeclaration [ident n] (Just m) t False Nothing :)
+        <$> apply (f s) v
+        
+    idents :: V.InterfaceDeclaration -> V.Identifier
+    idents (V.InterfaceSignalDeclaration [i] _ _ _ _) = i
 
 runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
 runComponent (StructComponent _ _)            = return Nothing
