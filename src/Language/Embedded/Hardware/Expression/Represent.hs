@@ -1,7 +1,6 @@
 module Language.Embedded.Hardware.Expression.Represent
   ( Tagged (..)
   , Rep    (..)
-  , sized
   ) where
 
 import qualified Language.VHDL as V
@@ -33,11 +32,6 @@ class Rep a
   where
     declare :: proxy a -> VHDL Type
     format  :: a       -> String
-
-sized :: Type -> Int
-sized (V.SubtypeIndication _ tm Nothing) = 1 -- todo: check tm
-sized (V.SubtypeIndication _ _ (Just (V.CRange (V.RangeConstraint (V.RSimple a V.DownTo b))))) =
-  literal a - literal b
 
 --------------------------------------------------------------------------------
 -- ** Boolean
