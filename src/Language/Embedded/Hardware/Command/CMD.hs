@@ -23,15 +23,6 @@ import qualified Data.Array as Arr
 --------------------------------------------------------------------------------
 -- ** Signals.
 
--- | If a signal is declared with a scope of 'Entity' its classified as either a
---   port or generic signal.
-data Clause   = Port | Generic
-  deriving (Show)
-
--- | Scope of a signal.
-data Scope    = SProcess | SArchitecture | SEntity
-  deriving (Show)
-
 -- | Signal representation.
 data Signal a = SignalC VarId | SignalE (IORef a)
 
@@ -39,24 +30,27 @@ data Signal a = SignalC VarId | SignalE (IORef a)
 data SignalCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Create a new signal.
-    NewSignal :: PredicateExp exp a =>
-      VarId -> Clause -> Scope -> Mode  -> Maybe (exp a) -> SignalCMD exp prog (Signal a)
+    NewSignal :: PredicateExp exp a => VarId -> Mode -> Maybe (exp a) -> SignalCMD exp prog (Signal a)
     -- ^ Fetch the contents of a signal.
-    GetSignal :: PredicateExp exp a => Signal a          -> SignalCMD exp prog (exp a)
+    GetSignal :: PredicateExp exp a => Signal a -> SignalCMD exp prog (exp a)
     -- ^ Write the value to a signal.
     SetSignal :: PredicateExp exp a => Signal a -> exp a -> SignalCMD exp prog ()
     -- ^ Unsafe version of fetching a signal.
     UnsafeFreezeSignal :: PredicateExp exp a => Signal a -> SignalCMD exp prog (exp a)
+    -- ^ ...
+    PackSignal :: PredicateExp exp i =>
+      VarId -> Array i Bool -> SignalCMD exp prog (Signal i)
 
 type instance IExp (SignalCMD e)       = e
 type instance IExp (SignalCMD e :+: i) = e
 
 instance HFunctor (SignalCMD exp)
   where
-    hfmap _ (NewSignal n c s m e)  = NewSignal n c s m e
+    hfmap _ (NewSignal n m e)      = NewSignal n m e
     hfmap _ (GetSignal s)          = GetSignal s
     hfmap _ (SetSignal s e)        = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
+    hfmap _ (PackSignal n a)       = PackSignal n a
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -68,10 +62,9 @@ data Variable a = VariableC VarId | VariableE (IORef a)
 data VariableCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Create a new variable.
-    NewVariable :: PredicateExp exp a =>
-      VarId -> Maybe (exp a) -> VariableCMD exp prog (Variable a)
+    NewVariable :: PredicateExp exp a => VarId -> Maybe (exp a) -> VariableCMD exp prog (Variable a)
     -- ^ Fetch the contents of a variable.
-    GetVariable :: PredicateExp exp a => Variable a          -> VariableCMD exp prog (exp a)
+    GetVariable :: PredicateExp exp a => Variable a -> VariableCMD exp prog (exp a)
     -- ^ Write the value to a variable.
     SetVariable :: PredicateExp exp a => Variable a -> exp a -> VariableCMD exp prog ()
     -- ^ Unsafe version of fetching a variable.
@@ -98,12 +91,9 @@ class CompArrayIx exp
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array  i a = ArrayC VarId  | ArrayE (IORef (IOArray i a))
+data Array i a = ArrayC VarId | ArrayE (IORef (IOArray i a))
 
--- | Immutable arrays.
-data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
-
--- | Commands for arrays.
+-- | Commands for signal arrays.
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
   where
     -- ^ Creates an array of given length.
@@ -111,54 +101,90 @@ data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
       :: ( PredicateExp exp a
          , PredicateExp exp i
          , Integral i
-         , Ix i )
+         , Ix i)
       => VarId -> exp i -> ArrayCMD exp prog (Array i a)
-    -- ^ Creates an array from the given list of elements.
-    InitArray
-      :: ( PredicateExp exp a
+    -- ^ Creates an array by unpacking the given expression.
+    UnpackArray
+      :: ( PredicateExp exp Bool
          , PredicateExp exp i
          , Integral i
-         , Ix i )
-      => VarId -> [a] -> ArrayCMD exp prog (Array i a)
-    -- ^ Fetches the array's value at a specified index.
-    GetArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i )
-      => exp i -> Array i a -> ArrayCMD exp prog (exp a)
-    -- ^ Writes a value to an array at some specified index.
-    SetArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i )
-      => exp i -> exp a -> Array i a -> ArrayCMD exp prog ()
-    CopyArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i )
-      => Array i a -> Array i a -> exp i -> ArrayCMD exp prog ()
-    -- ^ Unsafe version of fetching an array's value.
-    UnsafeFreezeArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i )
-      => Array i a -> ArrayCMD exp prog (IArray i a)
-
+         , Ix i)
+      => VarId -> Signal i -> ArrayCMD exp prog (Array i Bool)
+    -- ^ ...
+    
 type instance IExp (ArrayCMD e)       = e
 type instance IExp (ArrayCMD e :+: i) = e
 
 instance HFunctor (ArrayCMD exp)
   where
-    hfmap _ (NewArray n i)        = NewArray n i
-    hfmap _ (InitArray n is)      = InitArray n is
-    hfmap _ (GetArray i a)        = GetArray i a
-    hfmap _ (SetArray i e a)      = SetArray i e a
-    hfmap _ (CopyArray a b l)     = CopyArray a b l
-    hfmap _ (UnsafeFreezeArray a) = UnsafeFreezeArray a
+    hfmap _ (NewArray n e)    = NewArray n e
+    hfmap _ (UnpackArray n s) = UnpackArray n s
+
+--------------------------------------------------------------------------------
+-- ** Virtual arrays.
+
+-- | Virtual array reprensentation.
+data VArray i a = VArrayC VarId | VArrayE (IORef (IOArray i a))
+
+-- | Immutable arrays.
+data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
+
+-- | Commands for variable arrays.
+data VArrayCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    -- ^ Creates an array of given length.
+    NewVArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i)
+      => VarId -> exp i -> VArrayCMD exp prog (VArray i a)
+    -- ^ Creates an array from the given list of elements.
+    InitVArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i)
+      => VarId -> [a] -> VArrayCMD exp prog (VArray i a)
+    -- ^ Fetches the array's value at a specified index.
+    GetVArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i)
+      => exp i -> VArray i a -> VArrayCMD exp prog (exp a)
+    -- ^ Writes a value to an array at some specified index.
+    SetVArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i)
+      => exp i -> exp a -> VArray i a -> VArrayCMD exp prog ()
+    CopyVArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i)
+      => VArray i a -> VArray i a -> exp i -> VArrayCMD exp prog ()
+    -- ^ Unsafe version of fetching an array's value.
+    UnsafeFreezeVArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i)
+      => VArray i a -> VArrayCMD exp prog (IArray i a)
+
+type instance IExp (VArrayCMD e)       = e
+type instance IExp (VArrayCMD e :+: i) = e
+
+instance HFunctor (VArrayCMD exp)
+  where
+    hfmap _ (NewVArray n i)        = NewVArray n i
+    hfmap _ (InitVArray n is)      = InitVArray n is
+    hfmap _ (GetVArray i a)        = GetVArray i a
+    hfmap _ (SetVArray i e a)      = SetVArray i e a
+    hfmap _ (CopyVArray a b l)     = CopyVArray a b l
+    hfmap _ (UnsafeFreezeVArray a) = UnsafeFreezeVArray a
 
 --------------------------------------------------------------------------------
 -- ** Looping.

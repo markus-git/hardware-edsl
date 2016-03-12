@@ -26,12 +26,12 @@ import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 -- | Declare a named signal.
 initNamedSignal
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Signal a)
-initNamedSignal name = singleE . NewSignal name Port SArchitecture InOut . Just
+initNamedSignal name = singleE . NewSignal name InOut . Just
 
 -- | Declare an uninitialized named signal.
 newNamedSignal
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Signal a)
-newNamedSignal name = singleE $ NewSignal name Port SArchitecture InOut Nothing
+newNamedSignal name = singleE $ NewSignal name InOut Nothing
 
 -- | Declare a signal.
 initSignal  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Signal a)
@@ -53,27 +53,25 @@ setSignal s = singleE . SetSignal s
 unsafeFreezeSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> ProgramT i m (IExp i a)
 unsafeFreezeSignal = singleE . UnsafeFreezeSignal
 
+-- | ...
+packSignal
+  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a)
+  => String
+  -> Array a Bool
+  -> ProgramT i m (Signal a)
+packSignal s = singleE . PackSignal s
+
 --------------------------------------------------------------------------------
 
 -- | Declare port signals of the given mode and assign it initial value.
 initPort
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> IExp i a -> ProgramT i m (Signal a)
-initPort name m = singleE . NewSignal name Port SEntity m . Just
+initPort name m = singleE . NewSignal name m . Just
 
 -- | Declare port signals of the given mode.
 newPort
   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> ProgramT i m (Signal a)
-newPort name m = singleE $ NewSignal name Port SEntity m Nothing
-
--- | Declare generic signals of the given mode and assign it initial value.
-initGeneric
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> IExp i a -> ProgramT i m (Signal a)
-initGeneric name m = singleE . NewSignal name Generic SEntity m . Just
-
--- | Declare generic signals of the given mode.
-newGeneric
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> ProgramT i m (Signal a)
-newGeneric name m = singleE $ NewSignal name Generic SEntity m Nothing
+newPort name m = singleE $ NewSignal name m Nothing
 
 --------------------------------------------------------------------------------
 
@@ -111,7 +109,7 @@ setVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable
 setVariable v = singleE . SetVariable v
 
 -- | Unsafe version of fetching the contents of a variable.
-unsafeFreezeVariable
+unsafeFreezeVariable 
   :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> ProgramT i m (IExp i a)
 unsafeFreezeVariable = singleE . UnsafeFreezeVariable
 
@@ -128,66 +126,89 @@ veryUnsafeFreezeVariable (VariableC v) = varE v
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
--- | Create an uninitialized named array.
+-- | ...
 newNamedArray
-  :: ( PredicateExp (IExp instr) a
+  :: ( ArrayCMD     (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
+     , Integral i
+     , Ix i)
   => String -> IExp instr i -> ProgramT instr m (Array i a)
 newNamedArray name = singleE . NewArray name
 
+-- | ...
+unpackArray
+  :: ( ArrayCMD     (IExp instr) :<: instr
+     , PredicateExp (IExp instr) i
+     , PredicateExp (IExp instr) Bool
+     , Integral i
+     , Ix i)
+  => String -> Signal i -> ProgramT instr m (Array i Bool)
+unpackArray name = singleE . UnpackArray name
+  
+--------------------------------------------------------------------------------
+-- ** Virtual arrays.
+
+-- | Create an uninitialized named virtual array.
+newNamedVArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , VArrayCMD (IExp instr) :<: instr)
+  => String -> IExp instr i -> ProgramT instr m (VArray i a)
+newNamedVArray name = singleE . NewVArray name
+
 -- | Create an initialized named array.
-initNamedArray
+initNamedVArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => String -> [a] -> ProgramT instr m (Array i a)  
-initNamedArray name = singleE . InitArray name
+     , VArrayCMD (IExp instr) :<: instr)
+  => String -> [a] -> ProgramT instr m (VArray i a)  
+initNamedVArray name = singleE . InitVArray name
 
-newArray
+newVArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => IExp instr i -> ProgramT instr m (Array i a) 
-newArray = newNamedArray "a"
+     , VArrayCMD (IExp instr) :<: instr)
+  => IExp instr i -> ProgramT instr m (VArray i a) 
+newVArray = newNamedVArray "a"
 
-initArray
+initVArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => [a] -> ProgramT instr m (Array i a)
-initArray = initNamedArray "a"
+     , VArrayCMD (IExp instr) :<: instr)
+  => [a] -> ProgramT instr m (VArray i a)
+initVArray = initNamedVArray "a"
 
 -- | Get an element of an array.
-getArray
+getVArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => IExp instr i -> Array i a -> ProgramT instr m (IExp instr a)
-getArray i = singleE . GetArray i
+     , VArrayCMD (IExp instr) :<: instr)
+  => IExp instr i -> VArray i a -> ProgramT instr m (IExp instr a)
+getVArray i = singleE . GetVArray i
 
 -- | Set an element of an array.
-setArray
+setVArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => IExp instr i -> IExp instr a -> Array i a -> ProgramT instr m ()
-setArray i a = singleE . SetArray i a
+     , VArrayCMD (IExp instr) :<: instr)
+  => IExp instr i -> IExp instr a -> VArray i a -> ProgramT instr m ()
+setVArray i a = singleE . SetVArray i a
 
 -- | Copy a slice of one array to another.
-copyArray
+copyVArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => Array i a -> Array i a -> IExp instr i -> ProgramT instr m ()
-copyArray dest src = singleE . CopyArray dest src
+     , VArrayCMD (IExp instr) :<: instr)
+  => VArray i a -> VArray i a -> IExp instr i -> ProgramT instr m ()
+copyVArray dest src = singleE . CopyVArray dest src
 
 -- | Freeze a mutable array into an immutable one by copying.
 freezeArray
@@ -195,21 +216,21 @@ freezeArray
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
      , Monad m
-     , ArrayCMD (IExp instr) :<: instr)
-  => Array i a -> IExp instr i -> ProgramT instr m (IArray i a)
+     , VArrayCMD (IExp instr) :<: instr)
+  => VArray i a -> IExp instr i -> ProgramT instr m (IArray i a)
 freezeArray array len =
-  do copy <- newArray len
-     copyArray copy array len
-     unsafeFreezeArray copy
+  do copy <- newVArray len
+     copyVArray copy array len
+     unsafeFreezeVArray copy
 
 -- | Unsafe version of fetching the contents of an array's index.
-unsafeFreezeArray
+unsafeFreezeVArray
   :: ( PredicateExp (IExp instr) a
      , PredicateExp (IExp instr) i
      , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => Array i a -> ProgramT instr m (IArray i a)
-unsafeFreezeArray = singleE . UnsafeFreezeArray
+     , VArrayCMD (IExp instr) :<: instr)
+  => VArray i a -> ProgramT instr m (IArray i a)
+unsafeFreezeVArray = singleE . UnsafeFreezeVArray
 
 --------------------------------------------------------------------------------
 -- ** Looping.
