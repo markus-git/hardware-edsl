@@ -63,7 +63,7 @@ library
     constraints >=0.6,
     syntactic >=3.2,
     operational-alacarte >=0.1.1,
-    language-vhdl >=0.1.2.5
+    language-vhdl >=0.1.2.8
     
   hs-source-dirs:
     src
