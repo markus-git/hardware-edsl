@@ -84,88 +84,91 @@ class Rep a
 --------------------------------------------------------------------------------
 -- ** Boolean
 
+printBits :: (PrintfArg a, PrintfType b) => Int -> a -> b
+printBits zeroes = printf ("\"%0" ++ show zeroes ++ "b\"")
+
 instance Rep Bit where
   declare _    = declareBoolean >> return std_logic
-  format True  = "1"
-  format False = "0"
+  format True  = "\'1\'"
+  format False = "\'0\'"
 
 instance Rep Bit2 where
   declare _ = declareBoolean >> return (std_logic_vector 2)
-  format (B2 (W2 w)) = printf "%02b" w
+  format (B2 (W2 w)) = printBits 2 w
 
 instance Rep Bit4 where
   declare _ = declareBoolean >> return (std_logic_vector 4)
-  format (B4 (W4 w)) = printf "%04b" w
+  format (B4 (W4 w)) = printBits 4 w
 
 instance Rep Bit8 where
   declare _ = declareBoolean >> return (std_logic_vector 8)
-  format    = printf "%08b" . unB8
+  format    = printBits 8 . unB8
 
 instance Rep Bit16 where
   declare _ = declareBoolean >> return (std_logic_vector 16)
-  format    = printf "%016b" . unB16
+  format    = printBits 16 . unB16
 
 instance Rep Bit32 where
   declare _ = declareBoolean >> return (std_logic_vector 32)
-  format    = printf "%032b" . unB32
+  format    = printBits 32 . unB32
 
 instance Rep Bit64 where
   declare _ = declareBoolean >> return (std_logic_vector 64)
-  format    = printf "%064b" . unB64
+  format    = printBits 64 . unB64
 
 --------------------------------------------------------------------------------
 -- ** Signed
 
 instance Rep Int2 where
   declare _ = declareNumeric >> return signed2
-  format (I2 i) = printf "%02b" i
+  format (I2 i) = printBits 2 i
 
 instance Rep Int4 where
   declare _ = declareNumeric >> return signed4
-  format (I4 i) = printf "%04b" i
+  format (I4 i) = printBits 4 i
 
 instance Rep Int8 where
   declare _ = declareNumeric >> return signed8
-  format    = printf "%08b"
+  format    = printBits 8
 
 instance Rep Int16 where
   declare _ = declareNumeric >> return signed16
-  format    = printf "%016b"
+  format    = printBits 16
 
 instance Rep Int32 where
   declare _ = declareNumeric >> return signed32
-  format    = printf "%032b"
+  format    = printBits 32
 
 instance Rep Int64 where
   declare _ = declareNumeric >> return signed64
-  format    = printf "%064b"
+  format    = printBits 64
 
 --------------------------------------------------------------------------------
 -- ** Unsigned
 
 instance Rep Word2 where
   declare _ = declareNumeric >> return usigned2
-  format (W2 w) = printf "%02b" w
+  format (W2 w) = printBits 2 w
 
 instance Rep Word4 where
   declare _     = declareNumeric >> return usigned4
-  format (W4 w) = printf "%04b" w
+  format (W4 w) = printBits 4 w
 
 instance Rep Word8 where
   declare _ = declareNumeric >> return usigned8
-  format    = printf "%08b"
+  format    = printBits 8
 
 instance Rep Word16 where
   declare _ = declareNumeric >> return usigned16
-  format    = printf "%016b"
+  format    = printBits 16
 
 instance Rep Word32 where
   declare _ = declareNumeric >> return usigned32
-  format    = printf "%032b"
+  format    = printBits 32
 
 instance Rep Word64 where
   declare _ = declareNumeric >> return usigned64
-  format    = printf "%064b"
+  format    = printBits 64
 
 --------------------------------------------------------------------------------
 -- ** Floating point.

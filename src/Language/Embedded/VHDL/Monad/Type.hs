@@ -104,7 +104,7 @@ literal (SimpleExpression Nothing (Term (FacPrim i (Nothing)) []) []) = unlit i
     unlit (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = read i
 
 point :: Show i => i -> SimpleExpression
-point i = SimpleExpression Nothing (Term (FacPrim (lit i) (Nothing)) []) []
+point i = SimpleExpression Nothing (Term (FacPrim (lit $ show i) (Nothing)) []) []
 
 upper 0 = point 0
 upper n = point (n-1)

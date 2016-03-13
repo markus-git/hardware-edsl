@@ -241,7 +241,7 @@ compileVArray (SetVArray i e (VArrayC arr)) =
      V.assignArray (V.indexed (ident arr) i') e'
 compileVArray (CopyVArray (VArrayC a) (VArrayC b) l) =
   do len <- compE l
-     let slice = (lift (V.lit (0 :: Word8)), lift len)
+     let slice = (lift (V.lit "0"), lift len)
          dest  = V.slice (ident a) slice
          src   = V.slice (ident b) slice
      V.assignArray src (lift $ V.PrimName dest)
