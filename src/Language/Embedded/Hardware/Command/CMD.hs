@@ -103,6 +103,13 @@ data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
          , Integral i
          , Ix i)
       => VarId -> exp i -> ArrayCMD exp prog (Array i a)
+    -- ^ ...
+    OthersArray
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i)
+      => VarId -> exp i -> exp a -> ArrayCMD exp prog (Array i a)
     -- ^ Creates an array by unpacking the given expression.
     UnpackArray
       :: ( PredicateExp exp Bool
@@ -117,8 +124,9 @@ type instance IExp (ArrayCMD e :+: i) = e
 
 instance HFunctor (ArrayCMD exp)
   where
-    hfmap _ (NewArray n e)    = NewArray n e
-    hfmap _ (UnpackArray n s) = UnpackArray n s
+    hfmap _ (NewArray n i)      = NewArray n i
+    hfmap _ (OthersArray n i e) = OthersArray n i e
+    hfmap _ (UnpackArray n s)   = UnpackArray n s
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -283,8 +291,19 @@ instance HFunctor (ComponentCMD exp)
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
--- | Untyped signals.
-data SignalX = forall a. SignalX (Signal a)
+data Ident = Ident VarId
+
+class    ToIdent a where toIdent :: a -> Ident
+instance ToIdent (Signal a)   where toIdent (SignalC i)   = Ident i
+instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
+instance ToIdent (Array i a)  where toIdent (ArrayC i)    = Ident i
+instance ToIdent (VArray i a) where toIdent (VArrayC i)   = Ident i
+
+-- | Construct the untyped signal list for processes.
+(.:) :: ToIdent a => a -> [Ident] -> [Ident]
+(.:) x xs = toIdent x : xs
+
+infixr .:
 
 -- | Commands for structural entities.
 data StructuralCMD (exp :: * -> *) (prog :: * -> *) a
@@ -297,7 +316,7 @@ data StructuralCMD (exp :: * -> *) (prog :: * -> *) a
       :: VarId -> VarId -> prog a -> StructuralCMD exp prog a
     -- ^ Wraps the program in a process.
     StructProcess
-      :: [SignalX] -> prog () -> StructuralCMD exp prog ()
+      :: [Ident] -> prog () -> StructuralCMD exp prog ()
 
 type instance IExp (StructuralCMD e)       = e
 type instance IExp (StructuralCMD e :+: i) = e

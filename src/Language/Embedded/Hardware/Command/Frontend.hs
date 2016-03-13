@@ -88,7 +88,7 @@ newUniquePort name m = singleE $ NewSignal (Unique name) m Nothing
 -- ** Variables.
 
 -- | Declare a named variable.
-initNamedVariable
+initNamedVariable 
   :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Variable a)
 initNamedVariable name = singleE . NewVariable (Base name) . Just
 
@@ -140,6 +140,36 @@ newNamedArray
      , Ix i)
   => String -> IExp instr i -> ProgramT instr m (Array i a)
 newNamedArray name = singleE . NewArray (Base name)
+
+-- | ...
+newArray
+  :: ( ArrayCMD     (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i
+     , Ix i)
+  => IExp instr i -> ProgramT instr m (Array i a)
+newArray = newNamedArray "a"
+
+-- | ...
+othersNamedArray 
+  :: ( ArrayCMD     (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i
+     , Ix i)
+  => String -> IExp instr i -> IExp instr a -> ProgramT instr m (Array i a)
+othersNamedArray name i = singleE . OthersArray (Base name) i
+
+-- | ...
+othersArray 
+  :: ( ArrayCMD     (IExp instr) :<: instr
+     , PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i
+     , Ix i)
+  => IExp instr i -> IExp instr a -> ProgramT instr m (Array i a)
+othersArray = othersNamedArray "a"
 
 -- | ...
 unpackArray
@@ -356,7 +386,7 @@ structArchitecture :: (StructuralCMD (IExp i) :<: i) => String -> String -> Prog
 structArchitecture e a = singleE . StructArchitecture (Base e) (Base a)
 
 -- | Declare a new process listening to some signals by wrapping the given program.
-process :: (StructuralCMD (IExp i) :<: i) => [SignalX] -> ProgramT i m () -> ProgramT i m ()
+process :: (StructuralCMD (IExp i) :<: i) => [Ident] -> ProgramT i m () -> ProgramT i m ()
 process is = singleE . StructProcess is
 
 --------------------------------------------------------------------------------

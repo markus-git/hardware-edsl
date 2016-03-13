@@ -178,7 +178,7 @@ instance EvaluateExp exp => Interp (ArrayCMD exp) IO
   where
     interp = runArray
 
-compileArray
+compileArray 
   :: forall exp a.
      ( CompileExp  exp
      , EvaluateExp exp
@@ -189,6 +189,12 @@ compileArray (NewArray base (len :: exp i)) =
   do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
      i <- newSym base
      V.signal (ident i) V.Out a Nothing
+     return (ArrayC i)
+compileArray (OthersArray base (len :: exp i) others) =
+  do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
+     e <- compE  others
+     i <- newSym base
+     V.signal (ident i) V.Out a (Just $ lift $ V.aggregate $ V.others e)
      return (ArrayC i)
 compileArray (UnpackArray base (SignalC n :: Signal i)) =
   do t <- compT (undefined :: exp i)
@@ -228,7 +234,7 @@ compileVArray (InitVArray base is) =
   do a <- compTA (range (length is) V.downto 0) (undefined :: exp i) (undefined :: a)
      i <- newSym base
      x <- sequence [compE (litE a :: exp b) | (a :: b) <- is]
-     V.variable (ident i) a (Just $ lift $ V.aggregate x)
+     V.variable (ident i) a (Just $ lift $ V.aggregate $ V.aggregated x)
      return (VArrayC i)
 compileVArray (GetVArray ix (VArrayC arr)) =
   do (v, i) <- freshVar (Base "a") :: VHDL (a, V.Identifier)
@@ -401,12 +407,9 @@ compileStructural (StructEntity e prog)         = V.entity (ident e) prog
 compileStructural (StructArchitecture e a prog) = V.architecture (ident e) (ident a) prog
 compileStructural (StructProcess xs prog)       =
   do label  <- V.newLabel
-     (a, c) <- V.inProcess label (fmap reveal xs) prog
+     (a, c) <- V.inProcess label (fmap (\(Ident i) -> ident i) xs) prog
      V.addConcurrent (V.ConProcess c)
      return a
-  where
-    reveal :: SignalX -> V.Identifier
-    reveal (SignalX (SignalC s)) = ident s
 
 runStructural :: forall exp a. EvaluateExp exp => StructuralCMD exp IO a -> IO a
 runStructural (StructEntity _ prog)         = prog
