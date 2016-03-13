@@ -18,7 +18,11 @@ data VarId
   | Base   String
 
 -- | ...
-instance IsString VarId where fromString = Unique
+instance IsString VarId
+  where
+    fromString = Unique
+
+--------------------------------------------------------------------------------
 
 -- | Expressions that support injection of values and named variables.
 class FreeExp exp
