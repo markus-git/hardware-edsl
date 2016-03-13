@@ -20,7 +20,7 @@ import Data.Word
 import Data.Ix
 import Data.Char   (intToDigit)
 import Data.Bits   (shiftR)
-import Text.Printf (printf)
+import Text.Printf
 import Numeric     (showIntAtBase)
 
 import Data.ByteString (ByteString)
@@ -91,81 +91,81 @@ instance Rep Bit where
 
 instance Rep Bit2 where
   declare _ = declareBoolean >> return (std_logic_vector 2)
-  format    = undefined
+  format (B2 (W2 w)) = printf "%02b" w
 
 instance Rep Bit4 where
   declare _ = declareBoolean >> return (std_logic_vector 4)
-  format    = undefined
+  format (B4 (W4 w)) = printf "%04b" w
 
 instance Rep Bit8 where
   declare _ = declareBoolean >> return (std_logic_vector 8)
-  format    = undefined
+  format    = printf "%08b" . unB8
 
 instance Rep Bit16 where
   declare _ = declareBoolean >> return (std_logic_vector 16)
-  format    = undefined
+  format    = printf "%016b" . unB16
 
 instance Rep Bit32 where
   declare _ = declareBoolean >> return (std_logic_vector 32)
-  format    = undefined
+  format    = printf "%032b" . unB32
 
 instance Rep Bit64 where
   declare _ = declareBoolean >> return (std_logic_vector 64)
-  format    = undefined
+  format    = printf "%064b" . unB64
 
 --------------------------------------------------------------------------------
 -- ** Signed
 
 instance Rep Int2 where
   declare _ = declareNumeric >> return signed2
-  format    = undefined
+  format (I2 i) = printf "%02b" i
 
 instance Rep Int4 where
   declare _ = declareNumeric >> return signed4
-  format    = undefined
+  format (I4 i) = printf "%04b" i
 
 instance Rep Int8 where
   declare _ = declareNumeric >> return signed8
-  format    = convert
+  format    = printf "%08b"
 
 instance Rep Int16 where
   declare _ = declareNumeric >> return signed16
-  format    = convert
+  format    = printf "%016b"
 
 instance Rep Int32 where
   declare _ = declareNumeric >> return signed32
-  format    = convert
+  format    = printf "%032b"
 
 instance Rep Int64 where
   declare _ = declareNumeric >> return signed64
-  format    = convert
+  format    = printf "%064b"
 
 --------------------------------------------------------------------------------
 -- ** Unsigned
 
 instance Rep Word2 where
   declare _ = declareNumeric >> return usigned2
-  format    = undefined
+  format (W2 w) = printf "%02b" w
 
 instance Rep Word4 where
-  declare _ = declareNumeric >> return usigned4
-  format    = undefined
+  declare _     = declareNumeric >> return usigned4
+  format (W4 w) = printf "%04b" w
 
 instance Rep Word8 where
   declare _ = declareNumeric >> return usigned8
-  format    = convert
+  format    = printf "%08b"
 
 instance Rep Word16 where
   declare _ = declareNumeric >> return usigned16
-  format    = convert
+  format    = printf "%016b"
 
 instance Rep Word32 where
   declare _ = declareNumeric >> return usigned32
-  format    = convert
+  format    = printf "%032b"
 
 instance Rep Word64 where
   declare _ = declareNumeric >> return usigned64
-  format    = convert
+  format    = printf "%064b"
 
 --------------------------------------------------------------------------------
 -- ** Floating point.
@@ -197,37 +197,19 @@ declareFloating =
      newImport  "IEEE.float_pkg"
 
 --------------------------------------------------------------------------------
--- ** Converting Integers to their Binrary representation
-
--- | Convert an Integral to its binary representation
-convert :: Integral a => a -> String
-convert = foldr1 (++) . fmap w2s . B.unpack . i2bs . toInteger
-
--- | Go over an Integer and convert it into a bytestring containing its
---   binary representation
-i2bs :: Integer -> ByteString
-i2bs x = B.reverse . B.unfoldr (fmap chunk) . Just $ sign x
-  where
-    sign :: (Num a, Ord a) => a -> a
-    sign | x < 0     = subtract 1 . negate
-         | otherwise = id
-
-    chunk :: Integer -> (Word8, Maybe Integer)
-    chunk x = (b, i)
-      where
-        b = sign (fromInteger x)
-        i | x >= 128  = Just (x `shiftR` 8)
-          | otherwise = Nothing
-
--- | Shows a word with zero padding
---
--- I assum the negative numbers to already be padded with ones
-w2s :: Word8 -> String
-w2s w = printf "%08s" $ showIntAtBase 2 intToDigit w ""
-
---------------------------------------------------------------------------------
 -- ...
 --------------------------------------------------------------------------------
+
+instance Num Bit where
+  True  + True  = False
+  False + False = False
+  _     + _     = True
+  (-)    = error "todo: bit (-)"
+  (*)    = error "todo: bit (*)"
+  abs    = error "todo: bit abs"
+  signum = error "todo: bit signum"
+  fromInteger 1 = True
+  fromInteger 0 = False
 
 --------------------------------------------------------------------------------
 -- ** ...
