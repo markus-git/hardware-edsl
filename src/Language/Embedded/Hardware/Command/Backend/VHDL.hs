@@ -110,7 +110,7 @@ compileSignal (NewSignal base mode exp) =
      V.signal (ident i) mode t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
-  do (v, i) <- freshVar "s" :: VHDL (a, V.Identifier)
+  do (v, i) <- freshVar (Base "s") :: VHDL (a, V.Identifier)
      e      <- compE v
      V.assignVariable i (lift $ name s)
      return v
@@ -152,7 +152,7 @@ compileVariable (NewVariable base exp) =
      V.variable (ident i) t v
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
-  do (v, i) <- freshVar "v" :: VHDL (a, V.Identifier)
+  do (v, i) <- freshVar (Base "v") :: VHDL (a, V.Identifier)
      e <- compE v
      V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident var)
      return v
@@ -231,7 +231,7 @@ compileVArray (InitVArray base is) =
      V.variable (ident i) a (Just $ lift $ V.aggregate x)
      return (VArrayC i)
 compileVArray (GetVArray ix (VArrayC arr)) =
-  do (v, i) <- freshVar "a" :: VHDL (a, V.Identifier)
+  do (v, i) <- freshVar (Base "a") :: VHDL (a, V.Identifier)
      e <- compE ix
      V.assignVariable i (lift $ V.PrimName $ V.indexed (ident arr) e)
      return v
@@ -274,7 +274,7 @@ instance EvaluateExp exp => Interp (LoopCMD exp) IO
 
 compileLoop :: forall exp a. (CompileExp exp, EvaluateExp exp) => LoopCMD exp VHDL a -> VHDL a
 compileLoop (For r step) =
-  do (v, i) <- freshVar "l"
+  do (v, i) <- freshVar (Base "l")
      loop   <- V.inFor i (range 0 V.to (evalE r)) (step v)
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
