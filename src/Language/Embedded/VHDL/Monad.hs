@@ -364,25 +364,31 @@ architecture entity name m =
   do oldGlobal     <- CMS.gets _signals
      oldConcurrent <- CMS.gets _concurrent
      oldSequential <- CMS.gets _sequential
+     oldTypes      <- CMS.gets _types
      oldComponents <- CMS.gets _components
      CMS.modify $ \e -> e { _signals    = []
                           , _concurrent = []
                           , _sequential = []
+                          , _types      = Set.empty
                           , _components = Set.empty }
      result        <- m
      newGlobal     <- reverse <$> CMS.gets _signals
      newConcurrent <- reverse <$> CMS.gets _concurrent
      newSequential <- reverse . filter isSignal <$> CMS.gets _sequential
+     newTypes      <- fmap BDIType . Set.toList <$> CMS.gets _types
      newComponents <- fmap BDIComp . Set.toList <$> CMS.gets _components
      let signals   =  fmap translateSequential newSequential
      addUnit_ $ LibrarySecondary $ SecondaryArchitecture $
            ArchitectureBody (name)
              (NSimple entity)
-             (newComponents ++ (fmap translateInterface newGlobal)) -- merge ...
+             (newTypes
+                ++ newComponents
+                ++ fmap translateInterface newGlobal) -- merge ...
              (signals ++ newConcurrent)
      CMS.modify $ \e -> e { _signals    = oldGlobal
                           , _concurrent = oldConcurrent
                           , _sequential = oldSequential
+                          , _types      = oldTypes
                           , _components = oldComponents }
      return result
   where

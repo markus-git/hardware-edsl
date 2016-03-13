@@ -7,7 +7,7 @@ module Language.Embedded.VHDL.Monad.Expression
   , exp, abs, not
   , name, string, indexed, selected, slice
   , lit, null
-  , aggregate, associate
+  , aggregate, aggregated, associate, others
   , function
   , qualified
   , cast
@@ -133,11 +133,17 @@ null :: Primary
 null = PrimLit LitNull
 
 -- aggregates
-aggregate :: [Expression] -> Primary
-aggregate = PrimAgg . Aggregate . fmap (ElementAssociation Nothing)
+aggregate :: Aggregate -> Primary
+aggregate = PrimAgg
 
-associate :: [(Maybe Choices, Expression)] -> Primary
-associate es = PrimAgg $ Aggregate $ map (uncurry ElementAssociation) es
+aggregated :: [Expression] -> Aggregate
+aggregated = Aggregate . fmap (ElementAssociation Nothing)
+
+associate :: [(Maybe Choices, Expression)] -> Aggregate
+associate es = Aggregate $ map (uncurry ElementAssociation) es
+
+others :: Expression -> Aggregate
+others = Aggregate . (:[]) . ElementAssociation (Just (Choices [ChoiceOthers]))
 
 -- function calls
 function :: Identifier -> [Expression] -> Primary
