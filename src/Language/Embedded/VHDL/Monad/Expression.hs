@@ -13,6 +13,9 @@ module Language.Embedded.VHDL.Monad.Expression
   , cast
   , resize
   , range, downto, to
+
+  -- *** temp
+  , attribute
   ) where
 
 import Language.VHDL
@@ -104,8 +107,11 @@ not = FacNot
 -- ** Primaries
 
 -- names
-name :: String -> Primary
-name = PrimName . NSimple . Ident
+name :: Name -> Primary
+name = PrimName
+
+attribute :: String -> Primary -> Primary
+attribute s (PrimName n) = PrimName $ NAttr $ AttributeName (PName n) Nothing (Ident s) Nothing
 
 string :: String -> Primary
 string = PrimLit . LitString . SLit

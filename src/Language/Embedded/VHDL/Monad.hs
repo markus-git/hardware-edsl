@@ -303,8 +303,7 @@ inConditional (c, m) os e =
      e'  <- contain e
      CMS.modify $ \e -> e { _sequential = oldSequential }
      return $
-       IfStatement
-         (Nothing)
+       IfStatement Nothing
          (c, m')
          (zip cs ns')
          (maybeList e')
@@ -314,18 +313,23 @@ inConditional (c, m) os e =
     maybeList xs = Just xs
 
 -- | Case statements.
-inCase :: MonadV m => Expression -> [(Choices, m ())] -> m (CaseStatement)
-inCase e choices =
+inCase :: MonadV m => Expression -> [(Choices, m ())] -> m () -> m (CaseStatement)
+inCase e choices d =
   do let (cs, ns) = unzip choices
      oldSequential <- CMS.gets _sequential
      CMS.modify $ \e -> e { _sequential = [] }
      ns' <- mapM contain ns
-     CMS.modify $ \e -> e { _sequential = oldSequential }     
+     d'  <- contain d
+     CMS.modify $ \e -> e { _sequential = oldSequential }
+     let xs = zipWith CaseStatementAlternative cs ns'
      return $
-       CaseStatement
-         (Nothing)
-         (e)
-         (zipWith CaseStatementAlternative cs ns')
+       CaseStatement Nothing e
+         (xs ++ maybeList d')
+  where
+    maybeList :: [SequentialStatement] -> [CaseStatementAlternative]
+    maybeList [] = []
+    maybeList xs = [CaseStatementAlternative (Choices [ChoiceOthers]) xs]
+    
 
 --------------------------------------------------------------------------------
 -- * Design units
@@ -544,12 +548,12 @@ assignArray i e = addSequential $ SSignalAss $
 --------------------------------------------------------------------------------
 -- Portmap.
 
-portMap :: MonadV m => Label -> Identifier -> [Identifier] -> m ()
+portMap :: MonadV m => Label -> Identifier -> [(Identifier, Identifier)] -> m ()
 portMap l c is = addConcurrent $ ConComponent $ ComponentInstantiationStatement l
   (IUComponent $ NSimple c)
   (Nothing)
-  (Just $ PortMapAspect $ AssociationList $
-    fmap (AssociationElement Nothing . APDesignator . ADSignal . NSimple) is)
+  (Just $ PortMapAspect $ AssociationList $ flip fmap is $ \(i, j) ->
+    AssociationElement (Just $ FPDesignator $ FDPort $ NSimple i) $ APDesignator $ ADSignal $ NSimple j)
 
 declareComponent :: MonadV m => Identifier -> [InterfaceDeclaration] -> m ()
 declareComponent name is = addComponent $ ComponentDeclaration name Nothing
