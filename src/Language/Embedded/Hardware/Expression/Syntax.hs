@@ -11,7 +11,7 @@ module Language.Embedded.Hardware.Expression.Syntax where
 import Language.Syntactic
 import Language.Syntactic.Functional (Denotation, Eval(..), EvalEnv)
 
-import qualified Language.VHDL as V (Name)
+import qualified Language.VHDL as V (Name, Aggregate)
 
 import Language.Embedded.Hardware.Command
 import Language.Embedded.Hardware.Interface
@@ -106,7 +106,7 @@ data Simple sig
     Pos :: (HType a, Num a) => Simple (a :->       Full a)
     Add :: (HType a, Num a) => Simple (a :-> a :-> Full a)
     Sub :: (HType a, Num a) => Simple (a :-> a :-> Full a)
-    Cat :: (HType a, Show a, Read a) => Simple (a :-> a :-> Full a)
+    Cat :: (HType a, HType b, Show a, Read b) => Simple (a :-> a :-> Full b)
 
 -- | Integral expressions.
 data Term sig
@@ -126,9 +126,9 @@ data Factor sig
 -- | ...
 data Primary sig
   where
-    Name       :: (HType a) => V.Name -> Primary (Full a)
-    Literal    :: (HType a) => a      -> Primary (Full a)
-    Aggregate  :: (HType a) => [a]    -> Primary (Full [a])
+    Name       :: (HType a) => V.Name      -> Primary (Full a)
+    Literal    :: (HType a) => a           -> Primary (Full a)
+    Aggregate  :: (HType a) => V.Aggregate -> Primary (Full a)
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
     Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
     Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)
@@ -369,7 +369,7 @@ instance Eval Primary
   where
     evalSym (Name _)       = error "cannot eval open names!"
     evalSym (Literal i)    = i
-    evalSym (Aggregate xs) = xs
+    evalSym (Aggregate _)  = error "todo: eval aggregate names."
     evalSym (Function _ f) = f
     evalSym (Qualified _)  = error "todo: eval qualified names."
     evalSym (Conversion f) = f

@@ -36,40 +36,40 @@ import qualified Data.ByteString as B
 type Bit = Bool
 
 newtype Bit2  = B2  { unB2  :: Word2 }
- deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+ deriving (Eq, Ord, Enum, Num, Real, Integral, Ix, Show, Read)
 
 newtype Bit4  = B4  { unB4  :: Word4 }
-  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix, Show, Read)
            
 newtype Bit8  = B8  { unB8  :: Word8 }
-  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix, Show, Read)
 
 newtype Bit16 = B16 { unB16 :: Word16 }
-  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix, Show, Read)
 
 newtype Bit32 = B32 { unB32 :: Word32 }
-  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix, Show, Read)
 
 newtype Bit64 = B64 { unB64 :: Word64 }
-  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix)
+  deriving (Eq, Ord, Enum, Num, Real, Integral, Ix, Show, Read)
   
 --------------------------------------------------------------------------------
 -- ** Signed.
 
 data Int2 = I2 Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)
 
 data Int4 = I4 Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)
   
 --------------------------------------------------------------------------------
 -- ** Unsigned.
 
 data Word2 = W2 Word
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)
 
 data Word4 = W4 Word
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Read)
 
 --------------------------------------------------------------------------------
 -- * Representation of types.

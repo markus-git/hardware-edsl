@@ -2,8 +2,11 @@ module Language.Embedded.Hardware.Expression.Frontend where
 
 import qualified Language.VHDL as V
 
-import Language.Embedded.Hardware.Interface (VarId(..))
+import Language.Embedded.Hardware.Interface
+import Language.Embedded.Hardware.Expression.Represent -- aaargh..
 import Language.Embedded.Hardware.Expression.Syntax
+import Language.Embedded.Hardware.Expression.Hoist
+import qualified Language.Embedded.VHDL.Monad.Expression as V
 
 import Data.Bits (Bits)
 
@@ -18,10 +21,6 @@ import qualified Prelude as P
 name :: HType a => V.Name -> HExp a
 name n = sugarT (Name n)
 
--- | Lifts a typed value to an expression.
-value :: HType a => a -> HExp a
-value i = sugarT (Literal i)
-
 -- | Creates a variable from a string.
 variable :: HType a => VarId -> HExp a
 variable = name . V.NSimple . V.Ident . id
@@ -29,6 +28,17 @@ variable = name . V.NSimple . V.Ident . id
     id :: VarId -> String
     id (Unique i) = i
     id (Base   i) = i
+
+-- | Lifts a typed value to an expression.
+value :: HType a => a -> HExp a
+value i = sugarT (Literal i)
+
+-- ...fudge..
+others :: HType a => a -> HExp a
+others a = sugarT (Aggregate (asExp a))
+  where
+    asExp :: Rep a => a -> V.Aggregate
+    asExp = V.others . lift . V.lit . format
 
 -- | Casts an expression using supplied conversion function.
 cast  :: (HType a, HType b) => (a -> b) -> HExp a -> HExp b
@@ -76,6 +86,10 @@ sub = sugarT Sub
 
 cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp a
 cat = sugarT Cat
+
+-- aaargh.. use type family instead.
+catBit :: HExp Bit -> HExp Bit -> HExp Bit2
+catBit = sugarT Cat
 
 -- multiplying operators
 mul :: (HType a, Num a) => HExp a -> HExp a -> HExp a

@@ -160,9 +160,7 @@ compHExp  e = Hoist.lift <$> compSimple e
     compDomain primary args
       | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i
-      | Just (Aggregate xs) <- prj primary =
-          let maps = fmap (Hoist.lift . VHDL.lit . format)
-          in return $ Hoist.P $ VHDL.aggregate $ maps xs
+      | Just (Aggregate a)  <- prj primary = return $ Hoist.P $ VHDL.aggregate a
       | Just (Function f _) <- prj primary = do
           as <- sequence $ listArgs compLoop args
           return $ Hoist.P $ VHDL.function (VHDL.Ident f) (fmap Hoist.lift as)
