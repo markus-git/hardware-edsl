@@ -152,16 +152,20 @@ compHExp  e = Hoist.lift <$> compSimple e
           t  <- compHType (undefined :: HExp (DenResult sig))
           x' <- Hoist.lift <$> compLoop x
           return $ Hoist.P $ VHDL.cast t x'
+    --- *** temp
+    compDomain attribute (x :* Nil)
+      | Just (Attribute a)  <- prj attribute = do
+          x' <- Hoist.lift <$> compLoop x
+          return $ Hoist.P $ VHDL.attribute a x'
     compDomain primary args
-      | Just (Name (Unique n)) <- prj primary = return $ Hoist.P $ VHDL.name n
-      | Just (Name (Base   n)) <- prj primary = return $ Hoist.P $ VHDL.name n
-      | Just (Literal i)       <- prj primary = return $ Hoist.P $ VHDL.lit $ format i
-      | Just (Aggregate xs)    <- prj primary =
+      | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
+      | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i
+      | Just (Aggregate xs) <- prj primary =
           let maps = fmap (Hoist.lift . VHDL.lit . format)
           in return $ Hoist.P $ VHDL.aggregate $ maps xs
       | Just (Function f _) <- prj primary = do
           as <- sequence $ listArgs compLoop args
           return $ Hoist.P $ VHDL.function (VHDL.Ident f) (fmap Hoist.lift as)
-      | Just (Allocator)    <- prj primary = undefined
+      | Just (Allocator)    <- prj primary = error "expression-backend: todo"
 
 --------------------------------------------------------------------------------

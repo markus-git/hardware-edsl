@@ -1,6 +1,8 @@
 module Language.Embedded.Hardware.Expression.Frontend where
 
-import Language.Embedded.Hardware.Interface (VarId)
+import qualified Language.VHDL as V
+
+import Language.Embedded.Hardware.Interface (VarId(..))
 import Language.Embedded.Hardware.Expression.Syntax
 
 import Data.Bits (Bits)
@@ -9,16 +11,24 @@ import Prelude hiding (not, and, or, abs, rem, div, mod, exp)
 import qualified Prelude as P
 
 --------------------------------------------------------------------------------
--- *
+-- * ...
 --------------------------------------------------------------------------------
+
+-- | ...
+name :: HType a => V.Name -> HExp a
+name n = sugarT (Name n)
 
 -- | Lifts a typed value to an expression.
 value :: HType a => a -> HExp a
 value i = sugarT (Literal i)
 
--- | Creates a variable from a name.
+-- | Creates a variable from a string.
 variable :: HType a => VarId -> HExp a
-variable = sugarT . Name
+variable = name . V.NSimple . V.Ident . id
+  where
+    id :: VarId -> String
+    id (Unique i) = i
+    id (Base   i) = i
 
 -- | Casts an expression using supplied conversion function.
 cast  :: (HType a, HType b) => (a -> b) -> HExp a -> HExp b
@@ -85,6 +95,12 @@ abs = sugarT Abs
 
 not :: HExp Bool -> HExp Bool
 not = sugarT Not
+
+--------------------------------------------------------------------------------
+
+-- *** temp
+event :: HType a => HExp a -> HExp Bool
+event = sugarT (Attribute "EVENT")
 
 --------------------------------------------------------------------------------
 

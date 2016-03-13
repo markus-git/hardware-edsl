@@ -11,6 +11,8 @@ module Language.Embedded.Hardware.Expression.Syntax where
 import Language.Syntactic
 import Language.Syntactic.Functional (Denotation, Eval(..), EvalEnv)
 
+import qualified Language.VHDL as V (Name)
+
 import Language.Embedded.Hardware.Command
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Represent
@@ -124,13 +126,16 @@ data Factor sig
 -- | ...
 data Primary sig
   where
-    Name       :: (HType a) => VarId   -> Primary (Full a)
-    Literal    :: (HType a) => a -> Primary (Full a)
-    Aggregate  :: (HType a) => [a] -> Primary (Full [a])
+    Name       :: (HType a) => V.Name -> Primary (Full a)
+    Literal    :: (HType a) => a      -> Primary (Full a)
+    Aggregate  :: (HType a) => [a]    -> Primary (Full [a])
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
-    Qualified  :: (HType a, HType b) => b -> Primary (a :-> Full a)
+    Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
     Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)
     Allocator  :: (HType a) => Primary (Full a)
+
+    -- *** temp
+    Attribute  :: (HType a, HType b) => String -> Primary (a :-> Full b)
 
 --------------------------------------------------------------------------------
 -- ** Syntactic instances.
@@ -342,11 +347,12 @@ instance Symbol Primary
   where
     symSig (Name _)       = signature
     symSig (Literal _)    = signature
-    symSig (Aggregate _)  = undefined
+    symSig (Aggregate _)  = signature
     symSig (Function _ _) = signature
     symSig (Qualified _)  = signature
     symSig (Conversion _) = signature
     symSig (Allocator)    = signature
+    symSig (Attribute _)  = signature
 
 instance Render Primary
   where
@@ -357,6 +363,7 @@ instance Render Primary
     renderSym (Qualified _)  = "qual"
     renderSym (Conversion _) = "conv"
     renderSym (Allocator)    = "alloc"
+    renderSym (Attribute _)  = "attr"
 
 instance Eval Primary
   where
@@ -366,7 +373,8 @@ instance Eval Primary
     evalSym (Function _ f) = f
     evalSym (Qualified _)  = error "todo: eval qualified names."
     evalSym (Conversion f) = f
-    evalSym (Allocator)    = undefined
+    evalSym (Allocator)    = error "todo: eval allocator"
+    evalSym (Attribute _)  = error "todo: eval attribute"
 
 instance EvalEnv Primary env
 
