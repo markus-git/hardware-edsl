@@ -88,8 +88,8 @@ ident (Unique n) = V.Ident n
 ident (Base   n) = V.Ident n
 
 name  :: VarId -> V.Primary
-name (Unique n) = V.name n
-name (Base   n) = V.name n
+name (Unique n) = V.PrimName $ V.NSimple $ V.Ident n
+name (Base   n) = V.PrimName $ V.NSimple $ V.Ident n
 
 --------------------------------------------------------------------------------
 -- ** Signals.
@@ -306,7 +306,7 @@ instance EvaluateExp exp => Interp (ConditionalCMD exp) IO
   where
     interp = runConditional
 
-compileConditional :: forall exp a. CompileExp exp => ConditionalCMD exp VHDL a -> VHDL a
+compileConditional :: forall exp a. (FreeExp exp, CompileExp exp) => ConditionalCMD exp VHDL a -> VHDL a
 compileConditional (If (a, b) cs em) =
   do let (es, ds) = unzip cs
          el       = maybe (return ()) id em
@@ -314,12 +314,24 @@ compileConditional (If (a, b) cs em) =
      ese <- mapM compE es
      s   <- V.inConditional (ae, b) (zip ese ds) el
      V.addSequential $ V.SIf s
+compileConditional (Case e cs d) =
+  do let (es, ds) = unzip cs
+         el       = maybe (return ()) id d
+     ae  <- compE e
+     ese <- mapM compE [ litE e :: exp b | (e :: b) <- es]
+     let choices  = [ V.Choices [V.ChoiceSimple (lift c)] | c <- ese]
+     s   <- V.inCase ae (zip choices ds) el
+     V.addSequential $ V.SCase s
 
 runConditional :: forall exp a. EvaluateExp exp => ConditionalCMD exp IO a -> IO a
 runConditional (If (a, b) cs em) = if (evalE a) then b else loop cs
   where
-    loop []          = maybe (return ()) id em
-    loop ((c, p):xs) = if (evalE c) then p else (loop xs)
+    loop []            = maybe (return ()) id em
+    loop ((c, p):xs)   = if (evalE c) then p else (loop xs)
+runConditional (Case e cs d) = loop (evalE e) cs
+  where
+    loop v []          = maybe (return ()) id d
+    loop v ((u, p):cs) = if v == u then p else (loop v cs)
 
 --------------------------------------------------------------------------------
 -- ** Components.
@@ -351,7 +363,7 @@ compileComponent (PortMap (Component (Just n) sig) as) =
   do l  <- newSym (Base "l")
      vs <- apply sig as
      V.declareComponent  (ident n) vs
-     V.portMap (ident l) (ident n) (fmap idents vs)
+     V.portMap (ident l) (ident n) (assoc sig as)
   where
      -- todo: associate 'n' with 'i'
     apply :: Sig exp VHDL b -> Arg b -> VHDL [V.InterfaceDeclaration]
@@ -361,8 +373,12 @@ compileComponent (PortMap (Component (Just n) sig) as) =
       (V.InterfaceSignalDeclaration [ident n] (Just m) t False Nothing :)
         <$> apply (f s) v
         
-    idents :: V.InterfaceDeclaration -> V.Identifier
-    idents (V.InterfaceSignalDeclaration [i] _ _ _ _) = i
+    assoc :: Sig exp VHDL b -> Arg b -> [(V.Identifier, V.Identifier)]
+    assoc (Unit _)    (Nill)               = []
+    assoc (Lam n _ f) (s@(SignalC i) :> v) = (n', i') : assoc (f s) v
+      where
+        n' = ident n
+        i' = ident i
 
 runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
 runComponent (StructComponent _ _)            = return Nothing

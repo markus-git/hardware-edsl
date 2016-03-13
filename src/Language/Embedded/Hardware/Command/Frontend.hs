@@ -77,9 +77,12 @@ newUniquePort name m = singleE $ NewSignal (Unique name) m Nothing
 
 --------------------------------------------------------------------------------
 
+(<--) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
+(<--) = setSignal
+
 -- | Short-hand for 'setSignal'.
-(<==) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
-(<==) = setSignal
+(<==) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m) => Signal a -> Signal a -> ProgramT i m ()
+(<==) s v = setSignal s =<< unsafeFreezeSignal v
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -282,6 +285,21 @@ iff
   -> ProgramT i m ()
 iff b t e = conditional (b, t) [] (Just e)
 
+switch
+  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a)
+  => IExp i a
+  -> [(a, ProgramT i m ())]
+  -> ProgramT i m ()
+switch e choices = singleE (Case e choices Nothing)
+
+switched 
+  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a)
+  => IExp i a
+  -> [(a, ProgramT i m ())]
+  -> ProgramT i m ()
+  -> ProgramT i m ()
+switched e choices def = singleE (Case e choices (Just def))
+
 --------------------------------------------------------------------------------
 -- ** Processes.
 
@@ -338,7 +356,7 @@ structArchitecture :: (StructuralCMD (IExp i) :<: i) => String -> String -> Prog
 structArchitecture e a = singleE . StructArchitecture (Base e) (Base a)
 
 -- | Declare a new process listening to some signals by wrapping the given program.
-structProcess :: (StructuralCMD (IExp i) :<: i) => [SignalX] -> ProgramT i m () -> ProgramT i m ()
-structProcess is = singleE . StructProcess is
+process :: (StructuralCMD (IExp i) :<: i) => [SignalX] -> ProgramT i m () -> ProgramT i m ()
+process is = singleE . StructProcess is
 
 --------------------------------------------------------------------------------

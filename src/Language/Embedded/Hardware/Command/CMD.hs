@@ -211,18 +211,25 @@ instance HFunctor (LoopCMD exp)
 -- | Commnads for conditional statements.
 data ConditionalCMD (exp :: * -> *) (prog :: * -> *) a
   where
-    If :: PredicateExp exp Bool
-       =>  (exp Bool, prog ())  -- if
-       -> [(exp Bool, prog ())] -- else-if
-       -> Maybe (prog ())       -- else
-       -> ConditionalCMD exp prog ()
+    If :: PredicateExp exp Bool =>
+      (exp Bool, prog ())   ->
+      [(exp Bool, prog ())] ->
+      Maybe (prog ())       ->
+      ConditionalCMD exp prog ()
+
+    Case :: (PredicateExp exp a, Eq a) =>
+      exp a ->
+      [(a, prog ())] ->
+      Maybe (prog ()) ->
+      ConditionalCMD exp prog ()
 
 type instance IExp (ConditionalCMD e)       = e
 type instance IExp (ConditionalCMD e :+: i) = e
 
 instance HFunctor (ConditionalCMD exp)
   where
-    hfmap f (If a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
+    hfmap f (If   a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
+    hfmap f (Case e xs d) = Case e (fmap (fmap f) xs) (fmap f d)
 
 --------------------------------------------------------------------------------
 -- ** Components.
