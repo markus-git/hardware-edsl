@@ -27,6 +27,8 @@ type CMD =
   :+: ConditionalCMD  HExp
   :+: ComponentCMD    HExp
   :+: StructuralCMD   HExp
+  -- ...
+  :+: IntegerCMD      HExp
 
 -- | Short-hand for programs.
 type P = Program CMD
@@ -52,22 +54,22 @@ axi_light
   s_axi_rdata  s_axi_rresp   s_axi_rvalid  s_axi_rready
   s_axi_bresp  s_axi_bvalid  s_axi_bready
    =
-  do local_reset         <- newSignal :: P (Signal Bit)
-     local_address       <- newSignal :: P (Signal Bit) -- P (Signal Int)
-     local_address_valid <- newSignal :: P (Signal Bit)
+  do local_reset         <- newSignal                                :: P (Signal Bit)
+     local_address       <- integer (Just (0, 512 :: Integer))       :: P (Signal Integer)
+     local_address_valid <- newSignal                                :: P (Signal Bit)
 
-     mm_control_register           <- newSignal :: P (Signal Bit32)
-     mm_data_register              <- newSignal :: P (Signal Bit32)
+     mm_control_register           <- newSignal                      :: P (Signal Bit32)
+     mm_data_register              <- newSignal                      :: P (Signal Bit32)
      servo_position_register_array <- newArray    (litE 4)           :: P (Array Word4 Bit8)
      low_endstop_register_array    <- othersArray (litE 4) min_pulse :: P (Array Word4 Bit32)
      high_endstop_register_array   <- othersArray (litE 4) max_pulse :: P (Array Word4 Bit32)
 
-     combined      <- newSignal :: P (Signal Bit2)
-     write_enable  <- newSignal :: P (Signal Bit)
-     send_read     <- newSignal :: P (Signal Bit)
+     combined      <- newSignal                                      :: P (Signal Bit2)
+     write_enable  <- newSignal                                      :: P (Signal Bit)
+     send_read     <- newSignal                                      :: P (Signal Bit)
 
-     current_state <- newSignal :: P (Signal Word4)
-     next_state    <- newSignal :: P (Signal Word4)
+     current_state <- newSignal                                      :: P (Signal Word4)
+     next_state    <- newSignal                                      :: P (Signal Word4)
 
 --------------------------------------------------------------------------------
 -- initial setup.
@@ -75,7 +77,7 @@ axi_light
      local_reset <-- not areset
      awvalid <- unsafeFreezeSignal s_axi_awvalid
      arvalid <- unsafeFreezeSignal s_axi_arvalid
-     combined    <-- (awvalid `catBit` arvalid)
+     combined    <-- (awvalid `catB` arvalid)
 
 --------------------------------------------------------------------------------
 -- state_machine_update.
@@ -150,7 +152,7 @@ axi_light
      process (send_read .: local_address .:
               servo_position_register_array .: mm_control_register .: mm_data_register .:
               low_endstop_register_array .: high_endstop_register_array .: []) $
-       do s_axi_rdata <-- others 0
+       do s_axi_rdata <-- others (0 :: Bit)
           vald <- unsafeFreezeSignal local_address_valid
           read <- unsafeFreezeSignal send_read
           when ((vald `eq` true) `and` (read `eq` true)) $
@@ -159,6 +161,7 @@ axi_light
                    is 0 $ s_axi_rdata <== mm_control_register
                  , is 4 $ s_axi_rdata <== mm_data_register
                  , 128 `to` 252 $ do
+                     
                      return ()
                  , 256 `to` 380 $ do
                      return ()
