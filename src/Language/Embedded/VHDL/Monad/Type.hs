@@ -6,6 +6,7 @@ module Language.Embedded.VHDL.Monad.Type
   , signed2,  signed4,  signed8,  signed16,  signed32,  signed64
   , usigned2, usigned4, usigned8, usigned16, usigned32, usigned64
   , float, double
+  , integer
 
   , width
   , literal, point
@@ -79,6 +80,14 @@ floating size = SubtypeIndication Nothing
 float, double :: Type
 float  = floating 32
 double = floating 64
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+integer :: Maybe Range -> Type
+integer r = SubtypeIndication Nothing
+  (TMType (NSimple (Ident "integer")))
+  (fmap (CRange . RangeConstraint) r)
 
 --------------------------------------------------------------------------------
 -- ** Helpers.
