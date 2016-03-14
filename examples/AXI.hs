@@ -104,42 +104,43 @@ axi_light
           s <- unsafeFreezeSignal current_state
           switched s [
             -- idle.
-              (0, do next_state <-- idle
-              )
+              is 0 $ do
+                 next_state <-- idle
             -- reset.
-            , (1, do next_state <-- idle
-                     c <- unsafeFreezeSignal combined
-                     switch c [
-                         (1, next_state <-- reading)
-                       , (2, next_state <-- writing)
-                       ]
-              )
+            , is 1 $ do
+                 next_state <-- idle
+                 c <- unsafeFreezeSignal combined
+                 switch c [
+                     is 1 $ next_state <-- reading
+                   , is 2 $ next_state <-- writing
+                   ]
             -- read transaction in progress.
-            , (2, do next_state    <-- reading
-                     s_axi_arready <== s_axi_arvalid
-                     s_axi_rvalid  <-- litE 0
-                     s_axi_rresp   <-- litE 0
-                     send_read     <-- litE 1
-                     rdy <- unsafeFreezeSignal s_axi_rready
-                     when (rdy `eq` true) $
-                       next_state <-- complete
-              )
+            , is 2 $ do 
+                 next_state    <-- reading
+                 s_axi_arready <== s_axi_arvalid
+                 s_axi_rvalid  <-- litE 0
+                 s_axi_rresp   <-- litE 0
+                 send_read     <-- litE 1
+                 rdy <- unsafeFreezeSignal s_axi_rready
+                 when (rdy `eq` true) $
+                   next_state <-- complete
             -- write transaction in progress.
-            , (3, do next_state    <-- writing
-                     s_axi_awready <== s_axi_awvalid
-                     s_axi_wready  <== s_axi_wvalid
-                     s_axi_bresp   <-- litE 0
-                     s_axi_bvalid  <-- litE 1
-                     rdy <- unsafeFreezeSignal s_axi_bready
-                     when (rdy `eq` true) $
-                       next_state <-- complete
-              )
+            , is 3 $ do 
+                 next_state    <-- writing
+                 s_axi_awready <== s_axi_awvalid
+                 s_axi_wready  <== s_axi_wvalid
+                 s_axi_bresp   <-- litE 0
+                 s_axi_bvalid  <-- litE 1
+                 rdy <- unsafeFreezeSignal s_axi_bready
+                 when (rdy `eq` true) $
+                   next_state <-- complete
             -- complete.
-            , (4, do cbd <- unsafeFreezeSignal combined
-                     switched cbd [
-                       (0, next_state <-- idle)]
-                       (next_state <-- complete)
-              )
+            , is 4 $ do 
+                 cbd <- unsafeFreezeSignal combined
+                 switched cbd [
+                     is 0 $ next_state <-- idle
+                   ]
+                   (next_state <-- complete)
             ]
             -- otherwise reset.
             (next_state <-- reset)
@@ -150,8 +151,22 @@ axi_light
               servo_position_register_array .: mm_control_register .: mm_data_register .:
               low_endstop_register_array .: high_endstop_register_array .: []) $
        do s_axi_rdata <-- others 0
-          return ()
-   where
+          vald <- unsafeFreezeSignal local_address_valid
+          read <- unsafeFreezeSignal send_read
+          when ((vald `eq` true) `and` (read `eq` true)) $
+            do addr <- unsafeFreezeSignal local_address
+               switched addr [
+                   is 0 $ s_axi_rdata <== mm_control_register
+                 , is 4 $ s_axi_rdata <== mm_data_register
+                 , 128 `to` 252 $ do
+                     return ()
+                 , 256 `to` 380 $ do
+                     return ()
+                 , 384 `to` 508 $ do
+                     return ()
+                 ]
+                 (return ())
+  where
      reset, idle, reading, writing, complete :: HExp Word4
      reset    = litE 0
      idle     = litE 1
