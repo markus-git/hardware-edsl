@@ -216,6 +216,14 @@ instance HFunctor (LoopCMD exp)
 --------------------------------------------------------------------------------
 -- ** Conditional statements.
 
+-- | ...
+data When a prog = When (Constraint a) (prog ())
+
+-- | ...
+data Constraint a
+       = Is a
+       | To a a
+
 -- | Commnads for conditional statements.
 data ConditionalCMD (exp :: * -> *) (prog :: * -> *) a
   where
@@ -225,9 +233,9 @@ data ConditionalCMD (exp :: * -> *) (prog :: * -> *) a
       Maybe (prog ())       ->
       ConditionalCMD exp prog ()
 
-    Case :: (PredicateExp exp a, Eq a) =>
+    Case :: (PredicateExp exp a, Eq a, Ord a) =>
       exp a ->
-      [(a, prog ())] ->
+      [When a prog] ->
       Maybe (prog ()) ->
       ConditionalCMD exp prog ()
 
@@ -237,7 +245,8 @@ type instance IExp (ConditionalCMD e :+: i) = e
 instance HFunctor (ConditionalCMD exp)
   where
     hfmap f (If   a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
-    hfmap f (Case e xs d) = Case e (fmap (fmap f) xs) (fmap f d)
+    hfmap f (Case e xs d) = Case e (fmap (wmap f) xs) (fmap f d)
+      where wmap f (When a p) = When a (f p)
 
 --------------------------------------------------------------------------------
 -- ** Components.

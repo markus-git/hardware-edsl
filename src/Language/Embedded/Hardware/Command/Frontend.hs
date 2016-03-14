@@ -315,20 +315,28 @@ iff
   -> ProgramT i m ()
 iff b t e = conditional (b, t) [] (Just e)
 
+--------------------------------------------------------------------------------
+
 switch
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a)
+  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a, Ord a)
   => IExp i a
-  -> [(a, ProgramT i m ())]
+  -> [When a (ProgramT i m)]
   -> ProgramT i m ()
 switch e choices = singleE (Case e choices Nothing)
 
 switched 
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a)
+  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a, Ord a)
   => IExp i a
-  -> [(a, ProgramT i m ())]
+  -> [When a (ProgramT i m)]
   -> ProgramT i m ()
   -> ProgramT i m ()
 switched e choices def = singleE (Case e choices (Just def))
+
+is :: PredicateExp (IExp i) a => a -> ProgramT i m () -> When a (ProgramT i m)
+is a = When (Is a) 
+
+to :: PredicateExp (IExp i) a => a -> a -> ProgramT i m () -> When a (ProgramT i m)
+to l h = When (To l h)
 
 --------------------------------------------------------------------------------
 -- ** Processes.

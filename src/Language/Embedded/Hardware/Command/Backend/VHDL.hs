@@ -321,13 +321,22 @@ compileConditional (If (a, b) cs em) =
      s   <- V.inConditional (ae, b) (zip ese ds) el
      V.addSequential $ V.SIf s
 compileConditional (Case e cs d) =
-  do let (es, ds) = unzip cs
-         el       = maybe (return ()) id d
+  do let el = maybe (return ()) id d
      ae  <- compE e
-     ese <- mapM compE [ litE e :: exp b | (e :: b) <- es]
-     let choices  = [ V.Choices [V.ChoiceSimple (lift c)] | c <- ese]
-     s   <- V.inCase ae (zip choices ds) el
+     ce  <- mapM compC cs
+     --ese <- mapM compE [ litE e :: exp b | (e :: b) <- es]
+     --let choices  = [ V.Choices [V.ChoiceSimple (lift c)] | c <- ese]
+     s   <- V.inCase ae ce el
      V.addSequential $ V.SCase s
+  where
+    compC :: forall b. PredicateExp exp b => When b VHDL -> VHDL (V.Choices, VHDL ())
+    compC (When (Is e) p)   = do
+      e' <- compE (litE e :: exp b)
+      return $ (V.Choices [V.ChoiceSimple (lift e')], p)
+    compC (When (To l h) p) = do
+      l' <- compE (litE l :: exp b)
+      h' <- compE (litE h :: exp b)
+      return $ (V.Choices [V.ChoiceRange (V.DRRange (V.range (lift l') V.to (lift h')))], p)
 
 runConditional :: forall exp a. EvaluateExp exp => ConditionalCMD exp IO a -> IO a
 runConditional (If (a, b) cs em) = if (evalE a) then b else loop cs
@@ -337,7 +346,9 @@ runConditional (If (a, b) cs em) = if (evalE a) then b else loop cs
 runConditional (Case e cs d) = loop (evalE e) cs
   where
     loop v []          = maybe (return ()) id d
-    loop v ((u, p):cs) = if v == u then p else (loop v cs)
+    loop v ((When (Is u)   p):cs) = if v == u         then p else loop v cs
+    loop v ((When (To l h) p):cs) = if v > l && v < h then p else loop v cs
+    
 
 --------------------------------------------------------------------------------
 -- ** Components.
