@@ -34,7 +34,7 @@ module Language.Embedded.VHDL.Monad (
                    
     -- ^ statements
   , inProcess, inFor, inWhile, inConditional, inCase
-  , exit
+  , exit, null
 
     -- ^ structures
   , entity, architecture, package, component
@@ -565,6 +565,12 @@ declareComponent :: MonadV m => Identifier -> [InterfaceDeclaration] -> m ()
 declareComponent name is = addComponent $ ComponentDeclaration name Nothing
   (Just (PortClause (InterfaceList is)))
   (Nothing)
+
+--------------------------------------------------------------------------------
+-- ....
+
+null :: MonadV m => m ()
+null = addSequential $ SNull $ NullStatement Nothing
 
 --------------------------------------------------------------------------------
 -- Some helper classes and their instances

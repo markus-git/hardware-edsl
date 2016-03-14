@@ -342,6 +342,9 @@ switched
   -> ProgramT i m ()
 switched e choices def = singleE (Case e choices (Just def))
 
+null :: (ConditionalCMD (IExp i) :<: i) => ProgramT i m ()
+null = singleE (Null)
+
 is :: PredicateExp (IExp i) a => a -> ProgramT i m () -> When a (ProgramT i m)
 is a = When (Is a) 
 
@@ -421,3 +424,4 @@ integer
 integer = namedInteger (Base "i")
 
 --------------------------------------------------------------------------------
+

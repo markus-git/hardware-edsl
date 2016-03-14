@@ -6,7 +6,7 @@ module Language.Embedded.VHDL.Monad.Expression
   , mul, div, mod, rem
   , exp, abs, not
   , name, string, indexed, selected, slice
-  , lit, null
+  , lit --, null
   , aggregate, aggregated, associate, others
   , function
   , qualified
@@ -128,10 +128,10 @@ slice i (f, t) = NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f Dow
 -- literals
 lit :: String -> Primary
 lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident
-
+{-
 null :: Primary
 null = PrimLit LitNull
-
+-}
 -- aggregates
 aggregate :: Aggregate -> Primary
 aggregate = PrimAgg

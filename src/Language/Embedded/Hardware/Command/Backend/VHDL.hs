@@ -349,6 +349,8 @@ compileConditional (Case e cs d) =
       l' <- compE (litE l :: exp b)
       h' <- compE (litE h :: exp b)
       return $ (V.Choices [V.ChoiceRange (V.DRRange (V.range (lift l') V.to (lift h')))], p)
+compileConditional (Null) =
+  do V.null
 
 runConditional :: forall exp a. EvaluateExp exp => ConditionalCMD exp IO a -> IO a
 runConditional (If (a, b) cs em) = if (evalE a) then b else loop cs
@@ -360,7 +362,7 @@ runConditional (Case e cs d) = loop (evalE e) cs
     loop v []          = maybe (return ()) id d
     loop v ((When (Is u)   p):cs) = if v == u         then p else loop v cs
     loop v ((When (To l h) p):cs) = if v > l && v < h then p else loop v cs
-    
+runConditional (Null) = return ()
 
 --------------------------------------------------------------------------------
 -- ** Components.
@@ -469,7 +471,14 @@ compileInteger (SignalInteger base (Just m :: Maybe (b, b))) =
       l' <- compE $ (litE l :: exp b)
       h' <- compE $ (litE h :: exp b)
       return (V.range (lift l') V.to (lift h'))
-
+compileInteger (ToInteger l h (ArrayC arr)) =
+  do undefined
+     {-
+     (v, i) <- freshVar (Base "i")
+     let typ = V.integer Nothing
+     --V.variable (ident i) typ Nothing
+     return v
+-}
 runInteger :: forall exp a. EvaluateExp exp => IntegerCMD exp IO a -> IO a
 runInteger = error "todo: run integers"
 

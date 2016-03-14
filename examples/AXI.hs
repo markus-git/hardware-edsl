@@ -11,7 +11,7 @@ import Data.ALaCarte
 import Data.Int
 import Data.Word
 
-import Prelude hiding (not, and, or, div)
+import Prelude hiding (not, and, or, div, null)
 
 --------------------------------------------------------------------------------
 -- *
@@ -38,6 +38,122 @@ type Signature = Sig HExp P
 
 --------------------------------------------------------------------------------
 
+axi_light_signature ::
+  Signature (
+       Signal Bit
+    -> Signal Bit
+    -> Signal Bit32
+    -> Signal Bit
+    -> Signal Bit
+    -> Signal Bit32
+    -> Signal Bit
+    -> Signal Bit
+    -> Signal Bit32
+    -> Signal Bit4
+    -> Signal Bit
+    -> Signal Bit
+    -> Signal Bit32
+    -> Signal Bit2
+    -> Signal Bit
+    -> Signal Bit
+    -> Signal Bit2
+    -> Signal Bit
+    -> Signal Bit
+    -> ()
+  )
+axi_light_signature =
+  input  "S_AXI_ACLK"    $ \s_axi_aclk    ->       
+  input  "S_AXI_ARESETN" $ \s_axi_aresetn -> 
+  input  "S_AXI_AWADDR"  $ \s_axi_awaddr  ->  
+  input  "S_AXI_AWVALID" $ \s_axi_awvalid -> 
+  output "S_AXI_AWREADY" $ \s_axi_awready -> 
+  input  "S_AXI_ARADDR"  $ \s_axi_araddr  ->  
+  input  "S_AXI_ARVALID" $ \s_axi_arvalid -> 
+  output "S_AXI_ARREADY" $ \s_axi_arready -> 
+  input  "S_AXI_WDATA"   $ \s_axi_wdata   ->     
+  input  "S_AXI_WSTRB"   $ \s_axi_wstrb   ->     
+  input  "S_AXI_WVALID"  $ \s_axi_wvalid  ->   
+  output "S_AXI_WREADY"  $ \s_axi_wready  ->   
+  output "S_AXI_RDATA"   $ \s_axi_rdata   ->     
+  output "S_AXI_RRESP"   $ \s_axi_rresp   ->     
+  output "S_AXI_RVALID"  $ \s_axi_rvalid  ->   
+  input  "S_AXI_RREADY"  $ \s_axi_rready  ->   
+  output "S_AXI_BRESP"   $ \s_axi_bresp   ->     
+  output "S_AXI_BVALID"  $ \s_axi_bvalid  ->   
+  input  "S_AXI_BREADY"  $ \s_axi_bready  ->   
+  ret $
+    axi_light
+      s_axi_aclk   s_axi_aresetn
+      s_axi_awaddr s_axi_awvalid s_axi_awready
+      s_axi_araddr s_axi_arvalid s_axi_arready
+      s_axi_wdata  s_axi_wstrb   s_axi_wvalid  s_axi_wready
+      s_axi_rdata  s_axi_rresp   s_axi_rvalid s_axi_rready
+      s_axi_bresp  s_axi_bvalid  s_axi_bready
+
+--------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------------
+
+wrap :: P ()
+wrap = do
+   component "AXI" axi_light_signature
+
+test :: IO ()
+test = putStrLn $ compile $ wrap
+
+--------------------------------------------------------------------------------
+{-
+todo *** replace the signature crap with:
+
+axi_light :: ...
+axi_light =
+  do i <- port "..." In
+     o <- port "..." Out
+     return $
+       do ...
+-}
+--------------------------------------------------------------------------------
+{-
 axi_light
   :: Signal Bit   -> Signal Bit
   -> Signal Bit32 -> Signal Bit   -> Signal Bit
@@ -161,17 +277,38 @@ axi_light
                    is 0 $ s_axi_rdata <== mm_control_register
                  , is 4 $ s_axi_rdata <== mm_data_register
                  , 128 `to` 252 $ do
-                     addr <- unsafeFreezeSignal local_address :: P (HExp Integer)
                      let ix = cast (W4 . fromInteger) $ (addr `sub` 128) `div` 4
                      serv <- getArray ix servo_position_register_array
                      s_axi_rdata <-- padB8 serv
-                     return ()
                  , 256 `to` 380 $ do
-                     return ()
+                     let ix = cast (W4 . fromInteger) $ (addr `sub` 256) `div` 4
+                     low <- getArray ix low_endstop_register_array
+                     s_axi_rdata <-- low
                  , 384 `to` 508 $ do
-                     return ()
+                     let ix = cast (W4 . fromInteger) $ (addr `sub` 384) `div` 4
+                     high <- getArray ix high_endstop_register_array
+                     s_axi_rdata <-- high
                  ]
-                 (return ())
+                 (null)
+
+--------------------------------------------------------------------------------
+-- local_address_capture_register
+     process (s_axi_aclk .: []) $
+       do clk <- unsafeFreezeSignal s_axi_aclk
+          rst <- unsafeFreezeSignal local_reset
+          when ((event clk) `and` (clk `eq` true)) $
+            iff (rst `eq` true)
+              (local_address <-- litE 0)
+              (do addrv <- unsafeFreezeSignal local_address_valid
+                  when (addrv `eq` true) $ do
+                    comb <- unsafeFreezeSignal combined
+                    switched comb [
+                        is 2 $ return ()
+                      , is 1 $ return ()
+                      ]
+                      (null)
+              )
+          return ()
   where
      reset, idle, reading, writing, complete :: HExp Word4
      reset    = litE 0
@@ -186,9 +323,9 @@ axi_light
 
 padB8 :: HExp Bit8 -> HExp Bit32
 padB8 = catB16 (litE 0) . catB8 (litE 0)
-
+-}
 --------------------------------------------------------------------------------
-
+{-
 axi_light_signature ::
   Signature (
        Signal Bit   -> Signal Bit
@@ -228,12 +365,7 @@ axi_light_signature =
       s_axi_rdata  s_axi_rresp   s_axi_rvalid s_axi_rready
       s_axi_bresp  s_axi_bvalid  s_axi_bready
 
---------------------------------------------------------------------------------
-
-wrap :: P ()
-wrap = do
-   component "AXI" axi_light_signature
-   return ()
+-}
 {-
   inp <- structEntity "controller" $ do
     newPort "inp" In :: P (Signal Bit)
@@ -279,19 +411,4 @@ wrap = do
       s_axi_bvalid  :> 
       s_axi_bready  :>
       Nill )
--}
-test :: IO ()
-test = putStrLn $ compile $ wrap
-
---------------------------------------------------------------------------------
-
-{-
-todo *** replace the signature crap with:
-
-axi_light :: ...
-axi_light =
-  do i <- port "..." In
-     o <- port "..." Out
-     return $
-       do ...
 -}

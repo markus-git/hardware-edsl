@@ -7,4 +7,3 @@ module Language.Embedded.Hardware
 import Language.Embedded.Hardware.Expression
 import Language.Embedded.Hardware.Command
 import Language.Embedded.Hardware.Interface
-

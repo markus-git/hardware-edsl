@@ -31,7 +31,7 @@ pack
   -> ProgramT instr m (IArray (IExp instr a) Bool)
 pack v =
   do let ix = litE v :: IExp instr a
-     
+
      undefined
 
 {-

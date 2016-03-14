@@ -96,69 +96,21 @@ data Array i a = ArrayC VarId | ArrayE (IORef (IOArray i a))
 -- | Commands for signal arrays.
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
   where
-    -- ^ Creates an array of given length.
     NewArray
       :: ( PredicateExp exp a
          , PredicateExp exp i
          , Integral i
          , Ix i)
-      => VarId -> exp i -> ArrayCMD exp prog (Array i a)
-    -- ^ ...
-    OthersArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => VarId -> exp i -> exp a -> ArrayCMD exp prog (Array i a)
-    -- ^ Creates an array by unpacking the given expression.
-    UnpackArray
-      :: ( PredicateExp exp Bool
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => VarId -> Signal i -> ArrayCMD exp prog (Array i Bool)
-    -- ^ ...
-    GetArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => exp i -> Array i a -> ArrayCMD exp prog (exp a)
-    -- ^ Writes a value to an array at some specified index.
-    SetArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => exp i -> exp a -> Array i a -> ArrayCMD exp prog ()
-    -- ^ ...
-    CopyArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => Array i a -> Array i a -> exp i -> ArrayCMD exp prog ()
-    -- ^ Unsafe version of fetching an array's value.
-    UnsafeFreezeArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => Array i a -> ArrayCMD exp prog (IArray i a)
-
+      => VarId -> exp i -> exp i -> ArrayCMD exp prog (Array i Bool)
+    
+         
     
 type instance IExp (ArrayCMD e)       = e
 type instance IExp (ArrayCMD e :+: i) = e
 
 instance HFunctor (ArrayCMD exp)
   where
-    hfmap _ (NewArray n i)        = NewArray n i
-    hfmap _ (OthersArray n i e)   = OthersArray n i e
-    hfmap _ (UnpackArray n s)     = UnpackArray n s
-    hfmap _ (GetArray i a)        = GetArray i a
-    hfmap _ (SetArray i e a)      = SetArray i e a
-    hfmap _ (CopyArray a b l)     = CopyArray a b l
-    hfmap _ (UnsafeFreezeArray a) = UnsafeFreezeArray a
+    hfmap _ (NewArray v l u) = NewArray v l u
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -271,6 +223,8 @@ data ConditionalCMD (exp :: * -> *) (prog :: * -> *) a
       Maybe (prog ()) ->
       ConditionalCMD exp prog ()
 
+    Null :: ConditionalCMD exp prog ()
+
 type instance IExp (ConditionalCMD e)       = e
 type instance IExp (ConditionalCMD e :+: i) = e
 
@@ -279,6 +233,7 @@ instance HFunctor (ConditionalCMD exp)
     hfmap f (If   a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
     hfmap f (Case e xs d) = Case e (fmap (wmap f) xs) (fmap f d)
       where wmap f (When a p) = When a (f p)
+    hfmap _ (Null)        = Null
 
 --------------------------------------------------------------------------------
 -- ** Components.
@@ -376,10 +331,18 @@ data IntegerCMD (exp :: * -> *) (prog :: * -> *) a
     SignalInteger
       :: (PredicateExp exp a, Num a)
       => VarId -> Maybe (a, a) -> IntegerCMD exp prog (Signal Integer)
+    ToInteger
+      :: ( PredicateExp exp a
+         , PredicateExp exp i
+         , Integral i
+         , Ix i
+         , Num a)
+      => exp i -> exp i -> Array i a -> IntegerCMD exp prog (exp Integer)
 
 instance HFunctor (IntegerCMD exp)
   where
     hfmap _ (SignalInteger v m) = SignalInteger v m
+    hfmap _ (ToInteger l h a)   = ToInteger l h a
 
 --------------------------------------------------------------------------------
 
