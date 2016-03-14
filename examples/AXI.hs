@@ -11,7 +11,7 @@ import Data.ALaCarte
 import Data.Int
 import Data.Word
 
-import Prelude hiding (not, and, or)
+import Prelude hiding (not, and, or, div)
 
 --------------------------------------------------------------------------------
 -- *
@@ -161,7 +161,10 @@ axi_light
                    is 0 $ s_axi_rdata <== mm_control_register
                  , is 4 $ s_axi_rdata <== mm_data_register
                  , 128 `to` 252 $ do
-                     
+                     addr <- unsafeFreezeSignal local_address :: P (HExp Integer)
+                     let ix = cast (W4 . fromInteger) $ (addr `sub` 128) `div` 4
+                     serv <- getArray ix servo_position_register_array
+                     s_axi_rdata <-- padB8 serv
                      return ()
                  , 256 `to` 380 $ do
                      return ()
@@ -180,6 +183,9 @@ axi_light
      max_pulse, min_pulse :: HExp Bit32
      max_pulse = litE 2000000
      min_pulse = litE 1000000
+
+padB8 :: HExp Bit8 -> HExp Bit32
+padB8 = catB16 (litE 0) . catB8 (litE 0)
 
 --------------------------------------------------------------------------------
 

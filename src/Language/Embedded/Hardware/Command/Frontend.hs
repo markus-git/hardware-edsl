@@ -180,7 +180,17 @@ unpackArray
      , Ix i)
   => String -> Signal i -> ProgramT instr m (Array i Bool)
 unpackArray name = singleE . UnpackArray (Base name)
-  
+
+-- | Get an element of an array.
+getArray
+  :: ( PredicateExp (IExp instr) a
+     , PredicateExp (IExp instr) i
+     , Integral i, Ix i
+     , ArrayCMD (IExp instr) :<: instr)
+  => IExp instr i -> Array i a -> ProgramT instr m (IExp instr a)
+getArray i = singleE . GetArray i
+
+
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
 

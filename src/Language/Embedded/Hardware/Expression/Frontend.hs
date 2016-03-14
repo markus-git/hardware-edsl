@@ -89,6 +89,7 @@ sub = sugarT Sub
 cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp (Cats a a)
 cat = sugarT Cat
 -}
+---------------------------------------- Lalalala can't see you!
 catB   :: HExp Bit   -> HExp Bit   -> HExp Bit2
 catB2  :: HExp Bit2  -> HExp Bit2  -> HExp Bit4
 catB4  :: HExp Bit4  -> HExp Bit4  -> HExp Bit8
@@ -103,6 +104,7 @@ catB8  = sugarT Cat
 catB16 = sugarT Cat
 catB32 = sugarT Cat
 
+----------------------------------------
 -- multiplying operators
 mul :: (HType a, Num a) => HExp a -> HExp a -> HExp a
 mul = sugarT Mul

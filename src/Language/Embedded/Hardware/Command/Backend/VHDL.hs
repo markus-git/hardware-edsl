@@ -203,6 +203,18 @@ compileArray (UnpackArray base (SignalC n :: Signal i)) =
      V.signal       (ident i) V.Out typ Nothing
      V.assignSignal (ident i) (lift $ V.cast typ $ lift $ name n)
      return (ArrayC i)
+compileArray (GetArray ix (ArrayC arr)) =
+  do (v, i) <- freshVar (Base "a") :: VHDL (a, V.Identifier)
+     e <- compE ix
+     V.assignVariable i (lift $ V.PrimName $ V.indexed (ident arr) e)
+     return v
+compileArray (SetArray i e (ArrayC n)) =
+  do undefined
+compileArray (CopyArray (ArrayC a) (ArrayC b) len) =
+  do undefined
+compileArray (UnsafeFreezeArray (ArrayC a)) =
+  do undefined
+     
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
 runArray = error "runArray-todo"

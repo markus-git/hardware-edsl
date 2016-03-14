@@ -2,11 +2,13 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Language.Embedded.Hardware.Expression.Represent
-  ( Rep (..)
-  , Bit, Bit2,  Bit4,  Bit8,  Bit16,  Bit32,  Bit64
-  ,      Int2,  Int4,  module Data.Int
-  ,      Word2, Word4, module Data.Word
-  
+  ( Rep(..)
+  , Bit(..), Bit2(..),  Bit4(..),  Bit8(..),  Bit16(..),  Bit32(..),  Bit64(..)
+  , Int2(..), Int4(..)
+  , Word2(..), Word4(..)
+           
+  , module Data.Int
+  , module Data.Word
   ) where
 
 import qualified Language.VHDL as V

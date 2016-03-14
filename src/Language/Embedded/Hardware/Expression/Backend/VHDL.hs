@@ -151,7 +151,8 @@ compHExp  e = Hoist.lift <$> compSimple e
       | Just (Conversion f) <- prj primary = do
           t  <- compHType (undefined :: HExp (DenResult sig))
           x' <- Hoist.lift <$> compLoop x
-          return $ Hoist.P $ VHDL.cast t x'
+          return $ x'
+          --return $ Hoist.P $ VHDL.cast t x' -- *** !!! *** !!! SOS !! *** ~~~
     --- *** temp
     compDomain attribute (x :* Nil)
       | Just (Attribute a)  <- prj attribute = do
