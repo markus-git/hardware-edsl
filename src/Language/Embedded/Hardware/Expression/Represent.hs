@@ -182,7 +182,14 @@ instance Rep Double where
   format    = error "todo: format double."
 
 --------------------------------------------------------------------------------
+-- ** ...
 
+instance Rep Integer where
+  declare _ = return (integer Nothing)
+  format    = show
+
+--------------------------------------------------------------------------------
+  
 declareBoolean :: VHDL ()
 declareBoolean =
   do newLibrary "IEEE"
@@ -213,6 +220,7 @@ instance Num Bit where
   signum = error "todo: bit signum"
   fromInteger 1 = True
   fromInteger 0 = False
+  fromInteger x = error $ show x
 
 --------------------------------------------------------------------------------
 -- ** ...
