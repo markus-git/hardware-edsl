@@ -398,3 +398,16 @@ process :: (StructuralCMD (IExp i) :<: i) => [Ident] -> ProgramT i m () -> Progr
 process is = singleE . StructProcess is
 
 --------------------------------------------------------------------------------
+-- ** ...
+
+namedInteger
+  :: (IntegerCMD (IExp i) :<: i, PredicateExp (IExp i) a, Num a)
+  => VarId -> Maybe (a, a) -> ProgramT i m (Signal Integer)
+namedInteger v m = singleE (SignalInteger v m)
+
+integer
+  :: (IntegerCMD (IExp i) :<: i, PredicateExp (IExp i) a, Num a)
+  => Maybe (a, a) -> ProgramT i m (Signal Integer)
+integer = namedInteger (Base "i")
+
+--------------------------------------------------------------------------------

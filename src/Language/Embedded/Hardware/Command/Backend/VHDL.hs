@@ -429,3 +429,37 @@ runStructural (StructProcess xs prog)       =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
 --------------------------------------------------------------------------------
+-- ...
+
+instance CompileExp exp => Interp (IntegerCMD exp) VHDL
+  where
+    interp = compileInteger
+
+instance EvaluateExp exp => Interp (IntegerCMD exp) IO
+  where
+    interp = runInteger
+
+compileInteger :: forall exp a. CompileExp exp => IntegerCMD exp VHDL a -> VHDL a
+compileInteger (SignalInteger base (Nothing)) =
+  do i <- newSym base
+     let typ = V.integer Nothing
+     V.signal (ident i) V.Out typ Nothing
+     return (SignalC i)
+compileInteger (SignalInteger base (Just m :: Maybe (b, b))) =
+  do i <- newSym base
+     r <- range m
+     let typ = V.integer (Just r)
+     V.signal (ident i) V.Out typ Nothing
+     return (SignalC i)
+  where
+    range :: (b, b) -> VHDL V.Range
+    range (l, h) = do
+      l' <- compE $ (litE l :: exp b)
+      h' <- compE $ (litE h :: exp b)
+      return (V.range (lift l') V.to (lift h'))
+
+runInteger :: forall exp a. EvaluateExp exp => IntegerCMD exp IO a -> IO a
+runInteger = error "todo: run integers"
+
+--------------------------------------------------------------------------------
+

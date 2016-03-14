@@ -337,3 +337,17 @@ instance HFunctor (StructuralCMD exp)
     hfmap f (StructProcess xs p)       = StructProcess xs (f p)
 
 --------------------------------------------------------------------------------
+-- ...
+
+data IntegerCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    SignalInteger
+      :: (PredicateExp exp a, Num a)
+      => VarId -> Maybe (a, a) -> IntegerCMD exp prog (Signal Integer)
+
+instance HFunctor (IntegerCMD exp)
+  where
+    hfmap _ (SignalInteger v m) = SignalInteger v m
+
+--------------------------------------------------------------------------------
+
