@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+
 module Language.Embedded.Hardware.Expression.Frontend where
 
 import qualified Language.VHDL as V
@@ -34,7 +36,7 @@ value :: HType a => a -> HExp a
 value i = sugarT (Literal i)
 
 -- ...fudge..
-others :: HType a => a -> HExp a
+others :: (HType a, HType b) => a -> HExp b
 others a = sugarT (Aggregate (asExp a))
   where
     asExp :: Rep a => a -> V.Aggregate
@@ -83,13 +85,23 @@ ror = sugarT Ror
 add, sub :: (HType a, Num a) => HExp a -> HExp a -> HExp a
 add = sugarT Add
 sub = sugarT Sub
-
-cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp a
+{-
+cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp (Cats a a)
 cat = sugarT Cat
+-}
+catB   :: HExp Bit   -> HExp Bit   -> HExp Bit2
+catB2  :: HExp Bit2  -> HExp Bit2  -> HExp Bit4
+catB4  :: HExp Bit4  -> HExp Bit4  -> HExp Bit8
+catB8  :: HExp Bit8  -> HExp Bit8  -> HExp Bit16
+catB16 :: HExp Bit16 -> HExp Bit16 -> HExp Bit32
+catB32 :: HExp Bit32 -> HExp Bit32 -> HExp Bit64
 
--- aaargh.. use type family instead.
-catBit :: HExp Bit -> HExp Bit -> HExp Bit2
-catBit = sugarT Cat
+catB   = sugarT Cat
+catB2  = sugarT Cat
+catB4  = sugarT Cat
+catB8  = sugarT Cat
+catB16 = sugarT Cat
+catB32 = sugarT Cat
 
 -- multiplying operators
 mul :: (HType a, Num a) => HExp a -> HExp a -> HExp a
@@ -168,3 +180,12 @@ instance (HType a, Fractional a) => Fractional (HExp a)
     fromRational = error "VHDL: fromRational is not supported"    
 
 --------------------------------------------------------------------------------
+
+type family Cats a b :: *
+
+-- Bits
+type instance Cats Bit2  Bit2  = Bit4
+type instance Cats Bit4  Bit4  = Bit8
+type instance Cats Bit8  Bit8  = Bit16
+type instance Cats Bit16 Bit16 = Bit32
+type instance Cats Bit32 Bit32 = Bit64
