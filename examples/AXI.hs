@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds     #-}
 {-# LANGUAGE TypeOperators #-}
 
 module AXI where
@@ -11,6 +12,8 @@ import Data.ALaCarte
 import Data.Int
 import Data.Word
 
+import GHC.TypeLits
+
 import Prelude hiding (not, and, or, div, null)
 
 --------------------------------------------------------------------------------
@@ -21,6 +24,7 @@ import Prelude hiding (not, and, or, div, null)
 type CMD =
       SignalCMD       HExp
   :+: VariableCMD     HExp
+  :+: ConstantCMD     HExp
   :+: ArrayCMD        HExp
   :+: VArrayCMD       HExp
   :+: LoopCMD         HExp
@@ -38,105 +42,200 @@ type Signature = Sig HExp P
 
 --------------------------------------------------------------------------------
 
+-- | ...
 axi_light_signature ::
   Signature (
-       Signal Bit
-    -> Signal Bit
-    -> Signal Bit32
-    -> Signal Bit
-    -> Signal Bit
-    -> Signal Bit32
-    -> Signal Bit
-    -> Signal Bit
-    -> Signal Bit32
-    -> Signal Bit4
-    -> Signal Bit
-    -> Signal Bit
-    -> Signal Bit32
-    -> Signal Bit2
-    -> Signal Bit
-    -> Signal Bit
-    -> Signal Bit2
-    -> Signal Bit
-    -> Signal Bit
+       Signal Bool     -- ^ Global clock signal.
+    -> Signal Bool     -- ^ Global reset signal.
+    -> Signal (Bit 4)  -- ^ Write address.
+    -> Signal (Bit 3)  -- ^ Write channel protection type.
+    -> Signal Bool     -- ^ Write address valid.
+    -> Signal Bool     -- ^ Write address ready.
+    -> Signal (Bit 32) -- ^ Write data.
+    -> Signal (Bit 4)  -- ^ Write strobes.
+    -> Signal Bool     -- ^ Write valid.
+    -> Signal Bool     -- ^ Write ready.
+    -> Signal (Bit 2)  -- ^ Write response.
+    -> Signal Bool     -- ^ Write response valid.
+    -> Signal Bool     -- ^ Response ready.
+    -> Signal (Bit 4)  -- ^ Read address.
+    -> Signal (Bit 3)  -- ^ Protection type.
+    -> Signal Bool     -- ^ Read address valid.
+    -> Signal Bool     -- ^ Read address ready.
+    -> Signal (Bit 32) -- ^ Read data.
+    -> Signal (Bit 2)  -- ^ Read response.
+    -> Signal Bool     -- ^ Read valid.
+    -> Signal Bool     -- ^ Read ready.    
     -> ()
   )
 axi_light_signature =
   input  "S_AXI_ACLK"    $ \s_axi_aclk    ->       
   input  "S_AXI_ARESETN" $ \s_axi_aresetn -> 
-  input  "S_AXI_AWADDR"  $ \s_axi_awaddr  ->  
+  input  "S_AXI_AWADDR"  $ \s_axi_awaddr  ->
+  input  "S_AXI_AWPROT"  $ \s_axi_awprot  ->
   input  "S_AXI_AWVALID" $ \s_axi_awvalid -> 
-  output "S_AXI_AWREADY" $ \s_axi_awready -> 
-  input  "S_AXI_ARADDR"  $ \s_axi_araddr  ->  
-  input  "S_AXI_ARVALID" $ \s_axi_arvalid -> 
-  output "S_AXI_ARREADY" $ \s_axi_arready -> 
-  input  "S_AXI_WDATA"   $ \s_axi_wdata   ->     
-  input  "S_AXI_WSTRB"   $ \s_axi_wstrb   ->     
+  output "S_AXI_AWREADY" $ \s_axi_awready ->
+  input  "S_AXI_WDATA"   $ \s_axi_wdata   ->
+  input  "S_AXI_WSTRB"   $ \s_axi_wstrb   ->
   input  "S_AXI_WVALID"  $ \s_axi_wvalid  ->   
   output "S_AXI_WREADY"  $ \s_axi_wready  ->   
-  output "S_AXI_RDATA"   $ \s_axi_rdata   ->     
-  output "S_AXI_RRESP"   $ \s_axi_rresp   ->     
-  output "S_AXI_RVALID"  $ \s_axi_rvalid  ->   
-  input  "S_AXI_RREADY"  $ \s_axi_rready  ->   
   output "S_AXI_BRESP"   $ \s_axi_bresp   ->     
   output "S_AXI_BVALID"  $ \s_axi_bvalid  ->   
   input  "S_AXI_BREADY"  $ \s_axi_bready  ->   
-  ret $
-    axi_light
-      s_axi_aclk   s_axi_aresetn
-      s_axi_awaddr s_axi_awvalid s_axi_awready
-      s_axi_araddr s_axi_arvalid s_axi_arready
-      s_axi_wdata  s_axi_wstrb   s_axi_wvalid  s_axi_wready
-      s_axi_rdata  s_axi_rresp   s_axi_rvalid s_axi_rready
-      s_axi_bresp  s_axi_bvalid  s_axi_bready
-
+  input  "S_AXI_ARADDR"  $ \s_axi_araddr  ->
+  input  "S_AXI_ARPROT"  $ \s_axi_arprot  ->
+  input  "S_AXI_ARVALID" $ \s_axi_arvalid ->   
+  output "S_AXI_ARREADY" $ \s_axi_arready ->
+  output "S_AXI_RDATA"   $ \s_axi_rdata   ->     
+  output "S_AXI_RRESP"   $ \s_axi_rresp   ->     
+  output "S_AXI_RVALID"  $ \s_axi_rvalid  ->
+  input  "S_AXI_RREADY"  $ \s_axi_rready  ->   
+  ret $ axi_light
+    s_axi_aclk s_axi_aresetn
+    s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready s_axi_wdata s_axi_wstrb s_axi_wvalid s_axi_wready
+    s_axi_bresp  s_axi_bvalid s_axi_bready
+    s_axi_araddr s_axi_arprot s_axi_arvalid s_axi_arready s_axi_rdata
+    s_axi_rresp  s_axi_rvalid s_axi_rready     
+    
 --------------------------------------------------------------------------------
 
+axi_light
+    s_axi_aclk s_axi_aresetn
+    s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready s_axi_wdata s_axi_wstrb s_axi_wvalid s_axi_wready
+    s_axi_bresp  s_axi_bvalid s_axi_bready
+    s_axi_araddr s_axi_arprot s_axi_arvalid s_axi_arready s_axi_rdata
+    s_axi_rresp  s_axi_rvalid s_axi_rready
 
+  = do ----------------------------------------
+       -- AXI Light signals.
+       --
+       awaddr  <- signal "axi_awaddr"  :: P (Signal (Bit 4))
+       awready <- signal "axi_awready" :: P (Signal Bool)
+       wready  <- signal "axi_wready"  :: P (Signal Bool)
+       bresp   <- signal "axi_bresp"   :: P (Signal (Bit 2))
+       bvalid  <- signal "axi_bvalid"  :: P (Signal Bool)
+       araddr  <- signal "axi_araddr"  :: P (Signal (Bit 4))
+       arready <- signal "axi_arready" :: P (Signal Bool)
+       rdata   <- signal "axi_rdata"   :: P (Signal (Bit 32))
+       rresp   <- signal "axi_rresp"   :: P (Signal (Bit 2))
+       rvalid  <- signal "axi_rvalid"  :: P (Signal Bool)
 
+       ----------------------------------------
+       -- Application-specific design signals.
+       --
+       addr_lsb  <- constant "ADDR_LSB"          2 :: P (Constant Integer)
+       addr_bits <- constant "OPT_MEM_ADDR_BITS" 1 :: P (Constant Integer)
 
+       ----------------------------------------
+       -- Signals for user logic registers.
+       --
+       reg_0     <- signal "slv_reg0"     :: P (Signal (Bit 32))
+       reg_1     <- signal "slv_reg1"     :: P (Signal (Bit 32))
+       reg_2     <- signal "slv_reg2"     :: P (Signal (Bit 32))
+       reg_3     <- signal "slv_reg3"     :: P (Signal (Bit 32))
+       reg_rdent <- signal "slv_reg_rden" :: P (Signal Bool)
+       reg_wren  <- signal "slv_reg_wren" :: P (Signal Bool)
+       reg_out   <- signal "reg_data_out" :: P (Signal (Bit 32))
+       reg_index <- signal "byte_index"   :: P (Signal Integer)
 
+       ----------------------------------------
+       -- I/O Connections.
+       --
+       s_axi_awready <== awready
+       s_axi_wready  <== wready
+       s_axi_bresp   <== bresp
+       s_axi_bvalid  <== bvalid
+       s_axi_arready <== arready
+       s_axi_rdata   <== rdata
+       s_axi_rresp   <== rresp
+       s_axi_rvalid  <== rvalid
 
+       ----------------------------------------
+       -- AXI_AWREADY generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk <- get s_axi_aclk
+         rst <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do awready <-- low)
+             (do rdy <- get awready
+                 awv <- get s_axi_awvalid
+                 wv  <- get s_axi_wvalid
+                 iff (isLow rdy `and` isHigh awv `and` isHigh wv)
+                   (do awready <-- high)
+                   (do awready <-- low))
 
+       ----------------------------------------
+       -- AXI_AWADDR latching.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk <- get s_axi_aclk
+         rst <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do setOthers awaddr (litE low))
+             (do rdy <- get awready
+                 awv <- get s_axi_awvalid
+                 wv  <- get s_axi_wvalid
+                 when (isLow rdy `and` isHigh awv `and` isHigh wv) $
+                   awaddr <== s_axi_awaddr)
 
+       ----------------------------------------
+       -- AXI_AWREADY generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk <- get s_axi_aclk
+         rst <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do wready <-- low)
+             (do rdy <- get awready
+                 awv <- get s_axi_awvalid
+                 wv  <- get s_axi_wvalid
+                 iff (isLow rdy `and` isHigh awv `and` isHigh wv)
+                   (wready <-- high)
+                   (wready <-- low))
 
+       ----------------------------------------
+       -- Slave register logic.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do setOthers reg_0 (litE low)
+                 setOthers reg_1 (litE low)
+                 setOthers reg_2 (litE low)
+                 setOthers reg_3 (litE low))
+             (do clsb  <- getConstant addr_lsb
+                 cbits <- getConstant addr_bits
+                 local <- getSlice awaddr (clsb + cbits) (clsb) :: P (Variable (Bit 2))
+                 wren  <- get reg_wren
+                 when (isHigh wren) $ do
+                   local <- unsafeFreezeVariable local
+                   switched local [
+                       is 0 $ do
+                         for (litE 3 :: HExp (Bit 2)) $ \i -> do
+                           ix <- getIndex s_axi_wstrb i
+                           return ()
+                     ]
+                     (do return ()))
+         
+       return ()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+low    = False
+high   = True
+isLow  = (`eq` litE low)
+isHigh = (`eq` litE high)
+get    = unsafeFreezeSignal
 
 --------------------------------------------------------------------------------
 
 wrap :: P ()
-wrap = do
-   component "AXI" axi_light_signature
+wrap  = component "AXI" axi_light_signature >> return ()
+
 
 test :: IO ()
 test = putStrLn $ compile $ wrap
