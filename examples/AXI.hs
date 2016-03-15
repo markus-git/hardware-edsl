@@ -45,27 +45,27 @@ type Signature = Sig HExp P
 -- | ...
 axi_light_signature ::
   Signature (
-       Signal Bool     -- ^ Global clock signal.
-    -> Signal Bool     -- ^ Global reset signal.
-    -> Signal (Bit 4)  -- ^ Write address.
-    -> Signal (Bit 3)  -- ^ Write channel protection type.
-    -> Signal Bool     -- ^ Write address valid.
-    -> Signal Bool     -- ^ Write address ready.
-    -> Signal (Bit 32) -- ^ Write data.
-    -> Signal (Bit 4)  -- ^ Write strobes.
-    -> Signal Bool     -- ^ Write valid.
-    -> Signal Bool     -- ^ Write ready.
-    -> Signal (Bit 2)  -- ^ Write response.
-    -> Signal Bool     -- ^ Write response valid.
-    -> Signal Bool     -- ^ Response ready.
-    -> Signal (Bit 4)  -- ^ Read address.
-    -> Signal (Bit 3)  -- ^ Protection type.
-    -> Signal Bool     -- ^ Read address valid.
-    -> Signal Bool     -- ^ Read address ready.
-    -> Signal (Bit 32) -- ^ Read data.
-    -> Signal (Bit 2)  -- ^ Read response.
-    -> Signal Bool     -- ^ Read valid.
-    -> Signal Bool     -- ^ Read ready.    
+       Signal Bit       -- ^ Global clock signal.
+    -> Signal Bit       -- ^ Global reset signal.
+    -> Signal (Bits 4)  -- ^ Write address.
+    -> Signal (Bits 3)  -- ^ Write channel protection type.
+    -> Signal Bit       -- ^ Write address valid.
+    -> Signal Bit       -- ^ Write address ready.
+    -> Signal (Bits 32) -- ^ Write data.
+    -> Signal (Bits 4)  -- ^ Write strobes.
+    -> Signal Bit       -- ^ Write valid.
+    -> Signal Bit       -- ^ Write ready.
+    -> Signal (Bits 2)  -- ^ Write response.
+    -> Signal Bit       -- ^ Write response valid.
+    -> Signal Bit       -- ^ Response ready.
+    -> Signal (Bits 4)  -- ^ Read address.
+    -> Signal (Bits 3)  -- ^ Protection type.
+    -> Signal Bit       -- ^ Read address valid.
+    -> Signal Bit       -- ^ Read address ready.
+    -> Signal (Bits 32) -- ^ Read data.
+    -> Signal (Bits 2)  -- ^ Read response.
+    -> Signal Bit       -- ^ Read valid.
+    -> Signal Bit       -- ^ Read ready.    
     -> ()
   )
 axi_light_signature =
@@ -109,16 +109,16 @@ axi_light
   = do ----------------------------------------
        -- AXI Light signals.
        --
-       awaddr  <- signal "axi_awaddr"  :: P (Signal (Bit 4))
-       awready <- signal "axi_awready" :: P (Signal Bool)
-       wready  <- signal "axi_wready"  :: P (Signal Bool)
-       bresp   <- signal "axi_bresp"   :: P (Signal (Bit 2))
-       bvalid  <- signal "axi_bvalid"  :: P (Signal Bool)
-       araddr  <- signal "axi_araddr"  :: P (Signal (Bit 4))
-       arready <- signal "axi_arready" :: P (Signal Bool)
-       rdata   <- signal "axi_rdata"   :: P (Signal (Bit 32))
-       rresp   <- signal "axi_rresp"   :: P (Signal (Bit 2))
-       rvalid  <- signal "axi_rvalid"  :: P (Signal Bool)
+       awaddr  <- signal "axi_awaddr"  :: P (Signal (Bits 4))
+       awready <- signal "axi_awready" :: P (Signal Bit)
+       wready  <- signal "axi_wready"  :: P (Signal Bit)
+       bresp   <- signal "axi_bresp"   :: P (Signal (Bits 2))
+       bvalid  <- signal "axi_bvalid"  :: P (Signal Bit)
+       araddr  <- signal "axi_araddr"  :: P (Signal (Bits 4))
+       arready <- signal "axi_arready" :: P (Signal Bit)
+       rdata   <- signal "axi_rdata"   :: P (Signal (Bits 32))
+       rresp   <- signal "axi_rresp"   :: P (Signal (Bits 2))
+       rvalid  <- signal "axi_rvalid"  :: P (Signal Bit)
 
        ----------------------------------------
        -- Application-specific design signals.
@@ -129,13 +129,13 @@ axi_light
        ----------------------------------------
        -- Signals for user logic registers.
        --
-       reg_0     <- signal "slv_reg0"     :: P (Signal (Bit 32))
-       reg_1     <- signal "slv_reg1"     :: P (Signal (Bit 32))
-       reg_2     <- signal "slv_reg2"     :: P (Signal (Bit 32))
-       reg_3     <- signal "slv_reg3"     :: P (Signal (Bit 32))
-       reg_rdent <- signal "slv_reg_rden" :: P (Signal Bool)
-       reg_wren  <- signal "slv_reg_wren" :: P (Signal Bool)
-       reg_out   <- signal "reg_data_out" :: P (Signal (Bit 32))
+       reg_0     <- signal "slv_reg0"     :: P (Signal (Bits 32))
+       reg_1     <- signal "slv_reg1"     :: P (Signal (Bits 32))
+       reg_2     <- signal "slv_reg2"     :: P (Signal (Bits 32))
+       reg_3     <- signal "slv_reg3"     :: P (Signal (Bits 32))
+       reg_rden  <- signal "slv_reg_rden" :: P (Signal Bit)
+       reg_wren  <- signal "slv_reg_wren" :: P (Signal Bit)
+       reg_out   <- signal "reg_data_out" :: P (Signal (Bits 32))
        reg_index <- signal "byte_index"   :: P (Signal Integer)
 
        ----------------------------------------
@@ -174,7 +174,7 @@ axi_light
          rst <- get s_axi_aresetn
          when (risingEdge clk) $ do
            iff (isLow rst)
-             (do setOthers awaddr (litE low))
+             (do awaddr <:- low)
              (do rdy <- get awready
                  awv <- get s_axi_awvalid
                  wv  <- get s_axi_wvalid
@@ -205,31 +205,153 @@ axi_light
          rst   <- get s_axi_aresetn
          when (risingEdge clk) $ do
            iff (isLow rst)
-             (do setOthers reg_0 (litE low)
-                 setOthers reg_1 (litE low)
-                 setOthers reg_2 (litE low)
-                 setOthers reg_3 (litE low))
+             (do reg_0 <:- low
+                 reg_1 <:- low
+                 reg_2 <:- low
+                 reg_3 <:- low)
              (do clsb  <- getConstant addr_lsb
                  cbits <- getConstant addr_bits
-                 local <- getSlice awaddr (clsb + cbits) (clsb) :: P (Variable (Bit 2))
+                 -- *** todo: lift these constants to a range constraint.
+                 slice <- getSlice awaddr (R :: Range 1 (1 + 2))
                  wren  <- get reg_wren
                  when (isHigh wren) $ do
-                   local <- unsafeFreezeVariable local
-                   switched local [
-                       is 0 $ do
-                         for (litE 3 :: HExp (Bit 2)) $ \i -> do
-                           ix <- getIndex s_axi_wstrb i
-                           return ()
+                   let iter = litE 3 :: HExp Integer
+                   i <- integer slice
+                   switched i [
+                       is 0 $ for iter $ \i -> do
+                          strb <- getIndex s_axi_wstrb i
+                          when (isHigh strb) $ do
+                            copySliceDynamic
+                              reg_0       (i*8+7, i*8)
+                              s_axi_wdata (i*8+7, i*8)
+                     , is 1 $ do
+                          strb <- getIndex s_axi_wstrb i
+                          when (isHigh strb) $ do
+                            copySliceDynamic
+                              reg_1       (i*8+7, i*8)
+                              s_axi_wdata (i*8+7, i*8)
+                     , is 2 $ do
+                          strb <- getIndex s_axi_wstrb i
+                          when (isHigh strb) $ do
+                            copySliceDynamic
+                              reg_2       (i*8+7, i*8)
+                              s_axi_wdata (i*8+7, i*8)
+                     , is 3 $ do
+                          strb <- getIndex s_axi_wstrb i
+                          when (isHigh strb) $ do
+                            copySliceDynamic
+                              reg_3       (i*8+7, i*8)
+                              s_axi_wdata (i*8+7, i*8)
                      ]
-                     (do return ()))
-         
-       return ()
+                     (do reg_0 <== reg_0
+                         reg_1 <== reg_1
+                         reg_2 <== reg_2
+                         reg_3 <== reg_3))
+
+       ----------------------------------------
+       -- Write response generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do bvalid <-- low
+                 bresp  <:- low)
+                 --bresp  <-- bitFromInteger 0)
+             (do rdy  <- get awready
+                 awv  <- get s_axi_awvalid
+                 wrdy <- get awready
+                 wv   <- get s_axi_wvalid
+                 bv   <- get bvalid
+                 brdy <- get s_axi_bready
+                 ifE
+                   ( isHigh rdy  `and` isHigh awv `and`
+                     isHigh wrdy `and` isHigh wv  `and`
+                     isLow  bv
+                   , do bvalid <-- high
+                        bresp  <:- low)
+                   ( isHigh brdy `and` isHigh bv
+                    ,   bvalid <-- low))
+
+       ----------------------------------------
+       -- AXI ARREADY generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do arready <-- low
+                 araddr  <:- high)
+             (do ready <- get arready
+                 valid <- get s_axi_arvalid
+                 iff (isLow ready `and` isHigh valid)
+                   (araddr  <== s_axi_araddr)
+                   (arready <-- low))
+
+       ----------------------------------------
+       -- AXI ARVALID generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do rvalid <-- low
+                 rresp  <:- low)
+             (do rdy  <- get arready
+                 av   <- get s_axi_arvalid
+                 rrdy <- get s_axi_rready
+                 rv   <- get rvalid
+                 ifE
+                   ( isHigh rdy `and` isHigh av `and` isLow rv
+                   , do rvalid <-- high
+                        rresp  <:- low)
+                   ( isHigh rv  `and` isHigh rrdy
+                   , do rvalid <-- low))
+
+       ----------------------------------------
+       -- ...
+       --
+       rrdy <- get arready
+       arv  <- get s_axi_arvalid
+       rv   <- get rvalid
+       reg_rden <=- (rrdy `and` arv `and` not rv)
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         when (risingEdge clk) $ do
+           -- *** todo: lift these constants to a range constraint.
+           slice <- getSlice araddr (R :: Range 1 (1 + 2))
+           i     <- integer slice                 
+           switch i [
+               is 0 $ reg_out <== reg_0
+             , is 1 $ reg_out <== reg_1
+             , is 2 $ reg_out <== reg_2
+             , is 3 $ reg_out <== reg_3
+             ]
+
+       ----------------------------------------
+       -- Output register or memory read data.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do rdata <:- low)
+             (do rden <- get reg_rden
+                 when (isLow rden) $
+                   rdata <== reg_out)
 
 low    = False
 high   = True
 isLow  = (`eq` litE low)
 isHigh = (`eq` litE high)
 get    = unsafeFreezeSignal
+
+(<:-) :: Signal (Bits n) -> Bool -> P ()
+(<:-) s b = setOthers s (litE b)
 
 --------------------------------------------------------------------------------
 
