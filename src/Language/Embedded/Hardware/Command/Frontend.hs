@@ -10,6 +10,7 @@ import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Command.CMD
 
 import Language.Embedded.Hardware.Expression.Represent
+import Language.Embedded.Hardware.Expression.Represent.Bit
 
 import Control.Monad.Operational.Higher
 
@@ -19,6 +20,8 @@ import Data.Int
 import Data.Word
 
 import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
+
+import GHC.TypeLits
 
 --------------------------------------------------------------------------------
 -- ** Signals.
@@ -60,28 +63,39 @@ unsafeFreezeSignal = singleE . UnsafeFreezeSignal
 setOthers
   :: ( SignalCMD    (IExp i) :<: i
      , PredicateExp (IExp i) Bool)
-  => Signal a -> IExp i Bool -> ProgramT i m ()
+  => Signal (Bits n) -> IExp i Bit -> ProgramT i m ()
 setOthers s ix = singleE (SetOthers s ix)
 
 getIndex
   :: ( SignalCMD (IExp i) :<: i
-     , PredicateExp (IExp i) a
+     , PredicateExp (IExp i) Bool
      , PredicateExp (IExp i) ix
      , Integral ix
      , Ix ix)
-  => Signal a -> IExp i ix -> ProgramT i m (IExp i a)
+  => Signal (Bits n) -> IExp i ix -> ProgramT i m (IExp i Bit)
 getIndex s ix = singleE (GetIndex s ix)
 
--- | ...
 getSlice
   :: ( SignalCMD    (IExp i) :<: i
-     , PredicateExp (IExp i) a
-     , PredicateExp (IExp i) b
-     , PredicateExp (IExp i) ix
-     , Integral ix
-     , Ix ix)
-  => Signal a -> IExp i ix -> IExp i ix -> ProgramT i m (Variable b)
-getSlice s l u = singleE (GetSlice s l u)
+     , PredicateExp (IExp i) Integer
+     , KnownNat low,  KnownNat high
+     , low  <= high
+     )
+  => Signal (Bits n) -> Range low  high -> ProgramT i m (Signal (Bits (high - low)))
+getSlice s r = singleE (GetSlice s r)
+
+copySlice
+  :: ( SignalCMD    (IExp i) :<: i
+     , PredicateExp (IExp i) Integer
+     , KnownNat low,  KnownNat high
+     , KnownNat low', KnownNat high'
+     , low  <= high
+     , low' <= high'
+     )
+  => Signal (Bits u) -> Range low  high
+  -> Signal (Bits v) -> Range low' high'
+  -> ProgramT i m ()
+copySlice s r s' r' = singleE (CopySlice s r s' r')
 
 --------------------------------------------------------------------------------
 -- ports.

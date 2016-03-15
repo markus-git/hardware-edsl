@@ -58,7 +58,7 @@ import GHC.TypeLits
 -- * ...
 --------------------------------------------------------------------------------
 
-type    Bit = Bool
+type Bit = Bool
 
 newtype Bits (n :: Nat) = B Integer
 

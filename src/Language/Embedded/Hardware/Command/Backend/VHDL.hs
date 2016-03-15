@@ -1,4 +1,7 @@
 {-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -12,6 +15,7 @@ import Control.Monad.Operational.Higher
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Hoist
 import Language.Embedded.Hardware.Expression.Represent
+import Language.Embedded.Hardware.Expression.Represent.Bit
 import Language.Embedded.Hardware.Command.CMD
 
 import Language.Embedded.VHDL (VHDL)
@@ -23,6 +27,8 @@ import Data.List     (genericTake)
 import Data.Word     (Word8)
 import qualified Data.IORef    as IR
 import qualified Data.Array.IO as IA
+
+import GHC.TypeLits
 
 --------------------------------------------------------------------------------
 -- * Translation of hardware commands into VHDL.
@@ -118,6 +124,8 @@ compileSignal (SetSignal (SignalC s) exp) =
   do V.assignSignal (ident s) =<< compE exp
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ varE s
+
+----------------------------------------
 -- ....
 compileSignal (SetOthers (SignalC s) b) =
   do v <- compE b
@@ -125,21 +133,35 @@ compileSignal (SetOthers (SignalC s) b) =
 compileSignal (GetIndex (SignalC s) ix) =
   do (v, i) <- freshVar (Base "s") :: VHDL (a, V.Identifier)
      ix'    <- compE ix
+     _      <- compT (undefined :: exp Bool)
      V.assignVariable i (lift $ V.name $ V.indexed (ident s) ix')
      return v
-compileSignal (GetSlice (SignalC s) l u) =
-  do i  <- newSym (Base "v")
-     t  <- compT  (temp (undefined :: a))
-     ix <- compE l
-     jx <- compE u
-     V.variable (ident i) t Nothing
-     V.assignVariable (ident i) $ lift
-       $ V.name
-       $ V.slice (ident s) (lift ix, lift jx)
-     return (VariableC i)
+compileSignal (GetSlice (SignalC s) r) =
+  do let (a, b) = sliced r
+     ra <- compE (litE a :: exp Integer)
+     rb <- compE (litE b :: exp Integer)
+     let name = V.slice (ident s) (lift rb, lift ra)
+     i  <- newSym (Base "s")
+     V.assignSignal (ident i) (lift $ V.name name)
+     return (SignalC i)
+compileSignal (CopySlice (SignalC s) r (SignalC s') r') =
+  do let (a,  b)  = sliced r
+         (a', b') = sliced r'
+     ra  <- compE (litE a :: exp Integer)
+     rb  <- compE (litE b :: exp Integer)
+     let name  = V.slice (ident s) (lift rb, lift ra)
+     ra' <- compE (litE a' :: exp Integer)
+     rb' <- compE (litE b' :: exp Integer)
+     let name' = V.slice (ident s') (lift rb', lift ra')
+     V.assignSignal' name (lift $ V.name name')
+  
+sliced :: forall x y. (KnownNat x, KnownNat y) => Range x y -> (Integer, Integer)
+sliced _ = (size (undefined :: Bits x), size (undefined :: Bits y))
   where
-    temp :: Variable c -> exp c
-    temp = undefined
+    size  :: KnownNat z => Bits z -> Integer
+    size  = fromIntegral . natVal
+
+----------------------------------------
 
 runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
 runSignal (NewSignal _ _ exp)         = fmap SignalE $ IR.newIORef $ evalEM exp
@@ -147,8 +169,11 @@ runSignal (GetSignal (SignalE r))     = fmap litE $ IR.readIORef r
 runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r $ evalE exp
 runSignal (UnsafeFreezeSignal r)      = runSignal (GetSignal r)
 -- ....
-runSignal (SetOthers (SignalE r) b)   = error "runSignal: todo"
-runSignal (GetSlice  (SignalE r) l u) = error "runSignal: todo"
+runSignal (SetOthers (SignalE r) b) = error "runSignal-todo: setOthers"
+runSignal (GetIndex  (SignalE r) i) = error "runSignal-todo: getIndex"
+runSignal (GetSlice  (SignalE r) l) = error "runSignal-todo: getSlice"
+runSignal (CopySlice (SignalE r) l (SignalE r') h) =
+  error "runSignaltodo: copySlice"
 
 --------------------------------------------------------------------------------
 -- ** Variables.

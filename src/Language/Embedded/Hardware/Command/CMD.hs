@@ -3,6 +3,8 @@
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE Rank2Types          #-}
+{-# LANGUAGE PolyKinds           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Embedded.Hardware.Command.CMD where
@@ -30,6 +32,9 @@ import GHC.TypeLits
 -- | Signal representation.
 data Signal a = SignalC VarId | SignalE (IORef a)
 
+-- | ...
+data Range (a :: Nat) (b :: Nat) = R
+
 -- | Commands for signals.
 data SignalCMD (exp :: * -> *) (prog :: * -> *) a
   where
@@ -42,13 +47,26 @@ data SignalCMD (exp :: * -> *) (prog :: * -> *) a
     -- ^ Unsafe version of fetching a signal.
     UnsafeFreezeSignal :: PredicateExp exp a => Signal a -> SignalCMD exp prog (exp a)
 
-    -- *** Move to ArrayCMD *** ---
-    SetOthers :: PredicateExp exp Bool =>
-      Signal a -> exp Bool -> SignalCMD exp prog ()
-    GetIndex :: (PredicateExp exp a, PredicateExp exp i, Integral i, Ix i) =>
-      Signal a -> exp i -> SignalCMD exp prog (exp a)
-    GetSlice :: (PredicateExp exp a, PredicateExp exp b, PredicateExp exp i, Integral i, Ix i) =>
-      Signal a -> exp i -> exp i -> SignalCMD exp prog (Variable b)
+    -- *** Move to ArrayCMD and make a class for "array" types like Bits *** ---
+    SetOthers :: (PredicateExp exp Bool) =>
+      Signal (Bits n) -> exp Bool -> SignalCMD exp prog ()
+    GetIndex  :: (PredicateExp exp Bool, PredicateExp exp i, Integral i, Ix i) =>
+      Signal (Bits n) -> exp i -> SignalCMD exp prog (exp Bool)
+    GetSlice  :: ( PredicateExp exp Integer
+                 , KnownNat low, KnownNat high
+                 , low <= high
+                 ) =>
+      Signal (Bits n) -> Range low high ->
+      SignalCMD exp prog (Signal (Bits (high - low)))
+    CopySlice :: ( PredicateExp exp Integer
+                 , KnownNat low,  KnownNat high
+                 , KnownNat low', KnownNat high'
+                 , low  <= high
+                 , low' <= high'
+                 ) =>
+      Signal (Bits n) -> Range low  high  ->
+      Signal (Bits m) -> Range low' high' ->
+      SignalCMD exp prog ()
     --------------------------------
 
 type instance IExp (SignalCMD e)       = e
@@ -63,7 +81,8 @@ instance HFunctor (SignalCMD exp)
     -- ....
     hfmap _ (SetOthers s b)        = SetOthers s b
     hfmap _ (GetIndex  s i)        = GetIndex  s i
-    hfmap _ (GetSlice  s l u)      = GetSlice  s l u
+    hfmap _ (GetSlice  s r)        = GetSlice  s r
+    hfmap _ (CopySlice s r s' r')  = CopySlice s r s' r'
 
 --------------------------------------------------------------------------------
 -- ** Variables.
