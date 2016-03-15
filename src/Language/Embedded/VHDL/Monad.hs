@@ -25,7 +25,7 @@ module Language.Embedded.VHDL.Monad (
 
     -- ^ ...
 --, addPort,       addGeneric
-  , addSignal,     addVariable
+  , addConstant,   addSignal,     addVariable
   , addConcurrent, addSequential
   , addType,       addComponent
 
@@ -40,9 +40,7 @@ module Language.Embedded.VHDL.Monad (
   , entity, architecture, package, component
 
     -- ^ common things
---, declareConstant,   declareSignal,   declareVariable
---, assignSignal,      assignSignalS,   assignVariable,   assignArray
-  , signal, variable, unconstrainedArray, constrainedArray
+  , constant, signal, variable, unconstrainedArray, constrainedArray
   , assignSignal, assignVariable, assignArray
   , portMap
   ) where
@@ -83,6 +81,7 @@ data VHDLEnv = VHDLEnv
   , _context       :: Set ContextItem
   , _types         :: Set TypeDeclaration
   , _components    :: Set ComponentDeclaration
+  , _constants     :: [InterfaceDeclaration]
   , _signals       :: [InterfaceDeclaration]
   , _variables     :: [InterfaceDeclaration]
   , _concurrent    :: [ConcurrentStatement]
@@ -97,6 +96,7 @@ emptyVHDLEnv = VHDLEnv
   , _context       = Set.empty
   , _types         = Set.empty
   , _components    = Set.empty
+  , _constants     = []
   , _signals       = []
   , _variables     = []
   , _concurrent    = []
@@ -180,8 +180,11 @@ addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
 addComponent :: MonadV m => ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
 
+-- | ...
+addConstant :: MonadV m => InterfaceDeclaration -> m ()
+addConstant c = CMS.modify $ \s -> s { _constants = c : (_constants s) }
+
 -- | Adds a global declaration.
---addSignal :: MonadV m => BlockDeclarativeItem -> m ()
 addSignal :: MonadV m => InterfaceDeclaration -> m ()
 addSignal v = CMS.modify $ \s -> s { _signals = v : (_signals s) }
 
@@ -361,17 +364,20 @@ addUnit_ lib = CMS.modify $ \s -> s { _units = (DesignUnit (ContextClause []) li
 --   and architecture names, respectively.
 architecture :: MonadV m => Identifier -> Identifier -> m a -> m a
 architecture entity name m =
-  do oldGlobal     <- CMS.gets _signals
+  do oldConstants  <- CMS.gets _constants
+     oldGlobal     <- CMS.gets _signals
      oldConcurrent <- CMS.gets _concurrent
      oldSequential <- CMS.gets _sequential
      oldTypes      <- CMS.gets _types
      oldComponents <- CMS.gets _components
-     CMS.modify $ \e -> e { _signals    = []
+     CMS.modify $ \e -> e { _constants  = []
+                          , _signals    = []
                           , _concurrent = []
                           , _sequential = []
                           , _types      = Set.empty
                           , _components = Set.empty }
      result        <- m
+     newConstants  <- reverse <$> CMS.gets _constants
      newGlobal     <- reverse <$> CMS.gets _signals
      newConcurrent <- reverse <$> CMS.gets _concurrent
      newSequential <- reverse . filter isSignal <$> CMS.gets _sequential
@@ -381,11 +387,13 @@ architecture entity name m =
      addUnit_ $ LibrarySecondary $ SecondaryArchitecture $
            ArchitectureBody (name)
              (NSimple entity)
-             (newTypes
+             (newTypes -- merge
                 ++ newComponents
-                ++ fmap translateInterface newGlobal) -- merge ...
+                ++ fmap translateInterface newGlobal
+                ++ fmap translateInterface newConstants)
              (signals ++ newConcurrent)
-     CMS.modify $ \e -> e { _signals    = oldGlobal
+     CMS.modify $ \e -> e { _constants  = oldConstants
+                          , _signals    = oldGlobal
                           , _concurrent = oldConcurrent
                           , _sequential = oldSequential
                           , _types      = oldTypes
@@ -500,10 +508,10 @@ designTypes set
 
 --------------------------------------------------------------------------------
 -- ** Ports/Generic declarations
-{-
-constant :: MonadV m => Identifier -> SubtypeIndication -> Maybe Expression -> m ()
-constant i t e = addConstant $ InterfaceConstantDeclaration [i] t e
--}
+
+constant :: MonadV m => Identifier -> SubtypeIndication -> Expression -> m ()
+constant i t e = addConstant $ InterfaceConstantDeclaration [i] t (Just e)
+
 signal   :: MonadV m => Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> m ()
 signal i m t e = addSignal $ InterfaceSignalDeclaration [i] (Just m) t False e
 
