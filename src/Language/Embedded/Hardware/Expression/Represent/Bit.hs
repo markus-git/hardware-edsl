@@ -37,7 +37,14 @@ module Language.Embedded.Hardware.Expression.Represent.Bit
   )
   where
 
+import Language.Embedded.Hardware.Expression.Represent
+
+import Language.Embedded.VHDL            (VHDL)
+import Language.Embedded.VHDL.Monad      (newSym, newLibrary, newImport, constrainedArray)
+import Language.Embedded.VHDL.Monad.Type
+
 import Data.Bits       (Bits(..))
+import Data.Ix
 import Control.Monad   (guard)
 import Control.DeepSeq (NFData(..))
 
@@ -51,6 +58,15 @@ import GHC.TypeLits
 
 newtype Bit (n :: Nat) = B Integer
 
+instance forall n. KnownNat n => Rep (Bit n)
+  where
+    declare = declareBit 
+    format  = bitShowBin
+
+declareBit :: forall proxy n. KnownNat n => proxy (Bit n) -> VHDL Type
+declareBit _ = declareBoolean >> return (std_logic_vector size)
+  where size = fromInteger (ni (undefined :: Bit n))
+        
 --------------------------------------------------------------------------------
 -- ** ...
 
@@ -236,5 +252,10 @@ instance KnownNat n => Enum (Bit n) where
 instance KnownNat n => Integral (Bit n) where
   toInteger = bitToInteger
   quotRem   = bitQuotRem
+
+instance KnownNat n => Ix (Bit n) where
+  range   = undefined
+  index   = undefined
+  inRange = undefined
 
 --------------------------------------------------------------------------------

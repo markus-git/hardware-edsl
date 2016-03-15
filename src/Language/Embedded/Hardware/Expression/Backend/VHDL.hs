@@ -9,7 +9,7 @@ import Language.Syntactic
 import Language.Syntactic.Functional (Denotation, evalSym)
 
 import Language.Embedded.Hardware.Expression.Syntax
-import Language.Embedded.Hardware.Expression.Frontend (value, variable)
+import Language.Embedded.Hardware.Expression.Frontend (value, var)
 import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Hoist (Kind)
 import Language.Embedded.Hardware.Interface
@@ -29,7 +29,7 @@ instance FreeExp HExp
   where
     type PredicateExp HExp = HType
     litE = value
-    varE = variable
+    varE = var
 
 --------------------------------------------------------------------------------
 
@@ -153,11 +153,6 @@ compHExp  e = Hoist.lift <$> compSimple e
           x' <- Hoist.lift <$> compLoop x
           return $ x'
           --return $ Hoist.P $ VHDL.cast t x' -- *** !!! *** !!! SOS !! *** ~~~
-    --- *** temp
-    compDomain attribute (x :* Nil)
-      | Just (Attribute a)  <- prj attribute = do
-          x' <- Hoist.lift <$> compLoop x
-          return $ Hoist.P $ VHDL.attribute a x'
     compDomain primary args
       | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i

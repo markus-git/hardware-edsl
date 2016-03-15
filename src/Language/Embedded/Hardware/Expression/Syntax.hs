@@ -133,10 +133,7 @@ data Primary sig
     Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
     Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)
     Allocator  :: (HType a) => Primary (Full a)
-
-    -- *** temp
-    Attribute  :: (HType a, HType b) => String -> Primary (a :-> Full b)
-
+    
 --------------------------------------------------------------------------------
 -- ** Syntactic instances.
 
@@ -352,7 +349,6 @@ instance Symbol Primary
     symSig (Qualified _)  = signature
     symSig (Conversion _) = signature
     symSig (Allocator)    = signature
-    symSig (Attribute _)  = signature
 
 instance Render Primary
   where
@@ -363,7 +359,6 @@ instance Render Primary
     renderSym (Qualified _)  = "qual"
     renderSym (Conversion _) = "conv"
     renderSym (Allocator)    = "alloc"
-    renderSym (Attribute _)  = "attr"
 
 instance Eval Primary
   where
@@ -374,7 +369,6 @@ instance Eval Primary
     evalSym (Qualified _)  = error "todo: eval qualified names."
     evalSym (Conversion f) = f
     evalSym (Allocator)    = error "todo: eval allocator"
-    evalSym (Attribute _)  = error "todo: eval attribute"
 
 instance EvalEnv Primary env
 

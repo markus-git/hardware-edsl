@@ -5,7 +5,6 @@ module Language.Embedded.Hardware.Expression.Frontend where
 import qualified Language.VHDL as V
 
 import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Represent -- aaargh..
 import Language.Embedded.Hardware.Expression.Syntax
 import Language.Embedded.Hardware.Expression.Hoist
 import qualified Language.Embedded.VHDL.Monad.Expression as V
@@ -24,8 +23,8 @@ name :: HType a => V.Name -> HExp a
 name n = sugarT (Name n)
 
 -- | Creates a variable from a string.
-variable :: HType a => VarId -> HExp a
-variable = name . V.NSimple . V.Ident . id
+var :: HType a => VarId -> HExp a
+var = name . V.NSimple . V.Ident . id
   where
     id :: VarId -> String
     id (Unique i) = i
@@ -35,22 +34,11 @@ variable = name . V.NSimple . V.Ident . id
 value :: HType a => a -> HExp a
 value i = sugarT (Literal i)
 
--- ...fudge..
-others :: (HType a, HType b) => a -> HExp b
-others a = sugarT (Aggregate (asExp a))
-  where
-    asExp :: Rep a => a -> V.Aggregate
-    asExp = V.others . lift . V.lit . format
-
 -- | Casts an expression using supplied conversion function.
 cast  :: (HType a, HType b) => (a -> b) -> HExp a -> HExp b
 cast f = sugarT (Conversion f)
 
 --------------------------------------------------------------------------------
-
-true, false :: HExp Bool
-true  = value True
-false = value False
 
 -- logical operators
 and, or, xor, xnor, nand, nor :: HExp Bool -> HExp Bool -> HExp Bool
@@ -85,26 +73,12 @@ ror = sugarT Ror
 add, sub :: (HType a, Num a) => HExp a -> HExp a -> HExp a
 add = sugarT Add
 sub = sugarT Sub
+
 {-
 cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp (Cats a a)
 cat = sugarT Cat
 -}
----------------------------------------- Lalalala can't see you!
-catB   :: HExp Bit   -> HExp Bit   -> HExp Bit2
-catB2  :: HExp Bit2  -> HExp Bit2  -> HExp Bit4
-catB4  :: HExp Bit4  -> HExp Bit4  -> HExp Bit8
-catB8  :: HExp Bit8  -> HExp Bit8  -> HExp Bit16
-catB16 :: HExp Bit16 -> HExp Bit16 -> HExp Bit32
-catB32 :: HExp Bit32 -> HExp Bit32 -> HExp Bit64
 
-catB   = sugarT Cat
-catB2  = sugarT Cat
-catB4  = sugarT Cat
-catB8  = sugarT Cat
-catB16 = sugarT Cat
-catB32 = sugarT Cat
-
-----------------------------------------
 -- multiplying operators
 mul :: (HType a, Num a) => HExp a -> HExp a -> HExp a
 mul = sugarT Mul
@@ -126,9 +100,12 @@ not = sugarT Not
 
 --------------------------------------------------------------------------------
 
--- *** temp
-event :: HType a => HExp a -> HExp Bool
-event = sugarT (Attribute "EVENT")
+true, false :: HExp Bool
+true  = value True
+false = value False
+
+risingEdge :: HExp a -> HExp Bool
+risingEdge = sugarT (Function "rising_edge" $ \_ -> True)
 
 --------------------------------------------------------------------------------
 
@@ -182,12 +159,3 @@ instance (HType a, Fractional a) => Fractional (HExp a)
     fromRational = error "VHDL: fromRational is not supported"    
 
 --------------------------------------------------------------------------------
-
-type family Cats a b :: *
-
--- Bits
-type instance Cats Bit2  Bit2  = Bit4
-type instance Cats Bit4  Bit4  = Bit8
-type instance Cats Bit8  Bit8  = Bit16
-type instance Cats Bit16 Bit16 = Bit32
-type instance Cats Bit32 Bit32 = Bit64
