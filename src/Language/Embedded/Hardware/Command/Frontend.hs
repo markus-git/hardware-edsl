@@ -5,7 +5,7 @@
 
 module Language.Embedded.Hardware.Command.Frontend where
 
-import Language.Embedded.VHDL               (Mode(..))
+import Language.Embedded.VHDL (Mode(..))
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Command.CMD
 
@@ -53,34 +53,70 @@ setSignal s = singleE . SetSignal s
 unsafeFreezeSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> ProgramT i m (IExp i a)
 unsafeFreezeSignal = singleE . UnsafeFreezeSignal
 
+--------------------------------------------------------------------------------
+-- ..meh.
+
 -- | ...
-packSignal
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a)
-  => String
-  -> Array a Bool
-  -> ProgramT i m (Signal a)
-packSignal s = singleE . PackSignal (Base s)
+setOthers
+  :: ( SignalCMD    (IExp i) :<: i
+     , PredicateExp (IExp i) Bool)
+  => Signal a -> IExp i Bool -> ProgramT i m ()
+setOthers s ix = singleE (SetOthers s ix)
+
+getIndex
+  :: ( SignalCMD (IExp i) :<: i
+     , PredicateExp (IExp i) a
+     , PredicateExp (IExp i) ix
+     , Integral ix
+     , Ix ix)
+  => Signal a -> IExp i ix -> ProgramT i m (IExp i a)
+getIndex s ix = singleE (GetIndex s ix)
+
+-- | ...
+getSlice
+  :: ( SignalCMD    (IExp i) :<: i
+     , PredicateExp (IExp i) a
+     , PredicateExp (IExp i) b
+     , PredicateExp (IExp i) ix
+     , Integral ix
+     , Ix ix)
+  => Signal a -> IExp i ix -> IExp i ix -> ProgramT i m (Variable b)
+getSlice s l u = singleE (GetSlice s l u)
 
 --------------------------------------------------------------------------------
+-- ports.
 
 -- | Declare port signals of the given mode and assign it initial value.
 initPort, initUniquePort
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> IExp i a -> ProgramT i m (Signal a)
+  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a)
+  => String -> Mode -> IExp i a -> ProgramT i m (Signal a)
 initPort       name m = singleE . NewSignal (Base   name) m . Just
 initUniquePort name m = singleE . NewSignal (Unique name) m . Just
 
 -- | Declare port signals of the given mode.
 newPort, newUniquePort
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Mode -> ProgramT i m (Signal a)
+  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a)
+  => String -> Mode -> ProgramT i m (Signal a)
 newPort       name m = singleE $ NewSignal (Base   name) m Nothing
 newUniquePort name m = singleE $ NewSignal (Unique name) m Nothing
 
 --------------------------------------------------------------------------------
+-- short-hands.
 
-(<--) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
-(<--) = setSignal
+signal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Signal a)
+signal = newNamedSignal
 
--- | Short-hand for 'setSignal'.
+(<--) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a, FreeExp (IExp i)) => Signal a -> a -> ProgramT i m ()
+(<--) s e = setSignal s (litE e)
+
+(<:-) :: (SignalCMD (IExp i) :<: i, ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m)
+      => Signal a -> Constant a -> ProgramT i m ()
+(<:-) s c = setSignal s =<< getConstant c
+
+(<:=) :: (SignalCMD (IExp i) :<: i, VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m)
+      => Signal a -> Variable a -> ProgramT i m ()
+(<:=) s v = setSignal s =<< unsafeFreezeVariable v
+
 (<==) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m) => Signal a -> Signal a -> ProgramT i m ()
 (<==) s v = setSignal s =<< unsafeFreezeSignal v
 
@@ -124,72 +160,39 @@ veryUnsafeFreezeVariable
 veryUnsafeFreezeVariable (VariableE r) = litE $! unsafePerformIO $! readIORef r
 veryUnsafeFreezeVariable (VariableC v) = varE v
 
+--------------------------------------------------------------------------------
+-- short-hands.
+
+variable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Variable a)
+variable = newNamedVariable
+
 -- | Short-hand for 'setVariable'.
 (==:) :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> IExp i a -> ProgramT i m ()
 (==:) = setVariable
 
 --------------------------------------------------------------------------------
+-- ** Constants.
+
+initNamedConstant
+  :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Constant a)
+initNamedConstant name = singleE . NewConstant (Base name)
+
+initConstant :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Constant a)
+initConstant = initNamedConstant "c"
+
+getConstant :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Constant a -> ProgramT i m (IExp i a)
+getConstant = singleE . GetConstant
+
+--------------------------------------------------------------------------------
+-- short-hands.
+
+constant :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Constant a)
+constant = initNamedConstant
+
+--------------------------------------------------------------------------------
 -- ** Arrays.
 
--- | ...
-newNamedArray
-  :: ( ArrayCMD     (IExp instr) :<: instr
-     , PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i
-     , Ix i)
-  => String -> IExp instr i -> ProgramT instr m (Array i a)
-newNamedArray name = singleE . NewArray (Base name)
-
--- | ...
-newArray
-  :: ( ArrayCMD     (IExp instr) :<: instr
-     , PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i
-     , Ix i)
-  => IExp instr i -> ProgramT instr m (Array i a)
-newArray = newNamedArray "a"
-
--- | ...
-othersNamedArray 
-  :: ( ArrayCMD     (IExp instr) :<: instr
-     , PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i
-     , Ix i)
-  => String -> IExp instr i -> IExp instr a -> ProgramT instr m (Array i a)
-othersNamedArray name i = singleE . OthersArray (Base name) i
-
--- | ...
-othersArray 
-  :: ( ArrayCMD     (IExp instr) :<: instr
-     , PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i
-     , Ix i)
-  => IExp instr i -> IExp instr a -> ProgramT instr m (Array i a)
-othersArray = othersNamedArray "a"
-
--- | ...
-unpackArray
-  :: ( ArrayCMD     (IExp instr) :<: instr
-     , PredicateExp (IExp instr) i
-     , PredicateExp (IExp instr) Bool
-     , Integral i
-     , Ix i)
-  => String -> Signal i -> ProgramT instr m (Array i Bool)
-unpackArray name = singleE . UnpackArray (Base name)
-
--- | Get an element of an array.
-getArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , ArrayCMD (IExp instr) :<: instr)
-  => IExp instr i -> Array i a -> ProgramT instr m (IExp instr a)
-getArray i = singleE . GetArray i
-
+-- ...
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.

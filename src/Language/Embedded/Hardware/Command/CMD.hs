@@ -1,4 +1,5 @@
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE TypeFamilies        #-}
@@ -8,6 +9,7 @@ module Language.Embedded.Hardware.Command.CMD where
 
 import Language.Embedded.VHDL               (Mode)
 import Language.Embedded.Hardware.Interface (PredicateExp, VarId)
+import Language.Embedded.Hardware.Expression.Represent.Bit
 
 import Control.Monad.Operational.Higher
 
@@ -15,6 +17,8 @@ import Data.Ix       (Ix)
 import Data.IORef    (IORef)
 import Data.Array.IO (IOArray)
 import qualified Data.Array as Arr
+
+import GHC.TypeLits
 
 --------------------------------------------------------------------------------
 -- * Hardware commands.
@@ -37,9 +41,15 @@ data SignalCMD (exp :: * -> *) (prog :: * -> *) a
     SetSignal :: PredicateExp exp a => Signal a -> exp a -> SignalCMD exp prog ()
     -- ^ Unsafe version of fetching a signal.
     UnsafeFreezeSignal :: PredicateExp exp a => Signal a -> SignalCMD exp prog (exp a)
-    -- ^ ...
-    PackSignal :: PredicateExp exp i =>
-      VarId -> Array i Bool -> SignalCMD exp prog (Signal i)
+
+    -- *** Move to ArrayCMD *** ---
+    SetOthers :: PredicateExp exp Bool =>
+      Signal a -> exp Bool -> SignalCMD exp prog ()
+    GetIndex :: (PredicateExp exp a, PredicateExp exp i, Integral i, Ix i) =>
+      Signal a -> exp i -> SignalCMD exp prog (exp a)
+    GetSlice :: (PredicateExp exp a, PredicateExp exp b, PredicateExp exp i, Integral i, Ix i) =>
+      Signal a -> exp i -> exp i -> SignalCMD exp prog (Variable b)
+    --------------------------------
 
 type instance IExp (SignalCMD e)       = e
 type instance IExp (SignalCMD e :+: i) = e
@@ -50,7 +60,10 @@ instance HFunctor (SignalCMD exp)
     hfmap _ (GetSignal s)          = GetSignal s
     hfmap _ (SetSignal s e)        = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
-    hfmap _ (PackSignal n a)       = PackSignal n a
+    -- ....
+    hfmap _ (SetOthers s b)        = SetOthers s b
+    hfmap _ (GetIndex  s i)        = GetIndex  s i
+    hfmap _ (GetSlice  s l u)      = GetSlice  s l u
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -81,6 +94,28 @@ instance HFunctor (VariableCMD exp)
     hfmap _ (UnsafeFreezeVariable s) = UnsafeFreezeVariable s
 
 --------------------------------------------------------------------------------
+-- ** Constants.
+
+-- | Constant representation.
+data Constant a = ConstantC VarId | ConstantE a
+
+-- | Commands for constants.
+data ConstantCMD (exp :: * -> *) (prog :: * -> *) a
+  where
+    -- ^ Create a new constant.
+    NewConstant :: PredicateExp exp a => VarId -> exp a -> ConstantCMD exp prog (Constant a)
+    -- ^ Fetch the value of a constant.
+    GetConstant :: PredicateExp exp a => Constant a -> ConstantCMD exp prog (exp a)
+
+type instance IExp (ConstantCMD e)       = e
+type instance IExp (ConstantCMD e :+: i) = e
+
+instance HFunctor (ConstantCMD exp)
+  where
+    hfmap _ (NewConstant v e) = NewConstant v e
+    hfmap _ (GetConstant c)   = GetConstant c
+
+--------------------------------------------------------------------------------
 -- ** Arrays.
 
 -- | Expression types that support compilation of array indexing
@@ -97,20 +132,14 @@ data Array i a = ArrayC VarId | ArrayE (IORef (IOArray i a))
 data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
   where
     NewArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => VarId -> exp i -> exp i -> ArrayCMD exp prog (Array i Bool)
-    
-         
+      :: ArrayCMD exp prog (Array i Bool)
     
 type instance IExp (ArrayCMD e)       = e
 type instance IExp (ArrayCMD e :+: i) = e
 
 instance HFunctor (ArrayCMD exp)
   where
-    hfmap _ (NewArray v l u) = NewArray v l u
+    hfmap _ _ = undefined
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.

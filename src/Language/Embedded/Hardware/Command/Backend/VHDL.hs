@@ -118,20 +118,37 @@ compileSignal (SetSignal (SignalC s) exp) =
   do V.assignSignal (ident s) =<< compE exp
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ varE s
-compileSignal (PackSignal base (ArrayC n :: Array i Bool)) =
-  do t <- compT (undefined :: exp i)
-     i <- newSym base
-     V.signal       (ident i) V.Out t Nothing
-     V.assignSignal (ident i) (lift $ V.cast t $ lift $ name n)
-     return (SignalC i)
+-- ....
+compileSignal (SetOthers (SignalC s) b) =
+  do v <- compE b
+     V.assignSignal (ident s) (lift $ V.aggregate $ V.others v)
+compileSignal (GetIndex (SignalC s) ix) =
+  do (v, i) <- freshVar (Base "s") :: VHDL (a, V.Identifier)
+     ix'    <- compE ix
+     V.assignVariable i (lift $ V.name $ V.indexed (ident s) ix')
+     return v
+compileSignal (GetSlice (SignalC s) l u) =
+  do i  <- newSym (Base "v")
+     t  <- compT  (temp (undefined :: a))
+     ix <- compE l
+     jx <- compE u
+     V.variable (ident i) t Nothing
+     V.assignVariable (ident i) $ lift
+       $ V.name
+       $ V.slice (ident s) (lift ix, lift jx)
+     return (VariableC i)
+  where
+    temp :: Variable c -> exp c
+    temp = undefined
 
 runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
 runSignal (NewSignal _ _ exp)         = fmap SignalE $ IR.newIORef $ evalEM exp
 runSignal (GetSignal (SignalE r))     = fmap litE $ IR.readIORef r
 runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r $ evalE exp
 runSignal (UnsafeFreezeSignal r)      = runSignal (GetSignal r)
-runSignal (PackSignal _ array)        =
-  error "runSignal-todo: run PackSignal"
+-- ....
+runSignal (SetOthers (SignalE r) b)   = error "runSignal: todo"
+runSignal (GetSlice  (SignalE r) l u) = error "runSignal: todo"
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -168,6 +185,31 @@ runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v $ evalE exp
 runVariable (UnsafeFreezeVariable v)        = runVariable (GetVariable v)
 
 --------------------------------------------------------------------------------
+-- ** Constants.
+
+instance CompileExp exp => Interp (ConstantCMD exp) VHDL
+  where
+    interp = compileConstant
+
+instance EvaluateExp exp => Interp (ConstantCMD exp) IO
+  where
+    interp = runConstant
+
+compileConstant :: forall exp a. CompileExp exp => ConstantCMD exp VHDL a -> VHDL a
+compileConstant (NewConstant base exp) =
+  do v <- compE  exp
+     t <- compT  exp
+     i <- newSym base
+     V.constant (ident i) t v
+     return (ConstantC i)
+compileConstant (GetConstant (ConstantC c)) =
+  do return $ varE c
+
+runConstant :: forall exp prog a. EvaluateExp exp => ConstantCMD exp prog a -> IO a
+runConstant (NewConstant _ exp)           = return $ ConstantE $ evalE exp
+runConstant (GetConstant (ConstantE exp)) = return $ litE exp
+
+--------------------------------------------------------------------------------
 -- ** Arrays.
 
 instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (ArrayCMD exp) VHDL
@@ -185,6 +227,8 @@ compileArray
      , CompArrayIx exp)
   => ArrayCMD exp VHDL a
   -> VHDL a
+compileArray = undefined
+{-
 compileArray (NewArray base (len :: exp i)) =
   do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
      i <- newSym base
@@ -214,7 +258,7 @@ compileArray (CopyArray (ArrayC a) (ArrayC b) len) =
   do undefined
 compileArray (UnsafeFreezeArray (ArrayC a)) =
   do undefined
-     
+-}
 
 runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
 runArray = error "runArray-todo"
@@ -473,7 +517,7 @@ compileInteger (SignalInteger base (Just m :: Maybe (b, b))) =
       return (V.range (lift l') V.to (lift h'))
 compileInteger (ToInteger l h (ArrayC arr)) =
   do undefined
-     {-
+{-
      (v, i) <- freshVar (Base "i")
      let typ = V.integer Nothing
      --V.variable (ident i) typ Nothing
