@@ -15,7 +15,7 @@ import Control.Monad.Operational.Higher
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Hoist
 import Language.Embedded.Hardware.Expression.Represent
-import Language.Embedded.Hardware.Expression.Represent.Bit
+import Language.Embedded.Hardware.Expression.Represent.Bit (Bits)
 import Language.Embedded.Hardware.Command.CMD
 
 import Language.Embedded.VHDL (VHDL)
@@ -24,6 +24,7 @@ import qualified Language.Embedded.VHDL as V
 
 import Data.Array.IO (freeze)
 import Data.List     (genericTake)
+import Data.Proxy
 import Data.Word     (Word8)
 import qualified Data.IORef    as IR
 import qualified Data.Array.IO as IA
@@ -154,11 +155,19 @@ compileSignal (CopySlice (SignalC s) r (SignalC s') r') =
      rb' <- compE (litE b' :: exp Integer)
      let name' = V.slice (ident s') (lift rb', lift ra')
      V.assignSignal' name (lift $ V.name name')
-  
+compileSignal (CopySliceDynamic (SignalC s) l h (SignalC s') l' h') =
+  do rl  <- compE l
+     rh  <- compE h
+     let name  = V.slice (ident s)  (lift rl,  lift rh)
+     rl' <- compE l'
+     rh' <- compE h'
+     let name' = V.slice (ident s') (lift rl', lift rh')
+     V.assignSignal' name (lift $ V.name name')
+
 sliced :: forall x y. (KnownNat x, KnownNat y) => Range x y -> (Integer, Integer)
-sliced _ = (size (undefined :: Bits x), size (undefined :: Bits y))
+sliced _ = (size (Proxy :: Proxy x), size (Proxy :: Proxy y))
   where
-    size  :: KnownNat z => Bits z -> Integer
+    size  :: KnownNat z => Proxy z -> Integer
     size  = fromIntegral . natVal
 
 ----------------------------------------
@@ -173,7 +182,9 @@ runSignal (SetOthers (SignalE r) b) = error "runSignal-todo: setOthers"
 runSignal (GetIndex  (SignalE r) i) = error "runSignal-todo: getIndex"
 runSignal (GetSlice  (SignalE r) l) = error "runSignal-todo: getSlice"
 runSignal (CopySlice (SignalE r) l (SignalE r') h) =
-  error "runSignaltodo: copySlice"
+  error "runSignal-todo: copySlice"
+runSignal (CopySliceDynamic a b c d e f) =
+  error "runSignal-todo: copySliceDynamic"
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -405,8 +416,6 @@ compileConditional (Case e cs d) =
   do let el = maybe (return ()) id d
      ae  <- compE e
      ce  <- mapM compC cs
-     --ese <- mapM compE [ litE e :: exp b | (e :: b) <- es]
-     --let choices  = [ V.Choices [V.ChoiceSimple (lift c)] | c <- ese]
      s   <- V.inCase ae ce el
      V.addSequential $ V.SCase s
   where
@@ -523,31 +532,17 @@ instance EvaluateExp exp => Interp (IntegerCMD exp) IO
     interp = runInteger
 
 compileInteger :: forall exp a. CompileExp exp => IntegerCMD exp VHDL a -> VHDL a
-compileInteger (SignalInteger base (Nothing)) =
-  do i <- newSym base
-     let typ = V.integer Nothing
-     V.signal (ident i) V.Out typ Nothing
-     return (SignalC i)
-compileInteger (SignalInteger base (Just m :: Maybe (b, b))) =
-  do i <- newSym base
-     r <- range m
-     let typ = V.integer (Just r)
-     V.signal (ident i) V.Out typ Nothing
-     return (SignalC i)
-  where
-    range :: (b, b) -> VHDL V.Range
-    range (l, h) = do
-      l' <- compE $ (litE l :: exp b)
-      h' <- compE $ (litE h :: exp b)
-      return (V.range (lift l') V.to (lift h'))
-compileInteger (ToInteger l h (ArrayC arr)) =
-  do undefined
-{-
-     (v, i) <- freshVar (Base "i")
-     let typ = V.integer Nothing
-     --V.variable (ident i) typ Nothing
+compileInteger (ToInteger (SignalC s)) =
+  do (v, i) <- freshVar (Base "i") :: VHDL (exp Integer, V.Identifier)
+     let t = V.integer Nothing
+         f = V.function (V.Ident "to_integer") [ lift $
+             V.function (V.Ident "signed") [ lift $
+                name s
+             ]]
+           -- hack
+     V.assignVariable i (lift f)
      return v
--}
+
 runInteger :: forall exp a. EvaluateExp exp => IntegerCMD exp IO a -> IO a
 runInteger = error "todo: run integers"
 

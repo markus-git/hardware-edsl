@@ -81,7 +81,7 @@ getSlice
      , KnownNat low,  KnownNat high
      , low  <= high
      )
-  => Signal (Bits n) -> Range low  high -> ProgramT i m (Signal (Bits (high - low)))
+  => Signal (Bits n) -> Range low high -> ProgramT i m (Signal (Bits (high - low)))
 getSlice s r = singleE (GetSlice s r)
 
 copySlice
@@ -96,6 +96,17 @@ copySlice
   -> Signal (Bits v) -> Range low' high'
   -> ProgramT i m ()
 copySlice s r s' r' = singleE (CopySlice s r s' r')
+
+copySliceDynamic
+  :: ( SignalCMD    (IExp i) :<: i
+     , PredicateExp (IExp i) a
+     , PredicateExp (IExp i) ix
+     , Integral ix
+     , Ix ix)
+  => Signal a -> (IExp i ix, IExp i ix)
+  -> Signal a -> (IExp i ix, IExp i ix)
+  -> ProgramT i m ()
+copySliceDynamic s (l, h) s' (l', h') = singleE (CopySliceDynamic s l h s' l' h')
 
 --------------------------------------------------------------------------------
 -- ports.
@@ -121,15 +132,10 @@ signal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> Progr
 signal = newNamedSignal
 
 (<--) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a, FreeExp (IExp i)) => Signal a -> a -> ProgramT i m ()
-(<--) s e = setSignal s (litE e)
+(<--) s e = s <=- (litE e)
 
-(<:-) :: (SignalCMD (IExp i) :<: i, ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m)
-      => Signal a -> Constant a -> ProgramT i m ()
-(<:-) s c = setSignal s =<< getConstant c
-
-(<:=) :: (SignalCMD (IExp i) :<: i, VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m)
-      => Signal a -> Variable a -> ProgramT i m ()
-(<:=) s v = setSignal s =<< unsafeFreezeVariable v
+(<=-) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
+(<=-) s e = setSignal s e
 
 (<==) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m) => Signal a -> Signal a -> ProgramT i m ()
 (<==) s v = setSignal s =<< unsafeFreezeSignal v
@@ -342,6 +348,13 @@ iff
   -> ProgramT i m ()
 iff b t e = conditional (b, t) [] (Just e)
 
+ifE
+  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) Bool)
+  => (IExp i Bool, ProgramT i m ())
+  -> (IExp i Bool, ProgramT i m ())
+  -> ProgramT i m ()
+ifE a b = conditional a [b] (Nothing)
+
 --------------------------------------------------------------------------------
 
 switch
@@ -430,15 +443,12 @@ process is = singleE . StructProcess is
 --------------------------------------------------------------------------------
 -- ** ...
 
-namedInteger
-  :: (IntegerCMD (IExp i) :<: i, PredicateExp (IExp i) a, Num a)
-  => VarId -> Maybe (a, a) -> ProgramT i m (Signal Integer)
-namedInteger v m = singleE (SignalInteger v m)
-
 integer
-  :: (IntegerCMD (IExp i) :<: i, PredicateExp (IExp i) a, Num a)
-  => Maybe (a, a) -> ProgramT i m (Signal Integer)
-integer = namedInteger (Base "i")
+  :: ( IntegerCMD   (IExp i) :<: i
+     , PredicateExp (IExp i) Integer
+     , KnownNat n)
+  => Signal (Bits n) -> ProgramT i m (IExp i Integer)
+integer = singleE . ToInteger
 
 --------------------------------------------------------------------------------
 

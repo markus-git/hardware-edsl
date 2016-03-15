@@ -67,6 +67,12 @@ data SignalCMD (exp :: * -> *) (prog :: * -> *) a
       Signal (Bits n) -> Range low  high  ->
       Signal (Bits m) -> Range low' high' ->
       SignalCMD exp prog ()
+    CopySliceDynamic :: ( PredicateExp exp i
+                        , Integral i
+                        , Ix i) =>
+      Signal a -> exp i -> exp i ->
+      Signal a -> exp i -> exp i ->
+      SignalCMD exp prog ()
     --------------------------------
 
 type instance IExp (SignalCMD e)       = e
@@ -83,6 +89,7 @@ instance HFunctor (SignalCMD exp)
     hfmap _ (GetIndex  s i)        = GetIndex  s i
     hfmap _ (GetSlice  s r)        = GetSlice  s r
     hfmap _ (CopySlice s r s' r')  = CopySlice s r s' r'
+    hfmap _ (CopySliceDynamic a b c d e f) = CopySliceDynamic a b c d e f
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -376,21 +383,14 @@ instance HFunctor (StructuralCMD exp)
 
 data IntegerCMD (exp :: * -> *) (prog :: * -> *) a
   where
-    SignalInteger
-      :: (PredicateExp exp a, Num a)
-      => VarId -> Maybe (a, a) -> IntegerCMD exp prog (Signal Integer)
     ToInteger
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i
-         , Num a)
-      => exp i -> exp i -> Array i a -> IntegerCMD exp prog (exp Integer)
+      :: (PredicateExp exp Integer, KnownNat n)
+      => Signal (Bits n)
+      -> IntegerCMD exp prog (exp Integer)
 
 instance HFunctor (IntegerCMD exp)
   where
-    hfmap _ (SignalInteger v m) = SignalInteger v m
-    hfmap _ (ToInteger l h a)   = ToInteger l h a
+    hfmap _ (ToInteger s) = ToInteger s
 
 --------------------------------------------------------------------------------
 
