@@ -20,7 +20,7 @@ data VarId
 -- | ...
 instance IsString VarId
   where
-    fromString = Unique
+    fromString = Base
 
 --------------------------------------------------------------------------------
 

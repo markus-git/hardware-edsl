@@ -1,18 +1,23 @@
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE KindSignatures      #-}
-{-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE Rank2Types          #-}
-{-# LANGUAGE PolyKinds           #-}
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 module Language.Embedded.Hardware.Command.CMD where
 
-import Language.Embedded.VHDL               (Mode)
-import Language.Embedded.Hardware.Interface (PredicateExp, VarId)
+import Language.Embedded.VHDL (Mode)
+import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Represent.Bit
 
+import Control.Monad.Reader (ReaderT(..), runReaderT, lift)
 import Control.Monad.Operational.Higher
 
 import Data.Ix       (Ix)
@@ -26,70 +31,67 @@ import GHC.TypeLits
 -- * Hardware commands.
 --------------------------------------------------------------------------------
 
+class    ToIdent a            where toIdent :: a -> Ident
+instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
+instance ToIdent (Signal   a) where toIdent (SignalC   i) = Ident i
+instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
+instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
+instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
+instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
+
+-- | ...
+swapM :: Monad m => Maybe (m a) -> m (Maybe a)
+swapM = maybe (return Nothing) (>>= return . Just)
+
+--------------------------------------------------------------------------------
+-- ** Values.
+
+-- | Value representation.
+data Val a = ValC VarId | ValE a
+
+-- | ...
+valToExp :: (PredicateExp exp a, FreeExp exp) => Val a -> exp a
+valToExp (ValC i) = varE i
+valToExp (ValE a) = litE a
+
 --------------------------------------------------------------------------------
 -- ** Signals.
 
 -- | Signal representation.
 data Signal a = SignalC VarId | SignalE (IORef a)
 
--- | ...
-data Range (a :: Nat) (b :: Nat) = R
-
 -- | Commands for signals.
-data SignalCMD (exp :: * -> *) (prog :: * -> *) a
+data SignalCMD fs a
   where
     -- ^ Create a new signal.
-    NewSignal :: PredicateExp exp a => VarId -> Mode -> Maybe (exp a) -> SignalCMD exp prog (Signal a)
+    NewSignal :: pred a => VarId -> Mode -> Maybe (exp a) -> SignalCMD (Param3 prog exp pred) (Signal a)
     -- ^ Fetch the contents of a signal.
-    GetSignal :: PredicateExp exp a => Signal a -> SignalCMD exp prog (exp a)
+    GetSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
     -- ^ Write the value to a signal.
-    SetSignal :: PredicateExp exp a => Signal a -> exp a -> SignalCMD exp prog ()
+    SetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching a signal.
-    UnsafeFreezeSignal :: PredicateExp exp a => Signal a -> SignalCMD exp prog (exp a)
+    UnsafeFreezeSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
 
-    -- *** Move to ArrayCMD and make a class for "array" types like Bits *** ---
-    SetOthers :: (PredicateExp exp Bool) =>
-      Signal (Bits n) -> exp Bool -> SignalCMD exp prog ()
-    GetIndex  :: (PredicateExp exp Bool, PredicateExp exp i, Integral i, Ix i) =>
-      Signal (Bits n) -> exp i -> SignalCMD exp prog (exp Bool)
-    GetSlice  :: ( PredicateExp exp Integer
-                 , KnownNat low, KnownNat high
-                 , low <= high
-                 ) =>
-      Signal (Bits n) -> Range low high ->
-      SignalCMD exp prog (Signal (Bits (high - low)))
-    CopySlice :: ( PredicateExp exp Integer
-                 , KnownNat low,  KnownNat high
-                 , KnownNat low', KnownNat high'
-                 , low  <= high
-                 , low' <= high'
-                 ) =>
-      Signal (Bits n) -> Range low  high  ->
-      Signal (Bits m) -> Range low' high' ->
-      SignalCMD exp prog ()
-    CopySliceDynamic :: ( PredicateExp exp i
-                        , Integral i
-                        , Ix i) =>
-      Signal a -> exp i -> exp i ->
-      Signal a -> exp i -> exp i ->
-      SignalCMD exp prog ()
-    --------------------------------
-
-type instance IExp (SignalCMD e)       = e
-type instance IExp (SignalCMD e :+: i) = e
-
-instance HFunctor (SignalCMD exp)
+instance HFunctor SignalCMD
   where
-    hfmap _ (NewSignal n m e)      = NewSignal n m e
-    hfmap _ (GetSignal s)          = GetSignal s
-    hfmap _ (SetSignal s e)        = SetSignal s e
+    hfmap _ (NewSignal n m e) = NewSignal n m e
+    hfmap _ (GetSignal s) = GetSignal s
+    hfmap _ (SetSignal s e) = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
-    -- ....
-    hfmap _ (SetOthers s b)        = SetOthers s b
-    hfmap _ (GetIndex  s i)        = GetIndex  s i
-    hfmap _ (GetSlice  s r)        = GetSlice  s r
-    hfmap _ (CopySlice s r s' r')  = CopySlice s r s' r'
-    hfmap _ (CopySliceDynamic a b c d e f) = CopySliceDynamic a b c d e f
+
+instance HBifunctor SignalCMD
+  where
+    hbimap _ f (NewSignal n m e) = NewSignal n m (fmap f e)
+    hbimap _ _ (GetSignal s) = GetSignal s
+    hbimap _ f (SetSignal s e) = SetSignal s (f e)
+    hbimap _ _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
+
+instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr
+  where
+    reexpressInstrEnv reexp (NewSignal n m e) = lift . singleInj . NewSignal n m =<< swapM (fmap reexp e)
+    reexpressInstrEnv reexp (GetSignal s) = lift $ singleInj $ GetSignal s
+    reexpressInstrEnv reexp (SetSignal s e) = lift . singleInj . SetSignal s =<< reexp e
+    reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s    
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -98,26 +100,37 @@ instance HFunctor (SignalCMD exp)
 data Variable a = VariableC VarId | VariableE (IORef a)
 
 -- | Commands for variables.
-data VariableCMD (exp :: * -> *) (prog :: * -> *) a
+data VariableCMD fs a
   where
     -- ^ Create a new variable.
-    NewVariable :: PredicateExp exp a => VarId -> Maybe (exp a) -> VariableCMD exp prog (Variable a)
+    NewVariable :: pred a => VarId -> Maybe (exp a) -> VariableCMD (Param3 prog exp pred) (Variable a)
     -- ^ Fetch the contents of a variable.
-    GetVariable :: PredicateExp exp a => Variable a -> VariableCMD exp prog (exp a)
+    GetVariable :: pred a => Variable a -> VariableCMD (Param3 prog exp pred) (Val a)
     -- ^ Write the value to a variable.
-    SetVariable :: PredicateExp exp a => Variable a -> exp a -> VariableCMD exp prog ()
+    SetVariable :: pred a => Variable a -> exp a -> VariableCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching a variable.
-    UnsafeFreezeVariable :: PredicateExp exp a => Variable a -> VariableCMD exp prog (exp a)
+    UnsafeFreezeVariable :: pred a => Variable a -> VariableCMD (Param3 prog exp pred) (Val a)
 
-type instance IExp (VariableCMD e)       = e
-type instance IExp (VariableCMD e :+: i) = e
-
-instance HFunctor (VariableCMD exp)
+instance HFunctor VariableCMD
   where
     hfmap _ (NewVariable n e)        = NewVariable n e
     hfmap _ (GetVariable s)          = GetVariable s
     hfmap _ (SetVariable s e)        = SetVariable s e
     hfmap _ (UnsafeFreezeVariable s) = UnsafeFreezeVariable s
+
+instance HBifunctor VariableCMD
+  where
+    hbimap _ f (NewVariable n e) = NewVariable n (fmap f e)
+    hbimap _ _ (GetVariable v) = GetVariable v
+    hbimap _ f (SetVariable v e) = SetVariable v (f e)
+    hbimap _ _ (UnsafeFreezeVariable v) = UnsafeFreezeVariable v
+
+instance (VariableCMD :<: instr) => Reexpressible VariableCMD instr
+  where
+    reexpressInstrEnv reexp (NewVariable n e) = lift . singleInj . NewVariable n =<< swapM (fmap reexp e)
+    reexpressInstrEnv reexp (GetVariable v) = lift $ singleInj $ GetVariable v
+    reexpressInstrEnv reexp (SetVariable v e) = lift . singleInj . SetVariable v =<< reexp e
+    reexpressInstrEnv reexp (UnsafeFreezeVariable v) = lift $ singleInj $ UnsafeFreezeVariable v
 
 --------------------------------------------------------------------------------
 -- ** Constants.
@@ -126,20 +139,27 @@ instance HFunctor (VariableCMD exp)
 data Constant a = ConstantC VarId | ConstantE a
 
 -- | Commands for constants.
-data ConstantCMD (exp :: * -> *) (prog :: * -> *) a
+data ConstantCMD fs a
   where
     -- ^ Create a new constant.
-    NewConstant :: PredicateExp exp a => VarId -> exp a -> ConstantCMD exp prog (Constant a)
+    NewConstant :: pred a => VarId -> exp a -> ConstantCMD (Param3 prog exp pred) (Constant a)
     -- ^ Fetch the value of a constant.
-    GetConstant :: PredicateExp exp a => Constant a -> ConstantCMD exp prog (exp a)
+    GetConstant :: pred a => Constant a -> ConstantCMD (Param3 prog exp pred) (Val a)
 
-type instance IExp (ConstantCMD e)       = e
-type instance IExp (ConstantCMD e :+: i) = e
-
-instance HFunctor (ConstantCMD exp)
+instance HFunctor ConstantCMD
   where
-    hfmap _ (NewConstant v e) = NewConstant v e
+    hfmap _ (NewConstant n e) = NewConstant n e
     hfmap _ (GetConstant c)   = GetConstant c
+
+instance HBifunctor ConstantCMD
+  where
+    hbimap _ f (NewConstant n e) = NewConstant n (f e)
+    hbimap _ _ (GetConstant c)   = GetConstant c
+
+instance (ConstantCMD :<: instr) => Reexpressible ConstantCMD instr
+  where
+    reexpressInstrEnv reexp (NewConstant n e) = lift . singleInj . NewConstant n =<< reexp e
+    reexpressInstrEnv reexp (GetConstant c) = lift $ singleInj $ GetConstant c
 
 --------------------------------------------------------------------------------
 -- ** Arrays.
@@ -155,17 +175,19 @@ class CompArrayIx exp
 data Array i a = ArrayC VarId | ArrayE (IORef (IOArray i a))
 
 -- | Commands for signal arrays.
-data ArrayCMD (exp :: * -> *) (prog :: * -> *) a
-  where
-    NewArray
-      :: ArrayCMD exp prog (Array i Bool)
-    
-type instance IExp (ArrayCMD e)       = e
-type instance IExp (ArrayCMD e :+: i) = e
+data ArrayCMD fs a
 
-instance HFunctor (ArrayCMD exp)
+instance HFunctor ArrayCMD 
   where
     hfmap _ _ = undefined
+
+instance HBifunctor ArrayCMD
+  where
+    hbimap _ _ _ = undefined
+
+instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr
+  where
+    reexpressInstrEnv _ _ = undefined
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -177,80 +199,84 @@ data VArray i a = VArrayC VarId | VArrayE (IORef (IOArray i a))
 data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
 
 -- | Commands for variable arrays.
-data VArrayCMD (exp :: * -> *) (prog :: * -> *) a
+data VArrayCMD fs a
   where
     -- ^ Creates an array of given length.
-    NewVArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => VarId -> exp i -> VArrayCMD exp prog (VArray i a)
+    NewVArray :: (pred a, Integral i, Ix i) => VarId -> exp i -> VArrayCMD (Param3 prog exp pred) (VArray i a)
     -- ^ Creates an array from the given list of elements.
-    InitVArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => VarId -> [a] -> VArrayCMD exp prog (VArray i a)
+    InitVArray :: (pred a, Integral i, Ix i) => VarId -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray i a)
     -- ^ Fetches the array's value at a specified index.
-    GetVArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => exp i -> VArray i a -> VArrayCMD exp prog (exp a)
+    GetVArray :: (pred a, Integral i, Ix i) => exp i -> VArray i a -> VArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetVArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => exp i -> exp a -> VArray i a -> VArrayCMD exp prog ()
-    CopyVArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => VArray i a -> VArray i a -> exp i -> VArrayCMD exp prog ()
+    SetVArray :: (pred a, Integral i, Ix i) => exp i -> exp a -> VArray i a -> VArrayCMD (Param3 prog exp pred) ()
+    -- ^ ...
+    CopyVArray:: (pred a, Integral i, Ix i) => VArray i a -> VArray i a -> exp i -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching an array's value.
-    UnsafeFreezeVArray
-      :: ( PredicateExp exp a
-         , PredicateExp exp i
-         , Integral i
-         , Ix i)
-      => VArray i a -> VArrayCMD exp prog (IArray i a)
+    UnsafeFreezeVArray :: (pred a, Integral i, Ix i) => VArray i a -> VArrayCMD (Param3 prog exp pred) (IArray i a)
+    -- ^ ...
+    UnsafeThawVArray :: (pred a, Integral i, Ix i) => IArray i a -> VArrayCMD (Param3 prog exp pred) (Array i a)
 
-type instance IExp (VArrayCMD e)       = e
-type instance IExp (VArrayCMD e :+: i) = e
-
-instance HFunctor (VArrayCMD exp)
+instance HFunctor VArrayCMD
   where
-    hfmap _ (NewVArray n i)        = NewVArray n i
-    hfmap _ (InitVArray n is)      = InitVArray n is
-    hfmap _ (GetVArray i a)        = GetVArray i a
-    hfmap _ (SetVArray i e a)      = SetVArray i e a
-    hfmap _ (CopyVArray a b l)     = CopyVArray a b l
+    hfmap _ (NewVArray n i) = NewVArray n i
+    hfmap _ (InitVArray n is) = InitVArray n is
+    hfmap _ (GetVArray i a) = GetVArray i a
+    hfmap _ (SetVArray i e a) = SetVArray i e a
+    hfmap _ (CopyVArray a b l) = CopyVArray a b l
     hfmap _ (UnsafeFreezeVArray a) = UnsafeFreezeVArray a
+    hfmap _ (UnsafeThawVArray a) = UnsafeThawVArray a
+
+instance HBifunctor VArrayCMD
+  where
+    hbimap _ f (NewVArray n i) = NewVArray n (f i)
+    hbimap _ _ (InitVArray n is) = InitVArray n is
+    hbimap _ f (GetVArray i a) = GetVArray (f i) a
+    hbimap _ f (SetVArray i e a) = SetVArray (f i) (f e) a
+    hbimap _ f (CopyVArray a b l) = CopyVArray a b (f l)
+    hbimap _ _ (UnsafeFreezeVArray a) = UnsafeFreezeVArray a
+    hbimap _ _ (UnsafeThawVArray a) = UnsafeThawVArray a
+
+instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr
+  where
+    reexpressInstrEnv reexp (NewVArray n i) = lift . singleInj . NewVArray n =<< reexp i
+    reexpressInstrEnv reexp (InitVArray n is) = lift $ singleInj $ InitVArray n is
+    reexpressInstrEnv reexp (GetVArray i a) = do i' <- reexp i; lift $ singleInj $ GetVArray i' a
+    reexpressInstrEnv reexp (SetVArray i e a) = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetVArray i' e' a
+    reexpressInstrEnv reexp (CopyVArray a b l) = lift . singleInj . CopyVArray a b =<< reexp l
+    reexpressInstrEnv reexp (UnsafeFreezeVArray a) = lift $ singleInj $ UnsafeFreezeVArray a
+    reexpressInstrEnv reexp (UnsafeThawVArray a) = lift $ singleInj $ UnsafeThawVArray a
 
 --------------------------------------------------------------------------------
 -- ** Looping.
 
 -- | Commands for looping constructs.
-data LoopCMD (exp :: * -> *) (prog :: * -> *) a
+data LoopCMD fs a
   where
     -- ^ Creates a new for loop.
-    For   :: (PredicateExp exp n, Integral n) => exp n -> (exp n -> prog ()) -> LoopCMD exp prog ()
+    For   :: (pred n, Integral n) => exp n -> (Val n -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
     -- ^ Creates a new while loop.
-    While :: PredicateExp exp Bool => prog (exp Bool) -> prog () -> LoopCMD exp prog ()
+    While :: prog (exp Bool) -> prog () -> LoopCMD (Param3 prog exp pred) ()
 
-type instance IExp (LoopCMD e)       = e
-type instance IExp (LoopCMD e :+: i) = e
-
-instance HFunctor (LoopCMD exp)
+instance HFunctor LoopCMD
   where
     hfmap f (For r step)      = For r (f . step)
     hfmap f (While cont step) = While (f cont) (f step)
+
+instance HBifunctor LoopCMD
+  where
+    hbimap g f (For r step) = For (f r) (g . step)
+    hbimap g f (While cont step) = While (g $ fmap f cont) (g step)
+
+instance (LoopCMD :<: instr) => Reexpressible LoopCMD instr
+  where
+    reexpressInstrEnv reexp (For r step) = do
+      r' <- reexp r
+      ReaderT $ \env -> singleInj $
+        For r' (flip runReaderT env . step)
+    reexpressInstrEnv reexp (While cont step) = do
+      ReaderT $ \env -> singleInj $
+        While (runReaderT (cont >>= reexp) env)
+              (runReaderT step env)
 
 --------------------------------------------------------------------------------
 -- ** Conditional statements.
@@ -259,36 +285,61 @@ instance HFunctor (LoopCMD exp)
 data When a prog = When (Constraint a) (prog ())
 
 -- | ...
-data Constraint a
-       = Is a
-       | To a a
+data Constraint a = Is a | To a a
 
 -- | Commnads for conditional statements.
-data ConditionalCMD (exp :: * -> *) (prog :: * -> *) a
+data ConditionalCMD fs a
   where
-    If :: PredicateExp exp Bool =>
-      (exp Bool, prog ())   ->
-      [(exp Bool, prog ())] ->
-      Maybe (prog ())       ->
-      ConditionalCMD exp prog ()
+    -- ^ ...
+    If :: (exp Bool, prog ()) -> [(exp Bool, prog ())] -> Maybe (prog ()) -> ConditionalCMD (Param3 prog exp pred) ()
+    -- ^ ...
+    Case :: pred a => exp a -> [When a prog] -> Maybe (prog ()) -> ConditionalCMD (Param3 prog exp pred) ()
+    -- ^ ...
+    Null :: ConditionalCMD (Param3 prog exp pred) ()
 
-    Case :: (PredicateExp exp a, Eq a, Ord a) =>
-      exp a ->
-      [When a prog] ->
-      Maybe (prog ()) ->
-      ConditionalCMD exp prog ()
-
-    Null :: ConditionalCMD exp prog ()
-
-type instance IExp (ConditionalCMD e)       = e
-type instance IExp (ConditionalCMD e :+: i) = e
-
-instance HFunctor (ConditionalCMD exp)
+instance HFunctor ConditionalCMD
   where
     hfmap f (If   a cs b) = If (fmap f a) (fmap (fmap f) cs) (fmap f b)
     hfmap f (Case e xs d) = Case e (fmap (wmap f) xs) (fmap f d)
       where wmap f (When a p) = When a (f p)
     hfmap _ (Null)        = Null
+
+instance HBifunctor ConditionalCMD
+  where
+    hbimap g f (If a cs b) = If (pmap a) (fmap pmap cs) (fmap g b)
+      where pmap (x, y) = (f x, g y)
+    hbimap g f (Case e xs d) = Case (f e) (fmap wmap xs) (fmap g d)
+      where wmap (When a p) = When a (g p)
+    hbimap _ _ (Null) = Null
+
+instance (ConditionalCMD :<: instr) => Reexpressible ConditionalCMD instr
+  where
+    reexpressInstrEnv reexp (If (c, a) cs b) =
+      do let (xs, ys) = unzip cs
+         c'  <-      reexp c
+         xs' <- mapM reexp xs
+         ReaderT $ \env ->
+           let ys' = fmap (flip runReaderT env) ys
+           in singleInj $
+             If (c', runReaderT a env)
+                (zip xs' ys')
+                (fmap (flip runReaderT env) b)
+    reexpressInstrEnv reexp (Case c cs d) =
+      do let (xs, ys) = unzipWhen cs
+         c' <- reexp c
+         ReaderT $ \env ->
+           let ys' = fmap (flip runReaderT env) ys
+           in singleInj $
+             Case c'
+               (zipWhen xs ys')
+               (fmap (flip runReaderT env) d)
+    reexpressInstrEnv reexp (Null) = lift $ singleInj $ Null
+
+unzipWhen :: [When a p] -> ([Constraint a], [p ()])
+unzipWhen = unzip . fmap (\(When a p) -> (a, p))
+
+zipWhen   :: [Constraint a] -> [p ()] -> [When a p]
+zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 
 --------------------------------------------------------------------------------
 -- ** Components.
@@ -317,7 +368,7 @@ data Arg a
     (:>) :: Signal a -> Arg b -> Arg (Signal a -> b)
 
 infixr :>
-
+{-
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD (exp :: * -> *) (prog :: * -> *) a
   where
@@ -338,24 +389,18 @@ instance HFunctor (ComponentCMD exp)
   where
     hfmap f (StructComponent n sig)        = StructComponent n (hfmap f sig)
     hfmap f (PortMap (Component m sig) as) = PortMap (Component m (hfmap f sig)) as
-
+-}
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
 data Ident = Ident VarId
-
-class    ToIdent a where toIdent :: a -> Ident
-instance ToIdent (Signal a)   where toIdent (SignalC i)   = Ident i
-instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
-instance ToIdent (Array i a)  where toIdent (ArrayC i)    = Ident i
-instance ToIdent (VArray i a) where toIdent (VArrayC i)   = Ident i
 
 -- | Construct the untyped signal list for processes.
 (.:) :: ToIdent a => a -> [Ident] -> [Ident]
 (.:) x xs = toIdent x : xs
 
 infixr .:
-
+{-
 -- | Commands for structural entities.
 data StructuralCMD (exp :: * -> *) (prog :: * -> *) a
   where
@@ -377,20 +422,6 @@ instance HFunctor (StructuralCMD exp)
     hfmap f (StructEntity e p)         = StructEntity e (f p)
     hfmap f (StructArchitecture e a p) = StructArchitecture e a (f p)
     hfmap f (StructProcess xs p)       = StructProcess xs (f p)
-
---------------------------------------------------------------------------------
--- ...
-
-data IntegerCMD (exp :: * -> *) (prog :: * -> *) a
-  where
-    ToInteger
-      :: (PredicateExp exp Integer, KnownNat n)
-      => Signal (Bits n)
-      -> IntegerCMD exp prog (exp Integer)
-
-instance HFunctor (IntegerCMD exp)
-  where
-    hfmap _ (ToInteger s) = ToInteger s
-
+-}
 --------------------------------------------------------------------------------
 
