@@ -345,21 +345,21 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 -- ** Components.
 
 -- | Processes.
-data Component exp m a = Component (Maybe VarId) (Sig exp m a)
+data Component fs a = Component (Maybe VarId) (Sig fs a)
 
 -- | Signature declaring type of processes.
-data Sig exp m a
+data Sig fs a
   where
     -- ^ Fully applied program, all signals are passed in a 'pointer' style.
     --   The monad `m` is implicit on all returns.
-    Unit :: m () -> Sig exp m ()
+    Unit :: prog () -> Sig (Param3 prog exp pred) ()
     
     -- ^ ...
-    Lam  :: PredicateExp exp a
+    Lam  :: pred a
       => VarId
       -> Mode
-      -> (Signal a -> Sig exp m b)
-      -> Sig exp m (Signal a -> b)
+      -> (Signal a -> Sig (Param3 prog exp pred) b)
+      -> Sig (Param3 prog exp pred) (Signal a -> b)
 
 -- | Arguments for a signature.
 data Arg a
@@ -368,28 +368,41 @@ data Arg a
     (:>) :: Signal a -> Arg b -> Arg (Signal a -> b)
 
 infixr :>
-{-
+
 -- | Commands for generating stand-alone components and calling them.
-data ComponentCMD (exp :: * -> *) (prog :: * -> *) a
+data ComponentCMD fs a
   where
     -- ^ ...
-    StructComponent :: VarId -> Sig exp prog a -> ComponentCMD exp prog (Maybe VarId)
+    StructComponent
+      :: VarId
+      -> Sig (Param3 prog exp pred) a
+      -> ComponentCMD (Param3 prog exp pred) (Maybe VarId)
     -- ^ ...
-    PortMap         :: Component exp prog a -> Arg a -> ComponentCMD exp prog ()
+    PortMap
+      :: Component (Param3 prog exp pred) a
+      -> Arg a
+      -> ComponentCMD (Param3 prog exp pred) ()
 
-type instance IExp (ComponentCMD e)       = e
-type instance IExp (ComponentCMD e :+: i) = e
-
-instance HFunctor (Sig exp)
+instance HFunctor Sig
   where
     hfmap f (Unit m)     = Unit $ f m
     hfmap f (Lam  n m g) = Lam n m (hfmap f . g)
 
-instance HFunctor (ComponentCMD exp)
+instance HBifunctor Sig
+  where
+    hbimap g f (Unit m)    = Unit $ g m
+    hbimap g f (Lam n m h) = Lam n m (hbimap g f . h)
+
+instance HFunctor ComponentCMD
   where
     hfmap f (StructComponent n sig)        = StructComponent n (hfmap f sig)
     hfmap f (PortMap (Component m sig) as) = PortMap (Component m (hfmap f sig)) as
--}
+
+instance HBifunctor ComponentCMD
+  where
+    hbimap g f (StructComponent n sig)        = StructComponent n (hbimap g f sig)
+    hbimap g f (PortMap (Component m sig) as) = PortMap (Component m (hbimap g f sig)) as
+
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
@@ -400,28 +413,33 @@ data Ident = Ident VarId
 (.:) x xs = toIdent x : xs
 
 infixr .:
-{-
+
 -- | Commands for structural entities.
-data StructuralCMD (exp :: * -> *) (prog :: * -> *) a
+--
+-- *** Param exp?
+data StructuralCMD fs a
   where
     -- ^ Wraps the program in an entity.
     StructEntity
-      :: VarId -> prog a -> StructuralCMD exp prog a
+      :: VarId -> prog a -> StructuralCMD (Param2 prog exp) a
     -- ^ Wraps the program in an architecture.
     StructArchitecture
-      :: VarId -> VarId -> prog a -> StructuralCMD exp prog a
+      :: VarId -> VarId -> prog a -> StructuralCMD (Param2 prog exp) a
     -- ^ Wraps the program in a process.
     StructProcess
-      :: [Ident] -> prog () -> StructuralCMD exp prog ()
+      :: [Ident] -> prog () -> StructuralCMD (Param2 prog exp) ()
 
-type instance IExp (StructuralCMD e)       = e
-type instance IExp (StructuralCMD e :+: i) = e
-
-instance HFunctor (StructuralCMD exp)
+instance HFunctor StructuralCMD
   where
     hfmap f (StructEntity e p)         = StructEntity e (f p)
     hfmap f (StructArchitecture e a p) = StructArchitecture e a (f p)
     hfmap f (StructProcess xs p)       = StructProcess xs (f p)
--}
+
+instance HBifunctor StructuralCMD
+  where
+    hbimap g f (StructEntity e p)         = StructEntity e (g p)
+    hbimap g f (StructArchitecture e a p) = StructArchitecture e a (g p)
+    hbimap g f (StructProcess xs p)       = StructProcess xs (g p)
+
 --------------------------------------------------------------------------------
 
