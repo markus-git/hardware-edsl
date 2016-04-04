@@ -1,5 +1,11 @@
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Language.Embedded.Hardware.Expression.Represent
-  ( Rep(..)
+  ( HType(..)
+  , Rep(..)
+  , compT
+  
   , declareBoolean
   , declareNumeric
   , declareFloating
@@ -19,6 +25,7 @@ import Data.Word
 import Data.Ix
 import Data.Char   (intToDigit)
 import Data.Bits   (shiftR)
+import Data.Typeable
 import Text.Printf
 import Numeric     (showIntAtBase)
 
@@ -29,14 +36,19 @@ import qualified Data.ByteString as B
 -- * Representation of types.
 --------------------------------------------------------------------------------
 
+-- | Collection of required classes for hardware expressions.
+class    (Typeable a, Rep a, Eq a) => HType a
+instance (Typeable a, Rep a, Eq a) => HType a
+
 -- | A 'rep'resentable value.
 class Rep a
   where
     declare :: proxy a -> VHDL Type
     format  :: a       -> String
 
-printBits :: (PrintfArg a, PrintfType b) => Int -> a -> b
-printBits zeroes = printf ("\"%0" ++ show zeroes ++ "b\"")
+-- | ...
+compT :: HType a => proxy a -> VHDL Type
+compT = declare
 
 --------------------------------------------------------------------------------
 -- ** Boolean
@@ -113,7 +125,10 @@ instance Rep Integer where
   format    = show
 
 --------------------------------------------------------------------------------
-  
+
+printBits :: (PrintfArg a, PrintfType b) => Int -> a -> b
+printBits zeroes = printf ("\"%0" ++ show zeroes ++ "b\"")
+
 declareBoolean :: VHDL ()
 declareBoolean =
   do newLibrary "IEEE"

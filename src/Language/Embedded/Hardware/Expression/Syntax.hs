@@ -25,10 +25,6 @@ import qualified Data.Bits as Bits
 -- * Syntax of hardware expressions.
 --------------------------------------------------------------------------------
 
--- | Collection of required classes for hardware expressions.
-class    (Typeable a, Rep a, Eq a) => HType a
-instance (Typeable a, Rep a, Eq a) => HType a
-
 -- | Domain of expressions.
 type Dom =
       Expression

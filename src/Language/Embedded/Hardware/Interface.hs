@@ -45,10 +45,7 @@ class FreeExp exp => EvaluateExp exp
 -- | General interface for compiling expressions.
 class FreeExp exp => CompileExp exp
   where
-    -- | Compilation of type kind.
-    compT :: PredicateExp exp a => exp a -> VHDL Type
-
     -- | Compilation of expressions.
-    compE :: PredicateExp exp a => exp a -> VHDL Expression
+    compE :: exp a -> VHDL Expression
 
 --------------------------------------------------------------------------------
