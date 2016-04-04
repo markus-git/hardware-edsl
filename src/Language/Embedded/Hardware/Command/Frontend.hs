@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ConstraintKinds     #-}
 
 module Language.Embedded.Hardware.Command.Frontend where
 
@@ -24,189 +25,142 @@ import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 import GHC.TypeLits
 
 --------------------------------------------------------------------------------
+-- *
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
 -- ** Signals.
 
 -- | Declare a named signal.
-initNamedSignal
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Signal a)
-initNamedSignal name = singleE . NewSignal (Base name) InOut . Just
-
--- | Declare an uninitialized named signal.
-newNamedSignal
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Signal a)
-newNamedSignal name = singleE $ NewSignal (Base name) InOut Nothing
+initNamedSignal :: (SignalCMD :<: instr, pred a) => String -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
+initNamedSignal name = singleInj . NewSignal (Base name) InOut . Just
 
 -- | Declare a signal.
-initSignal  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Signal a)
+initSignal  :: (SignalCMD :<: instr, pred a) => exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
 initSignal  = initNamedSignal "s"
 
+-- | Declare an uninitialized named signal.
+newNamedSignal :: (SignalCMD :<: instr, pred a) => String -> ProgramT instr (Param2 exp pred) m (Signal a)
+newNamedSignal name = singleInj $ NewSignal (Base name) InOut Nothing
+
 -- | Declare an uninitialized signal.
-newSignal   :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => ProgramT i m (Signal a)
+newSignal   :: (SignalCMD :<: instr, pred a) => ProgramT instr (Param2 exp pred) m (Signal a)
 newSignal = newNamedSignal "s"
 
 -- | Fetches the current value of a signal.
-getSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> ProgramT i m (IExp i a)
-getSignal = singleE . GetSignal
+getSignal :: (SignalCMD :<: instr, pred a, FreeExp exp, PredicateExp exp a,  Monad m)
+  => Signal a -> ProgramT instr (Param2 exp pred) m (exp a)
+getSignal = fmap valToExp . singleInj . GetSignal
 
 -- | Update the value of a signal.
-setSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
-setSignal s = singleE . SetSignal s
+setSignal :: (SignalCMD :<: instr, pred a) => Signal a -> exp a -> ProgramT instr (Param2 exp pred) m ()
+setSignal s = singleInj . SetSignal s
 
 -- | Unsafe version of fetching the contents of a signal.
-unsafeFreezeSignal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> ProgramT i m (IExp i a)
-unsafeFreezeSignal = singleE . UnsafeFreezeSignal
-
---------------------------------------------------------------------------------
--- ..meh.
-
--- | ...
-setOthers
-  :: ( SignalCMD    (IExp i) :<: i
-     , PredicateExp (IExp i) Bool)
-  => Signal (Bits n) -> IExp i Bit -> ProgramT i m ()
-setOthers s ix = singleE (SetOthers s ix)
-
-getIndex
-  :: ( SignalCMD (IExp i) :<: i
-     , PredicateExp (IExp i) Bool
-     , PredicateExp (IExp i) ix
-     , Integral ix
-     , Ix ix)
-  => Signal (Bits n) -> IExp i ix -> ProgramT i m (IExp i Bit)
-getIndex s ix = singleE (GetIndex s ix)
-
-getSlice
-  :: ( SignalCMD    (IExp i) :<: i
-     , PredicateExp (IExp i) Integer
-     , KnownNat low,  KnownNat high
-     , low  <= high
-     )
-  => Signal (Bits n) -> Range low high -> ProgramT i m (Signal (Bits (high - low)))
-getSlice s r = singleE (GetSlice s r)
-
-copySlice
-  :: ( SignalCMD    (IExp i) :<: i
-     , PredicateExp (IExp i) Integer
-     , KnownNat low,  KnownNat high
-     , KnownNat low', KnownNat high'
-     , low  <= high
-     , low' <= high'
-     )
-  => Signal (Bits u) -> Range low  high
-  -> Signal (Bits v) -> Range low' high'
-  -> ProgramT i m ()
-copySlice s r s' r' = singleE (CopySlice s r s' r')
-
-copySliceDynamic
-  :: ( SignalCMD    (IExp i) :<: i
-     , PredicateExp (IExp i) a
-     , PredicateExp (IExp i) ix
-     , Integral ix
-     , Ix ix)
-  => Signal a -> (IExp i ix, IExp i ix)
-  -> Signal a -> (IExp i ix, IExp i ix)
-  -> ProgramT i m ()
-copySliceDynamic s (l, h) s' (l', h') = singleE (CopySliceDynamic s l h s' l' h')
+unsafeFreezeSignal :: (SignalCMD :<: instr, pred a, FreeExp exp, PredicateExp exp a, Monad m)
+  => Signal a -> ProgramT instr (Param2 exp pred) m (exp a)
+unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
 
 --------------------------------------------------------------------------------
 -- ports.
 
 -- | Declare port signals of the given mode and assign it initial value.
-initPort, initUniquePort
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a)
-  => String -> Mode -> IExp i a -> ProgramT i m (Signal a)
-initPort       name m = singleE . NewSignal (Base   name) m . Just
-initUniquePort name m = singleE . NewSignal (Unique name) m . Just
+initPort, initUniquePort :: (SignalCMD :<: instr, pred a)
+  => String -> Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
+initPort       name m = singleInj . NewSignal (Base   name) m . Just
+initUniquePort name m = singleInj . NewSignal (Unique name) m . Just
 
 -- | Declare port signals of the given mode.
-newPort, newUniquePort
-  :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a)
-  => String -> Mode -> ProgramT i m (Signal a)
-newPort       name m = singleE $ NewSignal (Base   name) m Nothing
-newUniquePort name m = singleE $ NewSignal (Unique name) m Nothing
+newPort, newUniquePort :: (SignalCMD :<: instr, pred a)
+  => String -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
+newPort       name m = singleInj $ NewSignal (Base   name) m Nothing
+newUniquePort name m = singleInj $ NewSignal (Unique name) m Nothing
 
 --------------------------------------------------------------------------------
 -- short-hands.
 
-signal :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Signal a)
+signal :: (SignalCMD :<: instr, pred a) => String -> ProgramT instr (Param2 exp pred) m (Signal a)
 signal = newNamedSignal
 
-(<--) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a, FreeExp (IExp i)) => Signal a -> a -> ProgramT i m ()
-(<--) s e = s <=- (litE e)
+(<--) :: (SignalCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
+  => Signal a -> a -> ProgramT instr (Param2 exp pred) m ()
+(<--) s e = s <== (litE e)
 
-(<=-) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Signal a -> IExp i a -> ProgramT i m ()
-(<=-) s e = setSignal s e
+(<=-) :: (SignalCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
+  => Signal a -> Signal a -> ProgramT instr (Param2 exp pred) m ()
+(<=-) s v = do v' <- unsafeFreezeSignal v; s <== v'
 
-(<==) :: (SignalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Monad m) => Signal a -> Signal a -> ProgramT i m ()
-(<==) s v = setSignal s =<< unsafeFreezeSignal v
+(<==) :: (SignalCMD :<: instr, pred a) => Signal a -> exp a -> ProgramT instr (Param2 exp pred) m ()
+(<==) s e = setSignal s e
 
 --------------------------------------------------------------------------------
 -- ** Variables.
 
 -- | Declare a named variable.
-initNamedVariable 
-  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Variable a)
-initNamedVariable name = singleE . NewVariable (Base name) . Just
-
--- | Declare an uninitialized named variable.
-newNamedVariable
-  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Variable a)
-newNamedVariable name = singleE $ NewVariable (Base name) Nothing
+initNamedVariable :: (VariableCMD :<: instr, pred a)
+  => String -> exp a -> ProgramT instr (Param2 exp pred) m (Variable a)
+initNamedVariable name = singleInj . NewVariable (Base name) . Just
 
 -- | Declare a variable.
-initVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Variable a)
+initVariable :: (VariableCMD :<: instr, pred a) => exp a -> ProgramT instr (Param2 exp pred) m (Variable a)
 initVariable = initNamedVariable "v"
 
+-- | Declare an uninitialized named variable.
+newNamedVariable :: (VariableCMD :<: instr, pred a)
+  => String -> ProgramT instr (Param2 exp pred) m (Variable a)
+newNamedVariable name = singleInj $ NewVariable (Base name) Nothing
+
 -- | Declare an uninitialized variable.
-newVariable  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => ProgramT i m (Variable a)
+newVariable  :: (VariableCMD :<: instr, pred a) => ProgramT instr (Param2 exp pred) m (Variable a)
 newVariable = newNamedVariable "v"
 
 -- | Fetches the current value of a variable.
-getVariable  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> ProgramT i m (IExp i a)
-getVariable = singleE . GetVariable
+getVariable  :: (VariableCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
+  => Variable a -> ProgramT instr (Param2 exp pred) m (exp a)
+getVariable = fmap valToExp . singleInj . GetVariable
 
 -- | Updates the value of a variable.
-setVariable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> IExp i a -> ProgramT i m ()
-setVariable v = singleE . SetVariable v
+setVariable :: (VariableCMD :<: instr, pred a) => Variable a -> exp a -> ProgramT instr (Param2 exp pred) m ()
+setVariable v = singleInj . SetVariable v
 
 -- | Unsafe version of fetching the contents of a variable.
-unsafeFreezeVariable 
-  :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> ProgramT i m (IExp i a)
-unsafeFreezeVariable = singleE . UnsafeFreezeVariable
+unsafeFreezeVariable :: (VariableCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
+  => Variable a -> ProgramT instr (Param2 exp pred) m (exp a)
+unsafeFreezeVariable = fmap valToExp . singleInj . UnsafeFreezeVariable
 
 -- | Read the value of a reference without the monad in a very unsafe fashion.
-veryUnsafeFreezeVariable
-  :: (PredicateExp exp a, EvaluateExp exp, CompileExp exp) => Variable a -> exp a
+veryUnsafeFreezeVariable :: (PredicateExp exp a, FreeExp exp) => Variable a -> exp a
 veryUnsafeFreezeVariable (VariableE r) = litE $! unsafePerformIO $! readIORef r
 veryUnsafeFreezeVariable (VariableC v) = varE v
 
 --------------------------------------------------------------------------------
 -- short-hands.
 
-variable :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> ProgramT i m (Variable a)
+variable :: (VariableCMD :<: instr, pred a) => String -> ProgramT instr (Param2 exp pred) m (Variable a)
 variable = newNamedVariable
 
 -- | Short-hand for 'setVariable'.
-(==:) :: (VariableCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Variable a -> IExp i a -> ProgramT i m ()
+(==:) :: (VariableCMD :<: instr, pred a) => Variable a -> exp a -> ProgramT instr (Param2 exp pred) m ()
 (==:) = setVariable
 
 --------------------------------------------------------------------------------
 -- ** Constants.
 
-initNamedConstant
-  :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Constant a)
-initNamedConstant name = singleE . NewConstant (Base name)
+initNamedConstant :: (ConstantCMD :<: instr, pred a)
+  => String -> exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
+initNamedConstant name = singleInj . NewConstant (Base name)
 
-initConstant :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => IExp i a -> ProgramT i m (Constant a)
+initConstant :: (ConstantCMD :<: instr, pred a) => exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
 initConstant = initNamedConstant "c"
 
-getConstant :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => Constant a -> ProgramT i m (IExp i a)
-getConstant = singleE . GetConstant
+getConstant :: (ConstantCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
+  => Constant a -> ProgramT instr (Param2 exp pred) m (exp a)
+getConstant = fmap valToExp . singleInj . GetConstant
 
 --------------------------------------------------------------------------------
 -- short-hands.
 
-constant :: (ConstantCMD (IExp i) :<: i, PredicateExp (IExp i) a) => String -> IExp i a -> ProgramT i m (Constant a)
+constant :: (ConstantCMD :<: instr, pred a) => String -> exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
 constant = initNamedConstant
 
 --------------------------------------------------------------------------------
@@ -217,181 +171,133 @@ constant = initNamedConstant
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
 
--- | Create an uninitialized named virtual array.
-newNamedVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => String -> IExp instr i -> ProgramT instr m (VArray i a)
-newNamedVArray name = singleE . NewVArray (Base name)
+-- | Create an initialized named virtual array.
+initNamedVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
+  => String -> [a] -> ProgramT instr (Param2 exp pred) m (VArray i a)  
+initNamedVArray name = singleInj . InitVArray (Base name)
 
--- | Create an initialized named array.
-initNamedVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => String -> [a] -> ProgramT instr m (VArray i a)  
-initNamedVArray name = singleE . InitVArray (Base name)
-
-newVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => IExp instr i -> ProgramT instr m (VArray i a) 
-newVArray = newNamedVArray "a"
-
-initVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => [a] -> ProgramT instr m (VArray i a)
+-- | Create an initialized virtual array.
+initVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
+  => [a] -> ProgramT instr (Param2 exp pred) m (VArray i a)
 initVArray = initNamedVArray "a"
 
+-- | Create an uninitialized named virtual array.
+newNamedVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
+  => String -> exp i -> ProgramT instr (Param2 exp pred) m (VArray i a)
+newNamedVArray name = singleInj . NewVArray (Base name)
+
+-- | Create an uninitialized virtual array.
+newVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
+  => exp i -> ProgramT instr (Param2 exp pred) m (VArray i a) 
+newVArray = newNamedVArray "a"
+
 -- | Get an element of an array.
-getVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => IExp instr i -> VArray i a -> ProgramT instr m (IExp instr a)
-getVArray i = singleE . GetVArray i
+getVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i, PredicateExp exp a, FreeExp exp, Monad m)
+  => exp i -> VArray i a -> ProgramT instr (Param2 exp pred) m (exp a)
+getVArray i = fmap valToExp . singleInj . GetVArray i
 
 -- | Set an element of an array.
-setVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => IExp instr i -> IExp instr a -> VArray i a -> ProgramT instr m ()
-setVArray i a = singleE . SetVArray i a
+setVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
+  => exp i -> exp a -> VArray i a -> ProgramT instr (Param2 exp pred) m ()
+setVArray i a = singleInj . SetVArray i a
 
 -- | Copy a slice of one array to another.
-copyVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => VArray i a -> VArray i a -> IExp instr i -> ProgramT instr m ()
-copyVArray dest src = singleE . CopyVArray dest src
+copyVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
+  => VArray i a -> VArray i a -> exp i -> ProgramT instr (Param2 exp pred) m ()
+copyVArray dest src = singleInj . CopyVArray dest src
 
 -- | Freeze a mutable array into an immutable one by copying.
-freezeArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , Monad m
-     , VArrayCMD (IExp instr) :<: instr)
-  => VArray i a -> IExp instr i -> ProgramT instr m (IArray i a)
+freezeArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i, Monad m)
+  => VArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (IArray i a)
 freezeArray array len =
   do copy <- newVArray len
      copyVArray copy array len
      unsafeFreezeVArray copy
 
 -- | Unsafe version of fetching the contents of an array's index.
-unsafeFreezeVArray
-  :: ( PredicateExp (IExp instr) a
-     , PredicateExp (IExp instr) i
-     , Integral i, Ix i
-     , VArrayCMD (IExp instr) :<: instr)
-  => VArray i a -> ProgramT instr m (IArray i a)
-unsafeFreezeVArray = singleE . UnsafeFreezeVArray
+unsafeFreezeVArray :: (pred a, pred i, Integral i, Ix i, VArrayCMD :<: instr)
+  => VArray i a -> ProgramT instr (Param2 exp pred) m (IArray i a)
+unsafeFreezeVArray = singleInj . UnsafeFreezeVArray
 
 --------------------------------------------------------------------------------
 -- ** Looping.
 
 -- | For loop.
-for
-  :: (LoopCMD (IExp instr) :<: instr, PredicateExp (IExp instr) n, Integral n)
-  => IExp instr n
-  -> (IExp instr n -> ProgramT instr m ())
-  -> ProgramT instr m ()
-for range = singleE . For range
+for :: (LoopCMD :<: instr, pred n, Integral n, PredicateExp exp n, FreeExp exp, Monad m)
+  => exp n -> (exp n -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
+for range body = singleInj $ For range (body . valToExp)
 
 -- | While loop.
-while
-  :: (LoopCMD (IExp instr) :<: instr, PredicateExp (IExp instr) Bool)
-  => ProgramT instr m (IExp instr Bool)
-  -> ProgramT instr m ()
-  -> ProgramT instr m ()
-while cond = singleE . While cond
+while :: (LoopCMD :<: instr, pred Bool)
+  => ProgramT instr (Param2 exp pred) m (exp Bool)
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+while cond = singleInj . While cond
 
 --------------------------------------------------------------------------------
 -- ** Conditional statements.
 
 -- | Conditional statements guarded by if and then clauses with an optional else.
-conditional
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) Bool)
-  =>  (IExp i Bool, ProgramT i m ())
-  -> [(IExp i Bool, ProgramT i m ())]
-  -> Maybe (ProgramT i m ())
-  -> ProgramT i m ()
-conditional a bs = singleE . If a bs
+conditional :: (ConditionalCMD :<: instr, pred Bool)
+  =>  (exp Bool, ProgramT instr (Param2 exp pred) m ())
+  -> [(exp Bool, ProgramT instr (Param2 exp pred) m ())]
+  -> Maybe (ProgramT instr (Param2 exp pred) m ())
+  -> ProgramT instr (Param2 exp pred) m ()
+conditional a bs = singleInj . If a bs
 
 -- | Guarded statement.
-when
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) Bool)
-  => IExp i Bool
-  -> ProgramT i m ()
-  -> ProgramT i m ()
+when :: (ConditionalCMD :<: instr, pred Bool)
+  => exp Bool
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
 when e p = conditional (e, p) [] Nothing
 
 -- | Standard if-then-else statement.
 iff
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) Bool)
-  => IExp i Bool
-  -> ProgramT i m ()
-  -> ProgramT i m ()
-  -> ProgramT i m ()
+  :: (ConditionalCMD :<: instr, pred Bool)
+  => exp Bool
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
 iff b t e = conditional (b, t) [] (Just e)
 
 ifE
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) Bool)
-  => (IExp i Bool, ProgramT i m ())
-  -> (IExp i Bool, ProgramT i m ())
-  -> ProgramT i m ()
+  :: (ConditionalCMD :<: instr, pred Bool)
+  => (exp Bool, ProgramT instr (Param2 exp pred) m ())
+  -> (exp Bool, ProgramT instr (Param2 exp pred) m ())
+  -> ProgramT instr (Param2 exp pred) m ()
 ifE a b = conditional a [b] (Nothing)
 
 --------------------------------------------------------------------------------
 
-switch
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a, Ord a)
-  => IExp i a
-  -> [When a (ProgramT i m)]
-  -> ProgramT i m ()
-switch e choices = singleE (Case e choices Nothing)
+switch :: (ConditionalCMD :<: instr, pred a, Eq a, Ord a)
+  => exp a -> [When a (ProgramT instr (Param2 exp pred) m)] -> ProgramT instr (Param2 exp pred) m ()
+switch e choices = singleInj (Case e choices Nothing)
 
-switched 
-  :: (ConditionalCMD (IExp i) :<: i, PredicateExp (IExp i) a, Eq a, Ord a)
-  => IExp i a
-  -> [When a (ProgramT i m)]
-  -> ProgramT i m ()
-  -> ProgramT i m ()
-switched e choices def = singleE (Case e choices (Just def))
+switched  :: (ConditionalCMD :<: instr, pred a, Eq a, Ord a)
+  => exp a
+  -> [When a (ProgramT instr (Param2 exp pred) m)]
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+switched e choices def = singleInj (Case e choices (Just def))
 
-null :: (ConditionalCMD (IExp i) :<: i) => ProgramT i m ()
-null = singleE (Null)
+null :: (ConditionalCMD :<: instr) => ProgramT instr (Param2 exp pred) m ()
+null = singleInj (Null)
 
-is :: PredicateExp (IExp i) a => a -> ProgramT i m () -> When a (ProgramT i m)
+is :: pred a => a -> ProgramT instr (Param2 exp pred) m () -> When a (ProgramT instr (Param2 exp pred) m)
 is a = When (Is a) 
 
-to :: PredicateExp (IExp i) a => a -> a -> ProgramT i m () -> When a (ProgramT i m)
+to :: pred a => a -> a -> ProgramT instr (Param2 exp pred) m () -> When a (ProgramT instr (Param2 exp pred) m)
 to l h = When (To l h)
 
 --------------------------------------------------------------------------------
 -- ** Processes.
-
+{-
 -- | Wrap a signed program in a new component.
-component
-  :: forall i m a.
-     ( ComponentCMD (IExp i) :<: i
-     , Monad m)
+component :: forall instr m a. (ComponentCMD :<: instr, Monad m)
   => String
-  -> Sig (IExp i) (ProgramT i m) a
-  -> ProgramT i m (Component (IExp i) (ProgramT i m) a)
+  -> Sig exp (ProgramT instr (Param2 exp pred) m) a
+  -> ProgramT instr (Param2 exp pred) m (Component exp (ProgramT instr (Param2 exp pred) m) a)
 component name sig =
   do n <- singleE $ StructComponent (Unique name) sig
      return $ Component n sig
@@ -413,9 +319,9 @@ portmap
   -> Arg a
   -> ProgramT i m ()
 portmap pro arg = singleE $ PortMap pro arg
-
+-}
 --------------------------------------------------------------------------------
-
+{-
 output :: PredicateExp exp a => String -> (Signal a -> Sig exp m b) -> Sig exp m (Signal a -> b)
 output n = Lam (Unique n) Out
 
@@ -424,31 +330,24 @@ input  n = Lam (Unique n) In
   
 ret :: m () -> Sig exp m ()
 ret = Unit
-
+-}
 --------------------------------------------------------------------------------
 -- ** Structural entities.
-
+{-
 -- | Declare a new entity by wrapping the program to declare ports & generics.
-structEntity :: (StructuralCMD (IExp i) :<: i) => String -> ProgramT i m a -> ProgramT i m a
-structEntity e = singleE . StructEntity (Base e)
+structEntity :: (StructuralCMD :<: instr)
+  => String -> ProgramT instr (Param2 exp pred) m a -> ProgramT instr (Param2 exp pred) m a
+structEntity e = singleInj . StructEntity (Base e)
 
 -- | Declare a new architecture for some entity by wrapping the given program.
-structArchitecture :: (StructuralCMD (IExp i) :<: i) => String -> String -> ProgramT i m a -> ProgramT i m a
-structArchitecture e a = singleE . StructArchitecture (Base e) (Base a)
+structArchitecture :: (StructuralCMD :<: instr)
+  => String -> String -> ProgramT instr (Param2 exp pred) m a -> ProgramT instr (Param2 exp pred) m a
+structArchitecture e a = singleInj . StructArchitecture (Base e) (Base a)
 
 -- | Declare a new process listening to some signals by wrapping the given program.
-process :: (StructuralCMD (IExp i) :<: i) => [Ident] -> ProgramT i m () -> ProgramT i m ()
-process is = singleE . StructProcess is
-
---------------------------------------------------------------------------------
--- ** ...
-
-integer
-  :: ( IntegerCMD   (IExp i) :<: i
-     , PredicateExp (IExp i) Integer
-     , KnownNat n)
-  => Signal (Bits n) -> ProgramT i m (IExp i Integer)
-integer = singleE . ToInteger
-
+process :: (StructuralCMD :<: instr)
+  => [Ident] -> ProgramT instr (Param2 exp pred) m () -> ProgramT instr (Param2 exp pred) m ()
+process is = singleInj . StructProcess is
+-}
 --------------------------------------------------------------------------------
 

@@ -31,14 +31,6 @@ import GHC.TypeLits
 -- * Hardware commands.
 --------------------------------------------------------------------------------
 
-class    ToIdent a            where toIdent :: a -> Ident
-instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
-instance ToIdent (Signal   a) where toIdent (SignalC   i) = Ident i
-instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
-instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
-instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
-instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
-
 -- | ...
 swapM :: Monad m => Maybe (m a) -> m (Maybe a)
 swapM = maybe (return Nothing) (>>= return . Just)
@@ -403,10 +395,30 @@ instance HBifunctor ComponentCMD
     hbimap g f (StructComponent n sig)        = StructComponent n (hbimap g f sig)
     hbimap g f (PortMap (Component m sig) as) = PortMap (Component m (hbimap g f sig)) as
 
+instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr
+  where
+    reexpressInstrEnv reexp (StructComponent n sig) = error "!"
+{-
+    ReaderT $ \env ->
+      do let sig' = deep env sig
+         singleInj $ StructComponent n sig'
+      where
+        deep :: env -> Sig (Param3 prog exp pred) a -> Sig (Param3 exp pred x) a
+        deep env sig = case sig of
+          (Unit m) -> Unit $ runReaderT m env
+-}
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
 data Ident = Ident VarId
+
+class    ToIdent a            where toIdent :: a -> Ident
+instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
+instance ToIdent (Signal   a) where toIdent (SignalC   i) = Ident i
+instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
+instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
+instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
+instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
 
 -- | Construct the untyped signal list for processes.
 (.:) :: ToIdent a => a -> [Ident] -> [Ident]
