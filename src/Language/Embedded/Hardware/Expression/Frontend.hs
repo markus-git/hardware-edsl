@@ -7,6 +7,7 @@ import qualified Language.VHDL as V
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Syntax
 import Language.Embedded.Hardware.Expression.Hoist
+import Language.Embedded.Hardware.Expression.Represent
 import qualified Language.Embedded.VHDL.Monad.Expression as V
 
 import Data.Bits (Bits)

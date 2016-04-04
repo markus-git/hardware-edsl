@@ -48,13 +48,12 @@ evalHExp = go . unHExp
 
 instance CompileExp HExp
   where
-    compT  = compHType
     compE  = compHExp
 
 compHType :: forall a. HType a => HExp a -> VHDL VHDL.Type
 compHType _ = declare (undefined :: proxy a)
 
-compHExp  :: forall a. HType a => HExp a -> VHDL VHDL.Expression
+compHExp  :: forall a. HExp a -> VHDL VHDL.Expression
 compHExp  e = Hoist.lift <$> compSimple e
   where
     compSimple :: HExp b -> VHDL Kind
