@@ -28,34 +28,26 @@ import Data.Proxy
 import Data.Word     (Word8)
 import qualified Data.IORef    as IR
 import qualified Data.Array.IO as IA
-
 import GHC.TypeLits
 
 --------------------------------------------------------------------------------
 -- * Translation of hardware commands into VHDL.
 --------------------------------------------------------------------------------
 
-evalEM :: forall exp a. (PredicateExp exp a, EvaluateExp exp) => Maybe (exp a) -> a
+evalEM :: forall exp a. EvaluateExp exp => Maybe (exp a) -> a
 evalEM e = maybe (error "empty value") (id) $ fmap evalE e
 
-compEM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL (Maybe V.Expression)
+compEM :: forall exp a. CompileExp exp => Maybe (exp a) -> VHDL (Maybe V.Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
 
-compTM :: forall exp a. (PredicateExp exp a, CompileExp exp) => Maybe (exp a) -> VHDL V.Type
-compTM _ = compT (undefined :: exp a)
+compTM :: forall exp a. HType a => Maybe (exp a) -> VHDL V.Type
+compTM _ = compT (Proxy :: Proxy a)
 
-compTA
-  :: forall array exp i a.
-     ( PredicateExp exp a
-     , PredicateExp exp i
-     , CompileExp   exp
-     , EvaluateExp  exp
-     )
-  => V.Range -> exp i -> array i a -> VHDL V.Type
-compTA r _ _ =
-  do typ  <- compT (undefined :: exp a)
-     name <- ident <$> newSym (Base "type")
-     let array = V.constrainedArray name typ r
+compTA :: forall array i a. HType a => V.Range -> array i a -> VHDL V.Type
+compTA range _ =
+  do i <- newSym (Base "type")
+     t <- compT (Proxy :: Proxy a)
+     let array = V.constrainedArray (ident i) t range
      V.addType array
      return (typed array)
   where
@@ -65,34 +57,32 @@ compTA r _ _ =
 
     named :: V.Identifier -> V.SubtypeIndication
     named i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
-
+{-
 compTF :: forall exp m a b. (CompileExp exp, PredicateExp exp a) => (Signal a -> Sig exp m b) -> VHDL V.Type
 compTF _ = compT (undefined :: exp a)
-
+-}
 --------------------------------------------------------------------------------
+
+freshVar :: forall exp a. HType a => VarId -> VHDL (Val a)
+freshVar prefix =
+  do i <- newSym prefix
+     t <- compT (Proxy :: Proxy a)
+     V.variable (ident i) t Nothing
+     return (ValC i)
+
+range :: Integral a => a -> V.Direction -> a -> V.Range
+range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
 
 newSym :: VarId -> VHDL VarId
 newSym (Unique n) = Unique <$> return n
 newSym (Base   n) = Base   <$> V.newSym n
 
-freshVar :: forall exp a. (CompileExp exp, PredicateExp exp a) => VarId -> VHDL (exp a, V.Identifier)
-freshVar prefix =
-  do i <- varE <$> newSym prefix
-     p <- dig  <$> compE i
-     t <- compT (undefined :: exp a)
-     V.variable p t Nothing
-     return (i, p)
-  where
-    -- diggity dig!
-    dig :: V.Expression -> V.Identifier
-    dig (V.ENand (V.Relation (V.ShiftExpression (V.SimpleExpression _ (V.Term (V.FacPrim (V.PrimName (V.NSimple i)) _)_)_)_)_)_) = i
-
-range :: Integral a => a -> V.Direction -> a -> V.Range
-range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
-
 ident :: VarId -> V.Identifier
 ident (Unique n) = V.Ident n
 ident (Base   n) = V.Ident n
+
+fromIdent :: ToIdent a => a -> V.Identifier
+fromIdent a = let (Ident i) = toIdent a in ident i
 
 name  :: VarId -> V.Primary
 name (Unique n) = V.PrimName $ V.NSimple $ V.Ident n
@@ -101,15 +91,15 @@ name (Base   n) = V.PrimName $ V.NSimple $ V.Ident n
 --------------------------------------------------------------------------------
 -- ** Signals.
 
-instance CompileExp exp => Interp (SignalCMD exp) VHDL
+instance CompileExp exp => Interp SignalCMD VHDL (Param2 exp HType)
   where
     interp = compileSignal
 
-instance EvaluateExp exp => Interp (SignalCMD exp) IO
+instance InterpBi SignalCMD IO (Param1 pred)
   where
-    interp = runSignal
+    interpBi = runSignal
 
-compileSignal :: forall exp a. CompileExp exp => SignalCMD exp VHDL a -> VHDL a
+compileSignal :: CompileExp exp => SignalCMD (Param3 VHDL exp HType) a -> VHDL a
 compileSignal (NewSignal base mode exp) =
   do v <- compEM exp
      t <- compTM exp
@@ -117,87 +107,33 @@ compileSignal (NewSignal base mode exp) =
      V.signal (ident i) mode t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
-  do (v, i) <- freshVar (Base "s") :: VHDL (a, V.Identifier)
-     e      <- compE v
-     V.assignVariable i (lift $ name s)
-     return v
+  do i <- freshVar (Base "s")
+     V.assignVariable (fromIdent i) (lift $ name s)
+     return i
 compileSignal (SetSignal (SignalC s) exp) =
   do V.assignSignal (ident s) =<< compE exp
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
-  do return $ varE s
+  do return $ ValC s
 
-----------------------------------------
--- ....
-compileSignal (SetOthers (SignalC s) b) =
-  do v <- compE b
-     V.assignSignal (ident s) (lift $ V.aggregate $ V.others v)
-compileSignal (GetIndex (SignalC s) ix) =
-  do (v, i) <- freshVar (Base "s") :: VHDL (a, V.Identifier)
-     ix'    <- compE ix
-     _      <- compT (undefined :: exp Bool)
-     V.assignVariable i (lift $ V.name $ V.indexed (ident s) ix')
-     return v
-compileSignal (GetSlice (SignalC s) r) =
-  do let (a, b) = sliced r
-     ra <- compE (litE a :: exp Integer)
-     rb <- compE (litE b :: exp Integer)
-     let name = V.slice (ident s) (lift rb, lift ra)
-     i  <- newSym (Base "s")
-     V.assignSignal (ident i) (lift $ V.name name)
-     return (SignalC i)
-compileSignal (CopySlice (SignalC s) r (SignalC s') r') =
-  do let (a,  b)  = sliced r
-         (a', b') = sliced r'
-     ra  <- compE (litE a :: exp Integer)
-     rb  <- compE (litE b :: exp Integer)
-     let name  = V.slice (ident s) (lift rb, lift ra)
-     ra' <- compE (litE a' :: exp Integer)
-     rb' <- compE (litE b' :: exp Integer)
-     let name' = V.slice (ident s') (lift rb', lift ra')
-     V.assignSignal' name (lift $ V.name name')
-compileSignal (CopySliceDynamic (SignalC s) l h (SignalC s') l' h') =
-  do rl  <- compE l
-     rh  <- compE h
-     let name  = V.slice (ident s)  (lift rl,  lift rh)
-     rl' <- compE l'
-     rh' <- compE h'
-     let name' = V.slice (ident s') (lift rl', lift rh')
-     V.assignSignal' name (lift $ V.name name')
-
-sliced :: forall x y. (KnownNat x, KnownNat y) => Range x y -> (Integer, Integer)
-sliced _ = (size (Proxy :: Proxy x), size (Proxy :: Proxy y))
-  where
-    size  :: KnownNat z => Proxy z -> Integer
-    size  = fromIntegral . natVal
-
-----------------------------------------
-
-runSignal :: forall exp prog a. EvaluateExp exp => SignalCMD exp prog a -> IO a
-runSignal (NewSignal _ _ exp)         = fmap SignalE $ IR.newIORef $ evalEM exp
-runSignal (GetSignal (SignalE r))     = fmap litE $ IR.readIORef r
-runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r $ evalE exp
-runSignal (UnsafeFreezeSignal r)      = runSignal (GetSignal r)
--- ....
-runSignal (SetOthers (SignalE r) b) = error "runSignal-todo: setOthers"
-runSignal (GetIndex  (SignalE r) i) = error "runSignal-todo: getIndex"
-runSignal (GetSlice  (SignalE r) l) = error "runSignal-todo: getSlice"
-runSignal (CopySlice (SignalE r) l (SignalE r') h) =
-  error "runSignal-todo: copySlice"
-runSignal (CopySliceDynamic a b c d e f) =
-  error "runSignal-todo: copySliceDynamic"
+runSignal :: SignalCMD (Param3 IO IO pred) a -> IO a
+runSignal (NewSignal _ _ Nothing)     = fmap SignalE $ IR.newIORef (error "uninitialized signal")
+runSignal (NewSignal _ _ (Just a))    = fmap SignalE . IR.newIORef =<< a
+runSignal (GetSignal (SignalE r))     = fmap ValE $ IR.readIORef r
+runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r =<< exp
+runSignal x@(UnsafeFreezeSignal r)    = runSignal (GetSignal r `asTypeOf` x)
 
 --------------------------------------------------------------------------------
 -- ** Variables.
 
-instance CompileExp exp => Interp (VariableCMD exp) VHDL
+instance CompileExp exp => Interp VariableCMD VHDL (Param2 exp HType)
   where
     interp = compileVariable
 
-instance EvaluateExp exp => Interp (VariableCMD exp) IO
+instance InterpBi VariableCMD IO (Param1 pred)
   where
-    interp = runVariable
+    interpBi = runVariable
 
-compileVariable :: forall exp a. CompileExp exp => VariableCMD exp VHDL a -> VHDL a
+compileVariable :: forall exp a. CompileExp exp => VariableCMD (Param3 VHDL exp HType) a -> VHDL a
 compileVariable (NewVariable base exp) =
   do v <- compEM exp
      t <- compTM exp
@@ -205,33 +141,33 @@ compileVariable (NewVariable base exp) =
      V.variable (ident i) t v
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
-  do (v, i) <- freshVar (Base "v") :: VHDL (a, V.Identifier)
-     e <- compE v
-     V.assignVariable i (lift $ V.PrimName $ V.NSimple $ ident var)
-     return v
+  do i <- freshVar (Base "v")
+     V.assignVariable (fromIdent i) (lift $ V.PrimName $ V.NSimple $ ident var)
+     return i
 compileVariable (SetVariable (VariableC var) exp) =
   do V.assignVariable (ident var) =<< compE exp
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
-  do return $ varE v
+  do return $ ValC v
 
-runVariable :: forall exp prog a. EvaluateExp exp => VariableCMD exp prog a -> IO a
-runVariable (NewVariable _ exp)             = fmap VariableE $ IR.newIORef $ evalEM exp
-runVariable (GetVariable (VariableE v))     = fmap litE $ IR.readIORef v
-runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v $ evalE exp
-runVariable (UnsafeFreezeVariable v)        = runVariable (GetVariable v)
+runVariable :: VariableCMD (Param3 IO IO pred) a -> IO a
+runVariable (NewVariable _ Nothing)         = fmap VariableE $ IR.newIORef (error "uninitialized variable")
+runVariable (NewVariable _ (Just a))        = fmap VariableE . IR.newIORef =<< a
+runVariable (GetVariable (VariableE v))     = fmap ValE $ IR.readIORef v
+runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v =<< exp
+runVariable x@(UnsafeFreezeVariable v)      = runVariable (GetVariable v `asTypeOf` x)
 
 --------------------------------------------------------------------------------
 -- ** Constants.
 
-instance CompileExp exp => Interp (ConstantCMD exp) VHDL
+instance CompileExp exp => Interp ConstantCMD VHDL (Param2 exp HType)
   where
     interp = compileConstant
 
-instance EvaluateExp exp => Interp (ConstantCMD exp) IO
+instance InterpBi ConstantCMD IO (Param1 pred)
   where
-    interp = runConstant
+    interpBi = runConstant
 
-compileConstant :: forall exp a. CompileExp exp => ConstantCMD exp VHDL a -> VHDL a
+compileConstant :: forall exp a. CompileExp exp => ConstantCMD (Param3 VHDL exp HType) a -> VHDL a
 compileConstant (NewConstant base exp) =
   do v <- compE  exp
      t <- compT  exp
@@ -239,100 +175,49 @@ compileConstant (NewConstant base exp) =
      V.constant (ident i) t v
      return (ConstantC i)
 compileConstant (GetConstant (ConstantC c)) =
-  do return $ varE c
+  do return $ ValC c
 
-runConstant :: forall exp prog a. EvaluateExp exp => ConstantCMD exp prog a -> IO a
-runConstant (NewConstant _ exp)           = return $ ConstantE $ evalE exp
-runConstant (GetConstant (ConstantE exp)) = return $ litE exp
+runConstant :: ConstantCMD (Param3 IO IO pred) a -> IO a
+runConstant (NewConstant _ exp)           = return . ConstantE =<< exp
+runConstant (GetConstant (ConstantE exp)) = return $ ValE exp
 
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
-instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (ArrayCMD exp) VHDL
-  where
-    interp = compileArray
-
-instance EvaluateExp exp => Interp (ArrayCMD exp) IO
-  where
-    interp = runArray
-
-compileArray 
-  :: forall exp a.
-     ( CompileExp  exp
-     , EvaluateExp exp
-     , CompArrayIx exp)
-  => ArrayCMD exp VHDL a
-  -> VHDL a
-compileArray = undefined
-{-
-compileArray (NewArray base (len :: exp i)) =
-  do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
-     i <- newSym base
-     V.signal (ident i) V.Out a Nothing
-     return (ArrayC i)
-compileArray (OthersArray base (len :: exp i) others) =
-  do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
-     e <- compE  others
-     i <- newSym base
-     V.signal (ident i) V.Out a (Just $ lift $ V.aggregate $ V.others e)
-     return (ArrayC i)
-compileArray (UnpackArray base (SignalC n :: Signal i)) =
-  do t <- compT (undefined :: exp i)
-     i <- newSym base
-     let typ = V.std_logic_vector (V.width t)
-     V.signal       (ident i) V.Out typ Nothing
-     V.assignSignal (ident i) (lift $ V.cast typ $ lift $ name n)
-     return (ArrayC i)
-compileArray (GetArray ix (ArrayC arr)) =
-  do (v, i) <- freshVar (Base "a") :: VHDL (a, V.Identifier)
-     e <- compE ix
-     V.assignVariable i (lift $ V.PrimName $ V.indexed (ident arr) e)
-     return v
-compileArray (SetArray i e (ArrayC n)) =
-  do undefined
-compileArray (CopyArray (ArrayC a) (ArrayC b) len) =
-  do undefined
-compileArray (UnsafeFreezeArray (ArrayC a)) =
-  do undefined
--}
-
-runArray :: forall exp prog a. EvaluateExp exp => ArrayCMD exp prog a -> IO a
-runArray = error "runArray-todo"
+-- ....
 
 --------------------------------------------------------------------------------
 -- ** Virtual Arrays.
 
-instance (CompileExp exp, EvaluateExp exp, CompArrayIx exp) => Interp (VArrayCMD exp) VHDL
+instance CompileExp exp => Interp VArrayCMD VHDL (Param2 exp HType)
   where
     interp = compileVArray
 
-instance EvaluateExp exp => Interp (VArrayCMD exp) IO
+instance InterpBi VArrayCMD IO (Param1 pred)
   where
-    interp = runVArray
+    interpBi = runVArray
 
-compileVArray
-  :: forall exp a.
-     ( CompileExp exp
-     , EvaluateExp exp
-     , CompArrayIx exp)
-  => VArrayCMD exp VHDL a
-  -> VHDL a
+compileVArray :: forall exp a. CompileExp exp => VArrayCMD (Param3 VHDL exp HType) a -> VHDL a
 compileVArray (NewVArray base len) =
-  do a <- compTA (range (evalE len) V.downto 0) len (undefined :: a)
+  do l <- compE len
+     let r = V.range (lift l) V.downto (V.point (0 :: Int))
+     t <- compTA r (undefined :: a)
      i <- newSym base
-     V.variable (ident i) a Nothing
+     V.variable (ident i) t Nothing
      return (VArrayC i)
 compileVArray (InitVArray base is) =
-  do a <- compTA (range (length is) V.downto 0) (undefined :: exp i) (undefined :: a)
+  do let r = V.range (V.point (length is)) V.downto (V.point (0 :: Int))
+     t <- compTA r (undefined :: a)
      i <- newSym base
-     x <- sequence [compE (litE a :: exp b) | (a :: b) <- is]
-     V.variable (ident i) a (Just $ lift $ V.aggregate $ V.aggregated x)
+     x <- mapM literal is
+     let v = V.aggregate $ V.aggregated x
+     V.variable (ident i) t (Just $ lift v)
      return (VArrayC i)
 compileVArray (GetVArray ix (VArrayC arr)) =
-  do (v, i) <- freshVar (Base "a") :: VHDL (a, V.Identifier)
+  do i <- freshVar (Base "a")
      e <- compE ix
-     V.assignVariable i (lift $ V.PrimName $ V.indexed (ident arr) e)
-     return v
+     V.assignVariable (fromIdent i) (lift $ V.PrimName $ V.indexed (ident arr) e)
+     return i
 compileVArray (SetVArray i e (VArrayC arr)) =
   do i' <- compE i
      e' <- compE e
@@ -343,68 +228,91 @@ compileVArray (CopyVArray (VArrayC a) (VArrayC b) l) =
          dest  = V.slice (ident a) slice
          src   = V.slice (ident b) slice
      V.assignArray src (lift $ V.PrimName dest)
-compileVArray (UnsafeFreezeVArray (VArrayC a)) = return $ IArrayC a
+compileVArray (UnsafeFreezeVArray (VArrayC arr)) = return $ IArrayC arr
+compileVArray (UnsafeThawVArray (IArrayC arr)) = return $ VArrayC arr
 
-runVArray :: forall exp prog a. EvaluateExp exp => VArrayCMD exp prog a -> IO a
-runVArray (NewVArray _ len)           = fmap VArrayE . IR.newIORef =<< IA.newArray_ (0, evalE len)
-runVArray (InitVArray _ is)           = fmap VArrayE . IR.newIORef =<< IA.newListArray (0, fromIntegral $ length is) is
-runVArray (GetVArray i (VArrayE a))   = do r <- IR.readIORef a; fmap litE $ IA.readArray r (evalE i)
-runVArray (SetVArray i e (VArrayE a)) = do r <- IR.readIORef a; IA.writeArray r (evalE i) (evalE e)
-runVArray (UnsafeFreezeVArray (VArrayE a))       = fmap IArrayE . freeze =<< IR.readIORef a
-runVArray (CopyVArray (VArrayE a) (VArrayE b) l) =
-  do arr <- IR.readIORef a
-     brr <- IR.readIORef b
-     sequence_
-       [ IA.readArray brr i >>= IA.writeArray arr i
-       | i <- genericTake (evalE l) [0..]
-       ]
+runVArray :: VArrayCMD (Param3 IO IO pred) a -> IO a
+runVArray (NewVArray _ len) =
+  do len' <- len
+     arr  <- IA.newArray_ (0, len')
+     return (VArrayE arr)
+runVArray (InitVArray _ is) =
+  do arr  <- IA.newListArray (0, fromIntegral $ length is - 1) is
+     return (VArrayE arr)
+runVArray (GetVArray i (VArrayE arr)) =
+  do (l, h) <- IA.getBounds arr
+     ix  <- i
+     if (ix < l || ix > h)
+        then error "getArr out of bounds"
+        else do v <- IA.readArray arr ix
+                return (ValE v)
+runVArray (SetVArray i e (VArrayE arr)) =
+  do (l, h) <- IA.getBounds arr
+     ix <- i
+     e' <- e
+     if (ix < l || ix > h)
+        then error "setArr out of bounds"
+        else IA.writeArray arr (fromIntegral ix) e'
+runVArray (CopyVArray (VArrayE arr) (VArrayE brr) l) =
+  do l'      <- l
+     (0, ha) <- IA.getBounds arr
+     (0, hb) <- IA.getBounds brr
+     if (l' > hb + 1 || l' > ha + 1)
+        then error "copyArr out of bounts"
+        else sequence_ [ IA.readArray arr i >>= IA.writeArray brr i
+                       | i <- genericTake l' [0..] ]
+runVArray (UnsafeFreezeVArray (VArrayE arr)) = fmap IArrayE $ IA.freeze arr
+runVArray (UnsafeThawVArray (IArrayE arr)) = fmap VArrayE $ IA.thaw arr
 
 --------------------------------------------------------------------------------
 -- ** Loops.
 
-instance (CompileExp exp, EvaluateExp exp) => Interp (LoopCMD exp) VHDL
+instance CompileExp exp => Interp LoopCMD VHDL (Param2 exp HType)
   where
     interp = compileLoop
 
-instance EvaluateExp exp => Interp (LoopCMD exp) IO
+instance InterpBi LoopCMD IO (Param1 pred)
   where
-    interp = runLoop
+    interpBi = runLoop
 
-compileLoop :: forall exp a. (CompileExp exp, EvaluateExp exp) => LoopCMD exp VHDL a -> VHDL a
-compileLoop (For r step) =
-  do (v, i) <- freshVar (Base "l")
-     loop   <- V.inFor i (range 0 V.to (evalE r)) (step v)
+compileLoop :: forall exp a. CompileExp exp => LoopCMD (Param3 VHDL exp HType) a -> VHDL a
+compileLoop (For h step) =  -- (range 0 V.to (evalE r))
+  do h'   <- compE h
+     let r = V.range (V.point (0 :: Int)) V.to (lift h')
+     i    <- freshVar (Base "l")
+     loop <- V.inFor undefined r (step i)
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel
-     loop <- V.inWhile l (Nothing) $
+     loop <- V.inWhile l Nothing $
        do b    <- cont
           exit <- compE b
           V.exit l exit
           step
      V.addSequential $ V.SLoop $ loop
 
-runLoop :: forall exp prog a. EvaluateExp exp => LoopCMD exp IO a -> IO a
-runLoop (For r step) = loop (evalE r)
+runLoop :: LoopCMD (Param3 IO IO pred) a -> IO a
+runLoop (For r step) = r >>= loop
   where
-    loop i | i > 0     = step (litE i) >> loop (i - 1)
+    loop i | i > 0     = step (ValE i) >> loop (i - 1)
            | otherwise = return ()
 runLoop (While b step) = loop
   where
-    loop = b >>= flip when (step >> loop) . evalE
+    loop = do e <- join b
+              when e (step >> loop)
 
 --------------------------------------------------------------------------------
 -- ** Conditional.
 
-instance CompileExp exp => Interp (ConditionalCMD exp) VHDL
+instance CompileExp exp => Interp ConditionalCMD VHDL (Param2 exp HType)
   where
     interp = compileConditional
 
-instance EvaluateExp exp => Interp (ConditionalCMD exp) IO
+instance InterpBi ConditionalCMD IO (Param1 pred)
   where
-    interp = runConditional
+    interpBi = runConditional
 
-compileConditional :: forall exp a. (FreeExp exp, CompileExp exp) => ConditionalCMD exp VHDL a -> VHDL a
+compileConditional :: forall exp a. CompileExp exp => ConditionalCMD (Param3 VHDL exp HType) a -> VHDL a
 compileConditional (If (a, b) cs em) =
   do let (es, ds) = unzip cs
          el       = maybe (return ()) id em
@@ -419,32 +327,37 @@ compileConditional (Case e cs d) =
      s   <- V.inCase ae ce el
      V.addSequential $ V.SCase s
   where
-    compC :: forall b. PredicateExp exp b => When b VHDL -> VHDL (V.Choices, VHDL ())
+    compC :: HType b => When b VHDL -> VHDL (V.Choices, VHDL ())
     compC (When (Is e) p)   = do
-      e' <- compE (litE e :: exp b)
-      return $ (V.Choices [V.ChoiceSimple (lift e')], p)
+      e' <- literal e
+      return $ (V.Choices [V.ChoiceSimple $ lift e'], p)
     compC (When (To l h) p) = do
-      l' <- compE (litE l :: exp b)
-      h' <- compE (litE h :: exp b)
+      l' <- literal l
+      h' <- literal h
       return $ (V.Choices [V.ChoiceRange (V.DRRange (V.range (lift l') V.to (lift h')))], p)
-compileConditional (Null) =
-  do V.null
+compileConditional (Null) = V.null
 
-runConditional :: forall exp a. EvaluateExp exp => ConditionalCMD exp IO a -> IO a
-runConditional (If (a, b) cs em) = if (evalE a) then b else loop cs
+runConditional :: ConditionalCMD (Param3 IO IO pred) a -> IO a
+runConditional (If (a, b) cs em) =
+  do c <- a
+     if c then b else loop cs
   where
-    loop []            = maybe (return ()) id em
-    loop ((c, p):xs)   = if (evalE c) then p else (loop xs)
-runConditional (Case e cs d) = loop (evalE e) cs
+    loop [] = maybe (return ()) id em
+    loop ((c, p):xs) = do
+      b <- c
+      if b then p else (loop xs)
+runConditional (Case e cs d) =
+  do c <- e
+     loop c cs
   where
-    loop v []          = maybe (return ()) id d
+    loop v [] = maybe (return ()) id d
     loop v ((When (Is u)   p):cs) = if v == u         then p else loop v cs
     loop v ((When (To l h) p):cs) = if v > l && v < h then p else loop v cs
 runConditional (Null) = return ()
 
 --------------------------------------------------------------------------------
 -- ** Components.
-
+{-
 instance CompileExp exp => Interp (ComponentCMD exp) VHDL
   where
     interp = compileComponent
@@ -493,19 +406,19 @@ runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
 runComponent (StructComponent _ _)            = return Nothing
 runComponent (PortMap (Component _ sig) args) =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
-
+-}
 --------------------------------------------------------------------------------
 -- ** Structural.
 
-instance CompileExp exp => Interp (StructuralCMD exp) VHDL
+instance CompileExp exp => Interp StructuralCMD VHDL (Param2 exp HType)
   where
     interp = compileStructural
 
-instance EvaluateExp exp => Interp (StructuralCMD exp) IO
+instance InterpBi StructuralCMD IO (Param1 pred)
   where
-    interp = runStructural
+    interpBi = runStructural
 
-compileStructural :: forall exp a. CompileExp exp => StructuralCMD exp VHDL a -> VHDL a
+compileStructural :: forall exp a. CompileExp exp => StructuralCMD (Param3 VHDL exp HType) a -> VHDL a
 compileStructural (StructEntity e prog)         = V.entity (ident e) prog
 compileStructural (StructArchitecture e a prog) = V.architecture (ident e) (ident a) prog
 compileStructural (StructProcess xs prog)       =
@@ -514,37 +427,11 @@ compileStructural (StructProcess xs prog)       =
      V.addConcurrent (V.ConProcess c)
      return a
 
-runStructural :: forall exp a. EvaluateExp exp => StructuralCMD exp IO a -> IO a
+runStructural :: StructuralCMD (Param3 IO IO pred) a -> IO a
 runStructural (StructEntity _ prog)         = prog
 runStructural (StructArchitecture _ _ prog) = prog
 runStructural (StructProcess xs prog)       =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
-
---------------------------------------------------------------------------------
--- ...
-
-instance CompileExp exp => Interp (IntegerCMD exp) VHDL
-  where
-    interp = compileInteger
-
-instance EvaluateExp exp => Interp (IntegerCMD exp) IO
-  where
-    interp = runInteger
-
-compileInteger :: forall exp a. CompileExp exp => IntegerCMD exp VHDL a -> VHDL a
-compileInteger (ToInteger (SignalC s)) =
-  do (v, i) <- freshVar (Base "i") :: VHDL (exp Integer, V.Identifier)
-     let t = V.integer Nothing
-         f = V.function (V.Ident "to_integer") [ lift $
-             V.function (V.Ident "signed") [ lift $
-                name s
-             ]]
-           -- hack
-     V.assignVariable i (lift f)
-     return v
-
-runInteger :: forall exp a. EvaluateExp exp => IntegerCMD exp IO a -> IO a
-runInteger = error "todo: run integers"
 
 --------------------------------------------------------------------------------
 

@@ -5,6 +5,7 @@ module Language.Embedded.Hardware.Expression.Represent
   ( HType(..)
   , Rep(..)
   , compT
+  , literal
   
   , declareBoolean
   , declareNumeric
@@ -16,9 +17,14 @@ module Language.Embedded.Hardware.Expression.Represent
 
 import qualified Language.VHDL as V
 
-import Language.Embedded.VHDL            (VHDL)
-import Language.Embedded.VHDL.Monad      (newSym, newLibrary, newImport, constrainedArray)
-import Language.Embedded.VHDL.Monad.Type
+import Language.VHDL (Expression)
+
+import Language.Embedded.VHDL (VHDL)
+import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport, constrainedArray)
+import Language.Embedded.VHDL.Monad.Expression (lit)
+import Language.Embedded.VHDL.Monad.Type hiding (literal)
+
+import Language.Embedded.Hardware.Expression.Hoist (lift)
 
 import Data.Int
 import Data.Word
@@ -49,6 +55,10 @@ class Rep a
 -- | ...
 compT :: HType a => proxy a -> VHDL Type
 compT = declare
+
+-- | ...
+literal :: HType a => a -> VHDL Expression
+literal = return . lift . lit . format
 
 --------------------------------------------------------------------------------
 -- ** Boolean

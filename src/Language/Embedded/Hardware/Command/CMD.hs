@@ -164,7 +164,7 @@ class CompArrayIx exp
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array i a = ArrayC VarId | ArrayE (IORef (IOArray i a))
+data Array i a = ArrayC VarId | ArrayE (IOArray i a)
 
 -- | Commands for signal arrays.
 data ArrayCMD fs a
@@ -185,7 +185,7 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr
 -- ** Virtual arrays.
 
 -- | Virtual array reprensentation.
-data VArray i a = VArrayC VarId | VArrayE (IORef (IOArray i a))
+data VArray i a = VArrayC VarId | VArrayE (IOArray i a)
 
 -- | Immutable arrays.
 data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
@@ -206,7 +206,7 @@ data VArrayCMD fs a
     -- ^ Unsafe version of fetching an array's value.
     UnsafeFreezeVArray :: (pred a, Integral i, Ix i) => VArray i a -> VArrayCMD (Param3 prog exp pred) (IArray i a)
     -- ^ ...
-    UnsafeThawVArray :: (pred a, Integral i, Ix i) => IArray i a -> VArrayCMD (Param3 prog exp pred) (Array i a)
+    UnsafeThawVArray :: (pred a, Integral i, Ix i) => IArray i a -> VArrayCMD (Param3 prog exp pred) (VArray i a)
 
 instance HFunctor VArrayCMD
   where
@@ -277,7 +277,9 @@ instance (LoopCMD :<: instr) => Reexpressible LoopCMD instr
 data When a prog = When (Constraint a) (prog ())
 
 -- | ...
-data Constraint a = Is a | To a a
+data Constraint a where
+  Is :: Eq a  => a      -> Constraint a
+  To :: Ord a => a -> a -> Constraint a
 
 -- | Commnads for conditional statements.
 data ConditionalCMD fs a
@@ -433,13 +435,13 @@ data StructuralCMD fs a
   where
     -- ^ Wraps the program in an entity.
     StructEntity
-      :: VarId -> prog a -> StructuralCMD (Param2 prog exp) a
+      :: VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in an architecture.
     StructArchitecture
-      :: VarId -> VarId -> prog a -> StructuralCMD (Param2 prog exp) a
+      :: VarId -> VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in a process.
     StructProcess
-      :: [Ident] -> prog () -> StructuralCMD (Param2 prog exp) ()
+      :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
 
 instance HFunctor StructuralCMD
   where
