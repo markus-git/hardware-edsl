@@ -63,16 +63,22 @@ unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
 -- ports.
 
 -- | Declare port signals of the given mode and assign it initial value.
-initPort, initUniquePort :: (SignalCMD :<: instr, pred a)
+initNamedPort, initUniquePort :: (SignalCMD :<: instr, pred a)
   => String -> Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
-initPort       name m = singleInj . NewSignal (Base   name) m . Just
+initNamedPort  name m = singleInj . NewSignal (Base   name) m . Just
 initUniquePort name m = singleInj . NewSignal (Unique name) m . Just
 
+initPort :: (SignalCMD :<: instr, pred a) => Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
+initPort = initNamedPort "p"
+
 -- | Declare port signals of the given mode.
-newPort, newUniquePort :: (SignalCMD :<: instr, pred a)
+newNamedPort, newUniquePort :: (SignalCMD :<: instr, pred a)
   => String -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
-newPort       name m = singleInj $ NewSignal (Base   name) m Nothing
+newNamedPort  name m = singleInj $ NewSignal (Base   name) m Nothing
 newUniquePort name m = singleInj $ NewSignal (Unique name) m Nothing
+
+newPort :: (SignalCMD :<: instr, pred a) => Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
+newPort = newNamedPort "p"
 
 --------------------------------------------------------------------------------
 -- short-hands.

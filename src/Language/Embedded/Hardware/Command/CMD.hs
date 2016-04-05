@@ -434,16 +434,17 @@ data StructuralCMD fs (a :: *)
   where
     -- ^ Wraps the program in an entity.
     StructEntity
-      :: forall prog (exp :: * -> *) (pred :: * -> GHC.Constraint) a
-       . VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
+      :: VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in an architecture.
     StructArchitecture
-      :: forall prog (exp :: * -> *) (pred :: * -> GHC.Constraint) a
-       . VarId -> VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
+      :: VarId -> VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in a process.
     StructProcess
-      :: forall prog (exp :: * -> *) (pred :: * -> GHC.Constraint) a
-       . [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
+      :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
+
+    -- *** correct way of setting kinds without 'Dummy'?
+    Dummy
+      :: pred a => prog (exp a) -> StructuralCMD (Param3 prog exp pred) ()
 
 instance HFunctor StructuralCMD
   where
