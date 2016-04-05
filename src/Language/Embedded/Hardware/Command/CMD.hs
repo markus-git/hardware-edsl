@@ -25,7 +25,8 @@ import Data.IORef    (IORef)
 import Data.Array.IO (IOArray)
 import qualified Data.Array as Arr
 
-import GHC.TypeLits
+--import GHC.TypeLits
+import qualified GHC.Exts as GHC (Constraint)
 
 --------------------------------------------------------------------------------
 -- * Hardware commands.
@@ -429,19 +430,20 @@ instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
 infixr .:
 
 -- | Commands for structural entities.
---
--- *** Param exp?
-data StructuralCMD fs a
+data StructuralCMD fs (a :: *)
   where
     -- ^ Wraps the program in an entity.
     StructEntity
-      :: VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
+      :: forall prog (exp :: * -> *) (pred :: * -> GHC.Constraint) a
+       . VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in an architecture.
     StructArchitecture
-      :: VarId -> VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
+      :: forall prog (exp :: * -> *) (pred :: * -> GHC.Constraint) a
+       . VarId -> VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in a process.
     StructProcess
-      :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
+      :: forall prog (exp :: * -> *) (pred :: * -> GHC.Constraint) a
+       . [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
 
 instance HFunctor StructuralCMD
   where

@@ -22,8 +22,6 @@ import Data.Word
 
 import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 
-import GHC.TypeLits
-
 --------------------------------------------------------------------------------
 -- *
 --------------------------------------------------------------------------------
@@ -284,10 +282,14 @@ switched e choices def = singleInj (Case e choices (Just def))
 null :: (ConditionalCMD :<: instr) => ProgramT instr (Param2 exp pred) m ()
 null = singleInj (Null)
 
-is :: pred a => a -> ProgramT instr (Param2 exp pred) m () -> When a (ProgramT instr (Param2 exp pred) m)
+is :: (Eq a, pred a)
+  => a -> ProgramT instr (Param2 exp pred) m ()
+  -> When a (ProgramT instr (Param2 exp pred) m)
 is a = When (Is a) 
 
-to :: pred a => a -> a -> ProgramT instr (Param2 exp pred) m () -> When a (ProgramT instr (Param2 exp pred) m)
+to :: (Ord a, pred a)
+  => a -> a -> ProgramT instr (Param2 exp pred) m ()
+  -> When a (ProgramT instr (Param2 exp pred) m)
 to l h = When (To l h)
 
 --------------------------------------------------------------------------------
@@ -333,21 +335,27 @@ ret = Unit
 -}
 --------------------------------------------------------------------------------
 -- ** Structural entities.
-{-
+
 -- | Declare a new entity by wrapping the program to declare ports & generics.
-structEntity :: (StructuralCMD :<: instr)
-  => String -> ProgramT instr (Param2 exp pred) m a -> ProgramT instr (Param2 exp pred) m a
-structEntity e = singleInj . StructEntity (Base e)
+entity :: (StructuralCMD :<: instr)
+  => String
+  -> ProgramT instr (Param2 exp pred) m a
+  -> ProgramT instr (Param2 exp pred) m a
+entity e = singleInj . StructEntity (Base e)
 
 -- | Declare a new architecture for some entity by wrapping the given program.
-structArchitecture :: (StructuralCMD :<: instr)
-  => String -> String -> ProgramT instr (Param2 exp pred) m a -> ProgramT instr (Param2 exp pred) m a
-structArchitecture e a = singleInj . StructArchitecture (Base e) (Base a)
+architecture :: (StructuralCMD :<: instr)
+  => String -> String
+  -> ProgramT instr (Param2 exp pred) m a
+  -> ProgramT instr (Param2 exp pred) m a
+architecture e a = singleInj . StructArchitecture (Base e) (Base a)
 
 -- | Declare a new process listening to some signals by wrapping the given program.
 process :: (StructuralCMD :<: instr)
-  => [Ident] -> ProgramT instr (Param2 exp pred) m () -> ProgramT instr (Param2 exp pred) m ()
+  => [Ident]
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
 process is = singleInj . StructProcess is
--}
+
 --------------------------------------------------------------------------------
 
