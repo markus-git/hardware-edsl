@@ -339,54 +339,53 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 --------------------------------------------------------------------------------
 -- ** Components.
 
--- | Processes.
-data Component fs a = Component (Maybe VarId) (Sig fs a)
-
--- | Signature declaring type of processes.
-data Sig fs a
+-- | Annotations to place on arguments or result.
+data Ann a
   where
-    -- ^ Fully applied program, all signals are passed in a 'pointer' style.
-    --   The monad `m` is implicit on all returns.
-    Unit :: prog () -> Sig (Param3 prog exp pred) ()
-    
-    -- ^ ...
-    Lam  :: pred a
-      => VarId
-      -> Mode
-      -> (Signal a -> Sig (Param3 prog exp pred) b)
-      -> Sig (Param3 prog exp pred) (Signal a -> b)
+    Directed :: Mode   -> Ann a 
+    Named    :: String -> Ann a -> Ann a
 
--- | Arguments for a signature.
+-- | Annotation carrying signature description.
+data Signature fs a
+  where
+    Ret :: prog () -> Signature (Param3 prog exp pred) ()
+    Lam :: pred a
+      => Ann a
+      -> (Signal a -> Signature (Param3 prog exp pred) b)
+      -> Signature (Param3 prog exp pred) (Signal a -> b)
+
+-- | Signature arguments.
 data Arg a
   where
-    Nill :: Arg ()
-    (:>) :: Signal a -> Arg b -> Arg (Signal a -> b)
+    Nill      :: Arg ()
+    ArgSignal :: Signal a -> Arg b -> Arg (Signal a -> b)
 
-infixr :>
+instance HFunctor Signature
+  where
+    hfmap f (Ret m)     = Ret  (f m)
+    hfmap f (Lam a sig) = Lam a (hfmap f . sig)
+
+instance HBifunctor Signature
+  where
+    hbimap g f (Ret m)     = Ret (g m)
+    hbimap g f (Lam a sig) = Lam  a (hbimap g f . sig)
+
+--------------------------------------------------------------------------------
+
+-- | Named components.
+data Component fs a = Component (VarId) (Signature fs a)
 
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD fs a
   where
     -- ^ ...
     StructComponent
-      :: VarId
-      -> Sig (Param3 prog exp pred) a
+      :: Maybe String -> Signature (Param3 prog exp pred) a
       -> ComponentCMD (Param3 prog exp pred) (Maybe VarId)
     -- ^ ...
     PortMap
-      :: Component (Param3 prog exp pred) a
-      -> Arg a
+      :: Component (Param3 prog exp pred) a -> Arg a
       -> ComponentCMD (Param3 prog exp pred) ()
-
-instance HFunctor Sig
-  where
-    hfmap f (Unit m)     = Unit $ f m
-    hfmap f (Lam  n m g) = Lam n m (hfmap f . g)
-
-instance HBifunctor Sig
-  where
-    hbimap g f (Unit m)    = Unit $ g m
-    hbimap g f (Lam n m h) = Lam n m (hbimap g f . h)
 
 instance HFunctor ComponentCMD
   where
@@ -400,16 +399,20 @@ instance HBifunctor ComponentCMD
 
 instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr
   where
-    reexpressInstrEnv reexp (StructComponent n sig) = error "!"
-{-
-    ReaderT $ \env ->
-      do let sig' = deep env sig
-         singleInj $ StructComponent n sig'
-      where
-        deep :: env -> Sig (Param3 prog exp pred) a -> Sig (Param3 exp pred x) a
-        deep env sig = case sig of
-          (Unit m) -> Unit $ runReaderT m env
--}
+    reexpressInstrEnv reexp (StructComponent n sig) =
+      ReaderT $ \env ->
+        singleInj $ StructComponent n (reexpressSignature env sig)
+    reexpressInstrEnv reexp (PortMap (Component m sig) as) =
+      ReaderT $ \env ->
+        singleInj $ PortMap (Component m (reexpressSignature env sig)) as
+
+reexpressSignature
+  :: env
+  -> Signature (Param3 (ReaderT env (ProgramT instr (Param2 exp2 pred) m)) exp1 pred) a
+  -> Signature (Param3              (ProgramT instr (Param2 exp2 pred) m)  exp2 pred) a
+reexpressSignature env (Ret prog) = Ret (runReaderT prog env)
+reexpressSignature env (Lam a sf) = Lam a (reexpressSignature env . sf)
+
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
@@ -441,10 +444,10 @@ data StructuralCMD fs (a :: *)
     -- ^ Wraps the program in a process.
     StructProcess
       :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
-
     -- *** correct way of setting kinds without 'Dummy'?
     Dummy
       :: pred a => prog (exp a) -> StructuralCMD (Param3 prog exp pred) ()
+    -- ***
 
 instance HFunctor StructuralCMD
   where
