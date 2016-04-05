@@ -43,6 +43,9 @@ compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
 compTM :: forall exp a. HType a => Maybe (exp a) -> VHDL V.Type
 compTM _ = compT (Proxy :: Proxy a)
 
+compTF :: forall exp a b. HType a => (exp a -> b) -> VHDL V.Type
+compTF _ = compT (Proxy :: Proxy a)
+
 compTA :: forall array i a. HType a => V.Range -> array i a -> VHDL V.Type
 compTA range _ =
   do i <- newSym (Base "type")
@@ -57,10 +60,7 @@ compTA range _ =
 
     named :: V.Identifier -> V.SubtypeIndication
     named i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
-{-
-compTF :: forall exp m a b. (CompileExp exp, PredicateExp exp a) => (Signal a -> Sig exp m b) -> VHDL V.Type
-compTF _ = compT (undefined :: exp a)
--}
+
 --------------------------------------------------------------------------------
 
 freshVar :: forall exp a. HType a => VarId -> VHDL (Val a)
@@ -357,56 +357,55 @@ runConditional (Null) = return ()
 
 --------------------------------------------------------------------------------
 -- ** Components.
-{-
-instance CompileExp exp => Interp (ComponentCMD exp) VHDL
+
+instance CompileExp exp => Interp ComponentCMD VHDL (Param2 exp HType)
   where
     interp = compileComponent
 
-instance EvaluateExp exp => Interp (ComponentCMD exp) IO
+instance InterpBi ComponentCMD IO (Param1 pred)
   where
-    interp = runComponent
+    interpBi = runComponent
 
-compileComponent :: forall exp a. CompileExp exp => ComponentCMD exp VHDL a -> VHDL a
-compileComponent (StructComponent n sig) =
-  do comp <- newSym n
+compileComponent :: forall exp a. CompileExp exp => ComponentCMD (Param3 VHDL exp HType) a -> VHDL a
+compileComponent (StructComponent base sig) =
+  do comp <- newSym base
      V.component $
-       V.entity (ident comp) $ declare sig >>=
-       V.architecture (ident comp) (V.Ident "IMP")
+       V.entity (ident comp) (declare sig) >>=
+       V.architecture (ident comp) (V.Ident "imp")
      return (Just comp)
   where
-    declare :: Sig exp VHDL b ->  VHDL (VHDL ())
-    declare (Unit m)     = return m
-    declare (Lam  n m f) =
+    declare :: Signature (Param3 VHDL exp HType) b ->  VHDL (VHDL ())
+    declare (Ret prog)  = return prog
+    declare (Lam n m f) =
       do t <- compTF f
          i <- newSym n
          V.signal (ident i) m t Nothing
          declare (f (SignalC i))
-compileComponent (PortMap (Component (Just n) sig) as) =
-  do l  <- newSym (Base "l")
+compileComponent (PortMap (Component (Just base) sig) as) =
+  do i  <- newSym base
+     l  <- V.newLabel
      vs <- apply sig as
-     V.declareComponent  (ident n) vs
-     V.portMap (ident l) (ident n) (assoc sig as)
+     V.declareComponent  (ident i) vs
+     V.portMap l (ident i) (assoc sig as)
   where
-     -- todo: associate 'n' with 'i'
-    apply :: Sig exp VHDL b -> Arg b -> VHDL [V.InterfaceDeclaration]
-    apply (Unit _)     (Nill)               = return []
-    apply (Lam  n m f) (s@(SignalC i) :> v) = do
-      t <- compTF f
-      (V.InterfaceSignalDeclaration [ident n] (Just m) t False Nothing :)
-        <$> apply (f s) v
-        
-    assoc :: Sig exp VHDL b -> Arg b -> [(V.Identifier, V.Identifier)]
-    assoc (Unit _)    (Nill)               = []
-    assoc (Lam n _ f) (s@(SignalC i) :> v) = (n', i') : assoc (f s) v
-      where
-        n' = ident n
-        i' = ident i
+    apply :: Signature (Param3 VHDL exp HType) b -> Arg b -> VHDL [V.InterfaceDeclaration]
+    apply (Ret _)     (Nill)                      = return []
+    apply (Lam n m f) (ArgSignal s@(SignalC i) v) = do
+      t  <- compTF f
+      is <- apply (f s) v
+      let i = V.InterfaceSignalDeclaration [ident n] (Just m) t False Nothing
+      return (i : is)
 
-runComponent :: forall exp a. EvaluateExp exp => ComponentCMD exp IO a -> IO a
+    assoc :: Signature (Param3 VHDL exp HType) b -> Arg b -> [(V.Identifier, V.Identifier)]
+    assoc (Ret _)     (Nill)                      = []
+    assoc (Lam n _ f) (ArgSignal s@(SignalC i) v) = (ident n, ident i) : assoc (f s) v
+
+
+runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
 runComponent (StructComponent _ _)            = return Nothing
 runComponent (PortMap (Component _ sig) args) =
-  do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
--}
+  error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
+
 --------------------------------------------------------------------------------
 -- ** Structural.
 
@@ -434,4 +433,3 @@ runStructural (StructProcess xs prog)       =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
 --------------------------------------------------------------------------------
-

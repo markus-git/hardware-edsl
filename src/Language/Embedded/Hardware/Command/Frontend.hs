@@ -300,45 +300,42 @@ to l h = When (To l h)
 
 --------------------------------------------------------------------------------
 -- ** Processes.
-{-
+
+type Sig  instr exp pred m = Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred)
+type Comp instr exp pred m = Component (Param3 (ProgramT instr (Param2 exp pred) m) exp pred)
+
 -- | Wrap a signed program in a new component.
-component :: forall instr m a. (ComponentCMD :<: instr, Monad m)
-  => String
-  -> Sig exp (ProgramT instr (Param2 exp pred) m) a
-  -> ProgramT instr (Param2 exp pred) m (Component exp (ProgramT instr (Param2 exp pred) m) a)
-component name sig =
-  do n <- singleE $ StructComponent (Unique name) sig
+namedComponent :: (ComponentCMD :<: instr, Monad m) => String -> Sig instr exp pred m a
+  -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
+namedComponent name sig =
+  do n <- singleInj $ StructComponent (Base name) sig
      return $ Component n sig
 
-component_
-  :: forall i m a.
-     ( ComponentCMD (IExp i) :<: i
-     , Monad m)
-  => Sig (IExp i) (ProgramT i m) a
-  -> ProgramT i m (Component (IExp i) (ProgramT i m) a)
-component_ sig =
-  do n <- singleE $ StructComponent (Base "comp") sig
-     return $ Component n sig
+component :: (ComponentCMD :<: instr, Monad m) => Sig instr exp pred m a
+  -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
+component = namedComponent "comp"
 
 -- | Map signals to some component.
-portmap
-  :: forall i m a. (ComponentCMD (IExp i) :<: i)
-  => Component (IExp i) (ProgramT i m) a
-  -> Arg a
-  -> ProgramT i m ()
-portmap pro arg = singleE $ PortMap pro arg
--}
---------------------------------------------------------------------------------
-{-
-output :: PredicateExp exp a => String -> (Signal a -> Sig exp m b) -> Sig exp m (Signal a -> b)
-output n = Lam (Unique n) Out
+portmap :: (ComponentCMD :<: instr) => Comp instr exp pred m a -> Arg a -> ProgramT instr (Param2 exp pred) m ()
+portmap pro arg = singleInj $ PortMap pro arg
 
-input  :: PredicateExp exp a => String -> (Signal a -> Sig exp m b) -> Sig exp m (Signal a -> b)
-input  n = Lam (Unique n) In
-  
-ret :: m () -> Sig exp m ()
-ret = Unit
--}
+--------------------------------------------------------------------------------
+
+uniqueOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+uniqueOutput n = Lam (Unique n) Out
+
+output :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+output = Lam (Base "out") Out
+
+uniqueInput  :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+uniqueInput  n = Lam (Unique n) In
+
+input :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+input = Lam (Base "in") In
+
+ret :: (ProgramT instr (Param2 exp pred) m) () -> Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred) ()
+ret = ret
+
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 

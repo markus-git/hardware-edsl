@@ -339,18 +339,13 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 --------------------------------------------------------------------------------
 -- ** Components.
 
--- | Annotations to place on arguments or result.
-data Ann a
-  where
-    Directed :: Mode   -> Ann a 
-    Named    :: String -> Ann a -> Ann a
-
--- | Annotation carrying signature description.
+-- | Signature description.
 data Signature fs a
   where
     Ret :: prog () -> Signature (Param3 prog exp pred) ()
     Lam :: pred a
-      => Ann a
+      => VarId
+      -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
 
@@ -362,25 +357,25 @@ data Arg a
 
 instance HFunctor Signature
   where
-    hfmap f (Ret m)     = Ret  (f m)
-    hfmap f (Lam a sig) = Lam a (hfmap f . sig)
+    hfmap f (Ret m)       = Ret (f m)
+    hfmap f (Lam n m sig) = Lam n m (hfmap f . sig)
 
 instance HBifunctor Signature
   where
-    hbimap g f (Ret m)     = Ret (g m)
-    hbimap g f (Lam a sig) = Lam  a (hbimap g f . sig)
+    hbimap g f (Ret m)       = Ret (g m)
+    hbimap g f (Lam n m sig) = Lam n m (hbimap g f . sig)
 
 --------------------------------------------------------------------------------
 
 -- | Named components.
-data Component fs a = Component (VarId) (Signature fs a)
+data Component fs a = Component (Maybe VarId) (Signature fs a)
 
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD fs a
   where
     -- ^ ...
     StructComponent
-      :: Maybe String -> Signature (Param3 prog exp pred) a
+      :: VarId -> Signature (Param3 prog exp pred) a
       -> ComponentCMD (Param3 prog exp pred) (Maybe VarId)
     -- ^ ...
     PortMap
@@ -410,8 +405,8 @@ reexpressSignature
   :: env
   -> Signature (Param3 (ReaderT env (ProgramT instr (Param2 exp2 pred) m)) exp1 pred) a
   -> Signature (Param3              (ProgramT instr (Param2 exp2 pred) m)  exp2 pred) a
-reexpressSignature env (Ret prog) = Ret (runReaderT prog env)
-reexpressSignature env (Lam a sf) = Lam a (reexpressSignature env . sf)
+reexpressSignature env (Ret prog)   = Ret (runReaderT prog env)
+reexpressSignature env (Lam n m sf) = Lam n m (reexpressSignature env . sf)
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
