@@ -13,10 +13,7 @@ import Data.Int
 import Data.Word
 import Text.PrettyPrint
 
-import Prelude hiding (and, or)
-
-
-import Language.Embedded.VHDL (VHDL) -- !!! 
+import Prelude hiding (and, or, not)
 
 --------------------------------------------------------------------------------
 -- * ...
@@ -30,23 +27,30 @@ type CMD =
   :+: VArrayCMD
   :+: LoopCMD
   :+: ConditionalCMD
---  :+: ComponentCMD
+  :+: ComponentCMD
   :+: StructuralCMD
 
-type Prog = Program CMD (Param2 HExp HType)
+type HProg = Program CMD (Param2 HExp HType)
+
+type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 -- ** Example VHDL programs.
 
-testIdentity :: Prog ()
+tests :: IO ()
+tests = do
+  putStrLn "\n### Identity ###\n"
+  putStrLn $ compile $ testIdentity
+  putStrLn "\n### Component ###\n"
+  putStrLn $ compile $ testComponent
+
+--------------------------------------------------------------------------------
+
+testIdentity :: HProg ()
 testIdentity = do
-{-
-  x <- newPort In  :: Prog (Signal Int8)
-  return ()
--}
   (x, y) <- entity "identity" $
-    do x <- newPort In  :: Prog (Signal Int8)
-       y <- newPort Out :: Prog (Signal Int8)
+    do x <- newPort In  :: HProg (Signal Int8)
+       y <- newPort Out :: HProg (Signal Int8)
        return (x, y)
   architecture "identity" "behavioural" $
     process (x .: []) $
@@ -54,15 +58,22 @@ testIdentity = do
 
 --------------------------------------------------------------------------------
 
-compileProg
-  :: (Interp instr VHDL (Param2 HExp HType), HFunctor instr)
-  => Program instr (Param2 HExp HType) a -> String
-compileProg = compile
+testComponent :: HProg ()
+testComponent = do
+  (x, y) <- entity "component" $
+    do x <- newPort In  :: HProg (Signal Bool)
+       y <- newPort Out :: HProg (Signal Bool)
+       return (x, y)
+  architecture "component" "behavioural" $
+    do c <- component invert
+       portmap c (x .> y .> Nill)
 
-{-
-printTests :: IO ()
-printTests = do
-  putStrLn "\n### Simple ###\n"
-  putStrLn $ compile $ testIdentity
--}
+invert :: HSig (Signal Bool -> Signal Bool -> ())
+invert =
+  input  $ \i ->
+  output $ \o ->
+  ret    $ do
+    v <- getSignal i
+    setSignal o (not v)
+
 --------------------------------------------------------------------------------

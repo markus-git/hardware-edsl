@@ -349,11 +349,21 @@ data Signature fs a
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
 
+    -- *** correct way of setting kinds without 'Dummy'?
+    D1 :: pred a => prog (exp a) -> Signature (Param3 prog exp pred) ()
+    -- ***
+
 -- | Signature arguments.
 data Arg a
   where
     Nill      :: Arg ()
     ArgSignal :: Signal a -> Arg b -> Arg (Signal a -> b)
+
+-- | ...
+(.>) :: Signal a -> Arg b -> Arg (Signal a -> b)
+(.>) = ArgSignal
+
+infixr .>
 
 instance HFunctor Signature
   where
@@ -440,7 +450,7 @@ data StructuralCMD fs (a :: *)
     StructProcess
       :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
     -- *** correct way of setting kinds without 'Dummy'?
-    Dummy
+    D2
       :: pred a => prog (exp a) -> StructuralCMD (Param3 prog exp pred) ()
     -- ***
 

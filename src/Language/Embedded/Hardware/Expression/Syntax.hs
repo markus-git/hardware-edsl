@@ -13,7 +13,7 @@ import Language.Syntactic.Functional (Denotation, Eval(..), EvalEnv)
 
 import qualified Language.VHDL as V (Name, Aggregate)
 
-import Language.Embedded.Hardware.Command
+import Language.Embedded.Hardware.Command (CompArrayIx)
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Represent
 
