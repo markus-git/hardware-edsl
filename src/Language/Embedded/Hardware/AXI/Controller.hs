@@ -8,7 +8,7 @@ module Language.Embedded.Hardware.AXI.Controller where
 import Language.Embedded.Hardware
 
 import Control.Monad.Identity (Identity)
-import Control.Monad.Operational.Higher
+import Control.Monad.Operational.Higher hiding (when)
 import Data.Int
 import Data.Word
 import Data.Bits ()
@@ -32,8 +32,10 @@ type HProg instr = ProgramT instr (Param2 HExp HType) Identity
 -- ** Signature.
 
 axi_light_signature
-  :: ( SignalCMD   :<: instr,
-       ConstantCMD :<: instr
+  :: ( SignalCMD      :<: instr,
+       ConstantCMD    :<: instr,
+       ConditionalCMD :<: instr,
+       StructuralCMD  :<: instr
      )
   => HSig instr (
           Signal Bit       -- ^ Global clock signal.
@@ -93,8 +95,10 @@ axi_light_signature =
 
 axi_light
   :: forall instr. (
-       SignalCMD   :<: instr,
-       ConstantCMD :<: instr
+       SignalCMD      :<: instr,
+       ConstantCMD    :<: instr,
+       ConditionalCMD :<: instr,
+       StructuralCMD  :<: instr
      )
   => Signal Bit       -- ^ Global clock signal.
   -> Signal Bit       -- ^ Global reset signal.
@@ -145,7 +149,77 @@ axi_light
        --
        addr_lsb  <- constant "ADDR_LSB"          2 :: HProg instr (Constant Integer)
        addr_bits <- constant "OPT_MEM_ADDR_BITS" 1 :: HProg instr (Constant Integer)
+       
+       ----------------------------------------
+       -- Signals for user logic registers.
+       --
+       -- *** Generate these from a signature ***
+       --
+       reg_0     <- signal "slv_reg0"     :: HProg instr (Signal (Bits 32))
+       reg_1     <- signal "slv_reg1"     :: HProg instr (Signal (Bits 32))
+       reg_2     <- signal "slv_reg2"     :: HProg instr (Signal (Bits 32))
+       reg_3     <- signal "slv_reg3"     :: HProg instr (Signal (Bits 32))
+       reg_rden  <- signal "slv_reg_rden" :: HProg instr (Signal Bit)
+       reg_wren  <- signal "slv_reg_wren" :: HProg instr (Signal Bit)
+       reg_out   <- signal "reg_data_out" :: HProg instr (Signal (Bits 32))
+       reg_index <- signal "byte_index"   :: HProg instr (Signal Integer)
+
+       ----------------------------------------
+       -- I/O Connections.
+       --
+       s_axi_awready <=- awready
+       s_axi_wready  <=- wready
+       s_axi_bresp   <=- bresp
+       s_axi_bvalid  <=- bvalid
+       s_axi_arready <=- arready
+       s_axi_rdata   <=- rdata
+       s_axi_rresp   <=- rresp
+       s_axi_rvalid  <=- rvalid
+
+       ----------------------------------------
+       -- AXI_AWREADY generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk <- get s_axi_aclk
+         rst <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do awready <== low)
+             (do rdy <- get awready
+                 awv <- get s_axi_awvalid
+                 wv  <- get s_axi_wvalid
+                 iff (isLow rdy `and` isHigh awv `and` isHigh wv)
+                   (do awready <== high)
+                   (do awready <== low))
+
+       ----------------------------------------
+       -- AXI_AWADDR latching.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk <- get s_axi_aclk
+         rst <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do error "!") -- setOthers awaddr low
+             (do rdy <- get awready
+                 awv <- get s_axi_awvalid
+                 wv  <- get s_axi_wvalid
+                 when (isLow rdy  `and`
+                       isHigh awv `and`
+                       isHigh wv) $
+                   awaddr <=- s_axi_awaddr)
 
        undefined
+  where
+    get :: HType a => Signal a -> HProg instr (HExp a)
+    get = unsafeFreezeSignal
+
+    high, low :: HExp Bit
+    high = litE True
+    low  = litE False
+
+    isHigh, isLow :: HExp Bit -> HExp Bit
+    isHigh = undefined
+    isLow  = undefined
 
 --------------------------------------------------------------------------------
