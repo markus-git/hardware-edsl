@@ -188,7 +188,9 @@ axi_light
              (do rdy <- get awready
                  awv <- get s_axi_awvalid
                  wv  <- get s_axi_wvalid
-                 iff (isLow rdy `and` isHigh awv `and` isHigh wv)
+                 iff (isLow  rdy `and`
+                      isHigh awv `and`
+                      isHigh wv)
                    (do awready <== high)
                    (do awready <== low))
 
@@ -204,10 +206,54 @@ axi_light
              (do rdy <- get awready
                  awv <- get s_axi_awvalid
                  wv  <- get s_axi_wvalid
-                 when (isLow rdy  `and`
+                 when (isLow  rdy `and`
                        isHigh awv `and`
                        isHigh wv) $
                    awaddr <=- s_axi_awaddr)
+       
+       ----------------------------------------
+       -- AXI_AWREADY generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk <- get s_axi_aclk
+         rst <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do wready <== low)
+             (do rdy <- get awready
+                 awv <- get s_axi_awvalid
+                 wv  <- get s_axi_wvalid
+                 iff (isLow  rdy `and`
+                      isHigh awv `and`
+                      isHigh wv)
+                   (wready <== high)
+                   (wready <== low))
+
+       ----------------------------------------
+       -- Slave register logic.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do reg_0 <== others low
+                 reg_1 <== others low
+                 reg_2 <== others low
+                 reg_3 <== others low)
+             (do clsb  <- getConstant addr_lsb
+                 cbits <- getConstant addr_bits
+                 slice <- undefined --getSlice awaddr (R :: Range 1 (1 + 2))
+                 wren  <- get reg_wren
+                 when (isHigh wren) $ do
+                   i <- undefined --integer slice
+                   switched (low) []
+                     (do reg_0 <=- reg_0
+                         reg_1 <=- reg_1
+                         reg_2 <=- reg_2
+                         reg_3 <=- reg_3))
+
+
 
        undefined
   where
