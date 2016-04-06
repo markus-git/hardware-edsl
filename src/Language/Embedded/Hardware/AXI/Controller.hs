@@ -200,7 +200,7 @@ axi_light
          rst <- get s_axi_aresetn
          when (risingEdge clk) $ do
            iff (isLow rst)
-             (do error "!") -- setOthers awaddr low
+             (do awaddr <== (others low))
              (do rdy <- get awready
                  awv <- get s_axi_awvalid
                  wv  <- get s_axi_wvalid
@@ -215,8 +215,8 @@ axi_light
     get = unsafeFreezeSignal
 
     high, low :: HExp Bit
-    high = litE True
-    low  = litE False
+    high = true
+    low  = false
 
     isHigh, isLow :: HExp Bit -> HExp Bit
     isHigh = undefined
