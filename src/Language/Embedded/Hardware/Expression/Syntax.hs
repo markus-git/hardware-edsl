@@ -16,10 +16,10 @@ import qualified Language.VHDL as V (Name, Aggregate)
 import Language.Embedded.Hardware.Command (CompArrayIx)
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Represent
+import Language.Embedded.Hardware.Expression.Represent.Bit
 
-import Data.Bits     (Bits)
 import Data.Typeable (Typeable)
-import qualified Data.Bits as Bits
+import qualified Data.Bits as B
 
 --------------------------------------------------------------------------------
 -- * Syntax of hardware expressions.
@@ -88,12 +88,12 @@ data Relational sig
 -- | Bit vector expressions.
 data Shift sig
   where
-    Sll :: (HType a, Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Srl :: (HType a, Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Sla :: (HType a, Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Sra :: (HType a, Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Rol :: (HType a, Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Ror :: (HType a, Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
+    Sll :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
+    Srl :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
+    Sla :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
+    Sra :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
+    Rol :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
+    Ror :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
 
 -- | Numerical expressions.
 data Simple sig
@@ -125,6 +125,9 @@ data Primary sig
     Name       :: (HType a) => V.Name      -> Primary (Full a)
     Literal    :: (HType a) => a           -> Primary (Full a)
     Aggregate  :: (HType a) => V.Aggregate -> Primary (Full a)
+    -- expanded aggregate
+    Others     :: Primary (Bit :-> Full (Bits n))
+    --
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
     Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
     Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)
@@ -240,18 +243,18 @@ instance Render Shift
 
 instance Eval Shift
   where
-    evalSym Sll = \x i -> Bits.shiftL x (fromIntegral i)
+    evalSym Sll = \x i -> B.shiftL x (fromIntegral i)
     evalSym Srl = \x i -> shiftLR     x (fromIntegral i)
       where
-        shiftLR :: Bits a => a -> Int -> a
-        shiftLR x n = let y = Bits.shiftR x n in
-          case Bits.bitSizeMaybe x of
-            Just i  -> foldr (flip Bits.clearBit) y [i - n `Prelude.mod` i .. i]
+        shiftLR :: B.Bits a => a -> Int -> a
+        shiftLR x n = let y = B.shiftR x n in
+          case B.bitSizeMaybe x of
+            Just i  -> foldr (flip B.clearBit) y [i - n `Prelude.mod` i .. i]
             Nothing -> y
-    evalSym Sla = \x i -> Bits.shiftL x (fromIntegral i)
-    evalSym Sra = \x i -> Bits.shiftR x (fromIntegral i)
-    evalSym Rol = \x i -> Bits.rotateL x (fromIntegral i)
-    evalSym Ror = \x i -> Bits.rotateR x (fromIntegral i)
+    evalSym Sla = \x i -> B.shiftL x (fromIntegral i)
+    evalSym Sra = \x i -> B.shiftR x (fromIntegral i)
+    evalSym Rol = \x i -> B.rotateL x (fromIntegral i)
+    evalSym Ror = \x i -> B.rotateR x (fromIntegral i)
 
 instance EvalEnv Shift env
 
@@ -341,6 +344,7 @@ instance Symbol Primary
     symSig (Name _)       = signature
     symSig (Literal _)    = signature
     symSig (Aggregate _)  = signature
+    symSig (Others)       = signature
     symSig (Function _ _) = signature
     symSig (Qualified _)  = signature
     symSig (Conversion _) = signature
@@ -351,6 +355,7 @@ instance Render Primary
     renderSym (Name _)       = "name"
     renderSym (Literal _)    = "lit"
     renderSym (Aggregate _)  = "agg"
+    renderSym (Others)       = "others"
     renderSym (Function _ _) = "fun"
     renderSym (Qualified _)  = "qual"
     renderSym (Conversion _) = "conv"
@@ -360,11 +365,12 @@ instance Eval Primary
   where
     evalSym (Name _)       = error "cannot eval open names!"
     evalSym (Literal i)    = i
-    evalSym (Aggregate _)  = error "todo: eval aggregate names."
+    evalSym (Aggregate _)  = error "primary-todo: eval aggregate names."
+    evalSym (Others)       = error "primary-todo: eval others"
     evalSym (Function _ f) = f
-    evalSym (Qualified _)  = error "todo: eval qualified names."
+    evalSym (Qualified _)  = error "primary-todo: eval qualified names."
     evalSym (Conversion f) = f
-    evalSym (Allocator)    = error "todo: eval allocator"
+    evalSym (Allocator)    = error "primary-todo: eval allocator"
 
 instance EvalEnv Primary env
 

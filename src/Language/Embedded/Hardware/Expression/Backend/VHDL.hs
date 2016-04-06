@@ -142,6 +142,7 @@ compHExp  e = Hoist.lift <$> compSimple e
       | Just Not <- prj factor = do
           x' <- Hoist.lift <$> compLoop x
           return $ Hoist.F $ VHDL.not x'
+
     compDomain primary (x :* Nil)
       | Just (Qualified t)  <- prj primary = do
           f  <- compHType (undefined :: HExp (DenResult sig))
@@ -151,7 +152,10 @@ compHExp  e = Hoist.lift <$> compSimple e
           t  <- compHType (undefined :: HExp (DenResult sig))
           x' <- Hoist.lift <$> compLoop x
           return $ x'
-          --return $ Hoist.P $ VHDL.cast t x' -- *** !!! *** !!! SOS !! *** ~~~
+          --return $ Hoist.P $ VHDL.cast t x' *** Apply cast ***
+      | Just (Others) <- prj primary = do
+          x' <- Hoist.lift <$> compLoop x
+          return $ Hoist.P $ VHDL.aggregate $ VHDL.others x'
     compDomain primary args
       | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i

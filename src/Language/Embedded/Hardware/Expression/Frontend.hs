@@ -8,9 +8,10 @@ import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Syntax
 import Language.Embedded.Hardware.Expression.Hoist
 import Language.Embedded.Hardware.Expression.Represent
+import Language.Embedded.Hardware.Expression.Represent.Bit
 import qualified Language.Embedded.VHDL.Monad.Expression as V
 
-import Data.Bits (Bits)
+import qualified Data.Bits as B (Bits)
 
 import Prelude hiding (not, and, or, abs, rem, div, mod, exp)
 import qualified Prelude as P
@@ -62,7 +63,7 @@ gt  = sugarT Gt
 gte = sugarT Gte
 
 -- shift operators
-sll, srl, sla, sra, rol, ror :: (HType a, Bits a, HType b, Integral b) => HExp a -> HExp b -> HExp a
+sll, srl, sla, sra, rol, ror :: (HType a, B.Bits a, HType b, Integral b) => HExp a -> HExp b -> HExp a
 sll = sugarT Sll
 srl = sugarT Srl
 sla = sugarT Sla
@@ -74,11 +75,6 @@ ror = sugarT Ror
 add, sub :: (HType a, Num a) => HExp a -> HExp a -> HExp a
 add = sugarT Add
 sub = sugarT Sub
-
-{-
-cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp (Cats a a)
-cat = sugarT Cat
--}
 
 -- multiplying operators
 mul :: (HType a, Num a) => HExp a -> HExp a -> HExp a
@@ -101,10 +97,22 @@ not = sugarT Not
 
 --------------------------------------------------------------------------------
 
+others :: HExp Bit -> HExp (Bits n)
+others = undefined
+
+{-
+cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp (Cats a a)
+cat = sugarT Cat
+-}
+
+
+--------------------------------------------------------------------------------
+
 true, false :: HExp Bool
 true  = value True
 false = value False
 
+-- *** ...
 risingEdge :: HExp a -> HExp Bool
 risingEdge = sugarT (Function "rising_edge" $ \_ -> True)
 
