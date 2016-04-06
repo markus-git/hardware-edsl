@@ -1,4 +1,6 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+
+{-# LANGUAGE FlexibleContexts #-}
 
 module Language.Embedded.Hardware.Expression.Frontend where
 
@@ -11,10 +13,13 @@ import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit
 import qualified Language.Embedded.VHDL.Monad.Expression as V
 
+import Data.Typeable
 import qualified Data.Bits as B (Bits)
 
 import Prelude hiding (not, and, or, abs, rem, div, mod, exp)
 import qualified Prelude as P
+
+import GHC.TypeLits
 
 --------------------------------------------------------------------------------
 -- * ...
@@ -96,15 +101,19 @@ not :: HExp Bool -> HExp Bool
 not = sugarT Not
 
 --------------------------------------------------------------------------------
+-- These are a bit strange. Wonder when they'll add Typeable for type literals.
 
-others :: HExp Bit -> HExp (Bits n)
-others = undefined
+others :: (KnownNat n, Typeable n) => HExp Bit -> HExp (Bits n)
+others = sugarT Others
 
-{-
-cat :: (HType a, Read a, Show a) => HExp a -> HExp a -> HExp (Cats a a)
+cat
+  :: ( KnownNat n
+     , KnownNat m
+     , KnownNat (n + m)
+     , Typeable (n + m)
+     )
+  => HExp (Bits n) -> HExp (Bits m) -> HExp (Bits (n + m))
 cat = sugarT Cat
--}
-
 
 --------------------------------------------------------------------------------
 

@@ -1,10 +1,11 @@
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE TypeOperators        #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE DataKinds             #-}
 
 module Language.Embedded.Hardware.Expression.Syntax where
 
@@ -20,6 +21,8 @@ import Language.Embedded.Hardware.Expression.Represent.Bit
 
 import Data.Typeable (Typeable)
 import qualified Data.Bits as B
+
+import GHC.TypeLits hiding (Symbol)
 
 --------------------------------------------------------------------------------
 -- * Syntax of hardware expressions.
@@ -102,7 +105,7 @@ data Simple sig
     Pos :: (HType a, Num a) => Simple (a :->       Full a)
     Add :: (HType a, Num a) => Simple (a :-> a :-> Full a)
     Sub :: (HType a, Num a) => Simple (a :-> a :-> Full a)
-    Cat :: (HType a, HType b, Show a, Read b) => Simple (a :-> a :-> Full b)
+    Cat :: (KnownNat n, KnownNat m) => Simple (Bits n :-> Bits m :-> Full (Bits (n + m)))
 
 -- | Integral expressions.
 data Term sig
@@ -283,7 +286,7 @@ instance Eval Simple
     evalSym Pos = id
     evalSym Add = (+)
     evalSym Sub = (-)
-    evalSym Cat = \x y -> read (show x ++ show y)
+    evalSym Cat = bitJoin
 
 instance EvalEnv Simple env
 

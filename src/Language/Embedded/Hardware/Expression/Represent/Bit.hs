@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 
 module Language.Embedded.Hardware.Expression.Represent.Bit
   ( Bit
@@ -44,9 +45,11 @@ import Language.Embedded.VHDL            (VHDL)
 import Language.Embedded.VHDL.Monad      (newSym, newLibrary, newImport, constrainedArray)
 import Language.Embedded.VHDL.Monad.Type
 
-import Data.Bits       hiding (Bits)
-import qualified Data.Bits as Bit (Bits)
 import Data.Ix
+import Data.Typeable
+import Data.Bits hiding (Bits)
+import qualified Data.Bits as Bit (Bits)
+
 import Control.Monad   (guard)
 import Control.DeepSeq (NFData(..))
 
@@ -66,6 +69,8 @@ instance forall n. KnownNat n => Rep (Bits n)
   where
     declare = declareBits
     format  = bitShowBin
+
+deriving instance Typeable (Bits n)
 
 declareBits :: forall proxy n. KnownNat n => proxy (Bits n) -> VHDL Type
 declareBits _ = declareBoolean >> return (std_logic_vector size)
