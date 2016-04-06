@@ -4,8 +4,10 @@
 
 module Language.Embedded.Hardware.Command
   ( compile
---  , icompile
+  , icompile
   , runIO
+
+  , VHDL.Mode(..)
 
   , module CMD
   , module Language.Embedded.Hardware.Command.CMD
@@ -39,14 +41,15 @@ compile
   => Program instr (Param2 exp pred) a
   -> String
 compile = show . prettyVHDL . interpret
-{-
+
 -- | Compile a program to VHDL code and print it on the screen.
 icompile
-  :: (Interp instr VHDL (Param2 exp pred), HFunctor instr)
+  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
+   . (Interp instr VHDL (Param2 exp pred), HFunctor instr)
   => Program instr (Param2 exp pred) a
   -> IO ()
 icompile = putStrLn . compile
--}
+
 -- | Run a program in 'IO'.
 runIO
   :: (InterpBi instr IO (Param1 pred), HBifunctor instr, EvaluateExp exp)
