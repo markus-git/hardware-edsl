@@ -1,5 +1,5 @@
 name:                hardware-edsl
-version:             0.1.0.2
+version:             0.1.1.0
 synopsis:            Deep embedding of hardware descriptions with code generation.
 description:         Deep embedding of hardware descriptions with code generation.
 license:             BSD3
