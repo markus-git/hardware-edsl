@@ -340,7 +340,7 @@ input :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m 
 input = namedInput "in"
 
 ret :: (ProgramT instr (Param2 exp pred) m) () -> Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred) ()
-ret = ret
+ret = Ret
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
