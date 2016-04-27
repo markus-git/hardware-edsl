@@ -28,7 +28,9 @@ import Data.Proxy
 import Data.Word     (Word8)
 import qualified Data.IORef    as IR
 import qualified Data.Array.IO as IA
-import GHC.TypeLits
+--import GHC.TypeLits
+
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- * Translation of hardware commands into VHDL.
@@ -63,30 +65,36 @@ compTA range _ =
 
 --------------------------------------------------------------------------------
 
-freshVar :: forall exp a. HType a => VarId -> VHDL (Val a)
+newSym :: Name -> VHDL String
+newSym (Base  n) | trace ("sym: " ++ n) True = V.newSym n
+newSym (Exact n) | trace ("sym: " ++ n) True = return   n
+
+freshVar :: forall exp a. HType a => Name -> VHDL (Val a)
 freshVar prefix =
   do i <- newSym prefix
      t <- compT (Proxy :: Proxy a)
      V.variable (ident i) t Nothing
      return (ValC i)
 
+--------------------------------------------------------------------------------
+
+ident :: String -> V.Identifier
+ident s | trace ("ident: " ++ s) True = V.Ident s
+
+ident' :: Name -> V.Identifier
+ident' (Base  n) | trace "ident'" True = ident n
+ident' (Exact n) | trace "ident'" True = ident n
+
 range :: Integral a => a -> V.Direction -> a -> V.Range
 range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
 
-newSym :: VarId -> VHDL VarId
-newSym (Unique n) = Unique <$> return n
-newSym (Base   n) = Base   <$> V.newSym n
+name :: String -> V.Primary
+name = V.PrimName . V.NSimple . ident
 
-ident :: VarId -> V.Identifier
-ident (Unique n) = V.Ident n
-ident (Base   n) = V.Ident n
+--------------------------------------------------------------------------------
 
 fromIdent :: ToIdent a => a -> V.Identifier
 fromIdent a = let (Ident i) = toIdent a in ident i
-
-name  :: VarId -> V.Primary
-name (Unique n) = V.PrimName $ V.NSimple $ V.Ident n
-name (Base   n) = V.PrimName $ V.NSimple $ V.Ident n
 
 --------------------------------------------------------------------------------
 -- ** Signals.
@@ -367,21 +375,24 @@ instance InterpBi ComponentCMD IO (Param1 pred)
     interpBi = runComponent
 
 compileComponent :: forall exp a. CompileExp exp => ComponentCMD (Param3 VHDL exp HType) a -> VHDL a
-compileComponent (StructComponent base sig) =
+compileComponent (StructComponent base sig) | trace "compile component" True =
   do comp <- newSym base
      V.component $
-       V.entity (ident comp) (declare sig) >>=
-       V.architecture (ident comp) (V.Ident "imp")
-     return (Just comp)
+       do p <- V.entity (ident comp) (traverseS sig)
+          V.architecture (ident comp) (V.Ident "imp") p
+     return $ case base of
+       Base  _ -> Base comp
+       Exact _ -> Exact comp
   where
-    declare :: Signature (Param3 VHDL exp HType) b ->  VHDL (VHDL ())
-    declare (Ret prog)  = return prog
-    declare (Lam n m f) =
+    traverseS :: Signature (Param3 VHDL exp HType) b ->  VHDL (VHDL ())
+    traverseS (Ret prog)  | trace "ret" True = return prog
+    traverseS (Lam n m f) | trace "lam" True = 
       do t <- compTF f
          i <- newSym n
          V.signal (ident i) m t Nothing
-         declare (f (SignalC i))
-compileComponent (PortMap (Component (Just base) sig) as) =
+         traverseS (f (SignalC i))
+
+compileComponent (PortMap (Component base sig) as) =
   do i  <- newSym base
      l  <- V.newLabel
      vs <- apply sig as
@@ -390,19 +401,18 @@ compileComponent (PortMap (Component (Just base) sig) as) =
   where
     apply :: Signature (Param3 VHDL exp HType) b -> Arg b -> VHDL [V.InterfaceDeclaration]
     apply (Ret _)     (Nill)                      = return []
-    apply (Lam n m f) (ArgSignal s@(SignalC i) v) = do
-      t  <- compTF f
-      is <- apply (f s) v
-      let i = V.InterfaceSignalDeclaration [ident n] (Just m) t False Nothing
-      return (i : is)
+    apply (Lam n m f) (ArgSignal s@(SignalC i) v) =
+      do t  <- compTF f
+         is <- apply (f s) v
+         let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
+         return (i : is)
 
     assoc :: Signature (Param3 VHDL exp HType) b -> Arg b -> [(V.Identifier, V.Identifier)]
     assoc (Ret _)     (Nill)                      = []
-    assoc (Lam n _ f) (ArgSignal s@(SignalC i) v) = (ident n, ident i) : assoc (f s) v
-
+    assoc (Lam n _ f) (ArgSignal s@(SignalC i) v) = (ident' n, ident i) : assoc (f s) v
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
-runComponent (StructComponent _ _)            = return Nothing
+runComponent (StructComponent _ _)            = return None
 runComponent (PortMap (Component _ sig) args) =
   error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
@@ -418,9 +428,11 @@ instance InterpBi StructuralCMD IO (Param1 pred)
     interpBi = runStructural
 
 compileStructural :: forall exp a. CompileExp exp => StructuralCMD (Param3 VHDL exp HType) a -> VHDL a
-compileStructural (StructEntity e prog)         = V.entity (ident e) prog
-compileStructural (StructArchitecture e a prog) = V.architecture (ident e) (ident a) prog
-compileStructural (StructProcess xs prog)       =
+compileStructural (StructEntity e prog)         | trace "compile entity" True =
+  V.entity (ident' e) prog
+compileStructural (StructArchitecture e a prog) | trace "compile architecture" True =
+  V.architecture (ident' e) (ident' a) prog
+compileStructural (StructProcess xs prog)       | trace "compile process" True =
   do label  <- V.newLabel
      (a, c) <- V.inProcess label (fmap (\(Ident i) -> ident i) xs) prog
      V.addConcurrent (V.ConProcess c)

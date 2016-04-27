@@ -70,6 +70,8 @@ import qualified Text.PrettyPrint as Text
 import Prelude hiding (null, not, abs, exp, rem, mod, div, and, or)
 import qualified Prelude as P
 
+import Debug.Trace
+
 --------------------------------------------------------------------------------
 -- * VHDL monad and environment.
 --------------------------------------------------------------------------------
@@ -364,7 +366,7 @@ addUnit_ lib = CMS.modify $ \s -> s { _units = (DesignUnit (ContextClause []) li
 --   identifiers and concurrent statements it produces. Strings are its entity
 --   and architecture names, respectively.
 architecture :: MonadV m => Identifier -> Identifier -> m a -> m a
-architecture entity name m =
+architecture entity@(Ident n) name@(Ident e) m | trace ("architecture: " ++ n ++ "; " ++ e) True =
   do oldConstants  <- CMS.gets _constants
      oldGlobal     <- CMS.gets _signals
      oldConcurrent <- CMS.gets _concurrent
@@ -411,7 +413,7 @@ architecture entity name m =
 -- | Declares an entity with the given name by consuming all port-level
 --   declaraions and context items produced by running the monadic action.
 entity :: MonadV m => Identifier -> m a -> m a
-entity name m =
+entity name@(Ident n) m | trace ("entity: " ++ n) True =
   do oldPorts    <- CMS.gets _signals
      oldGenerics <- CMS.gets _variables
      CMS.modify $ \e -> e { _signals   = []
@@ -457,7 +459,7 @@ package name m =
 
 -- | Declares an entire component, with entity declaration and a body.
 component :: MonadV m => m () -> m ()
-component m =
+component m | trace "component" True =
   do oldEnv <- CMS.get
      CMS.put emptyVHDLEnv
      m

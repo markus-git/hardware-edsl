@@ -30,12 +30,8 @@ name :: HType a => V.Name -> HExp a
 name n = sugarT (Name n)
 
 -- | Creates a variable from a string.
-var :: HType a => VarId -> HExp a
-var = name . V.NSimple . V.Ident . id
-  where
-    id :: VarId -> String
-    id (Unique i) = i
-    id (Base   i) = i
+var :: HType a => String -> HExp a
+var = name . V.NSimple . V.Ident
 
 -- | Lifts a typed value to an expression.
 value :: HType a => a -> HExp a
@@ -106,6 +102,9 @@ not = sugarT Not
 others :: (KnownNat n, Typeable n) => HExp Bit -> HExp (Bits n)
 others = sugarT Others
 
+slice :: (KnownNat n, Typeable n) => HExp (Bits n) -> (Integer, Integer) -> HExp (Bits m)
+slice = undefined
+
 cat
   :: ( KnownNat n
      , KnownNat m
@@ -114,6 +113,7 @@ cat
      )
   => HExp (Bits n) -> HExp (Bits m) -> HExp (Bits (n + m))
 cat = sugarT Cat
+
 
 --------------------------------------------------------------------------------
 

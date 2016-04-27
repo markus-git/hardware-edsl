@@ -32,6 +32,11 @@ import qualified GHC.Exts as GHC (Constraint)
 -- * Hardware commands.
 --------------------------------------------------------------------------------
 
+data Name =
+    None
+  | Base  VarId
+  | Exact VarId 
+
 -- | ...
 swapM :: Monad m => Maybe (m a) -> m (Maybe a)
 swapM = maybe (return Nothing) (>>= return . Just)
@@ -40,7 +45,7 @@ swapM = maybe (return Nothing) (>>= return . Just)
 -- ** Values.
 
 -- | Value representation.
-data Val a = ValC VarId | ValE a
+data Val a = ValC String | ValE a
 
 -- | ...
 valToExp :: (PredicateExp exp a, FreeExp exp) => Val a -> exp a
@@ -57,7 +62,7 @@ data Signal a = SignalC VarId | SignalE (IORef a)
 data SignalCMD fs a
   where
     -- ^ Create a new signal.
-    NewSignal :: pred a => VarId -> Mode -> Maybe (exp a) -> SignalCMD (Param3 prog exp pred) (Signal a)
+    NewSignal :: pred a => Name -> Mode -> Maybe (exp a) -> SignalCMD (Param3 prog exp pred) (Signal a)
     -- ^ Fetch the contents of a signal.
     GetSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
     -- ^ Write the value to a signal.
@@ -96,7 +101,7 @@ data Variable a = VariableC VarId | VariableE (IORef a)
 data VariableCMD fs a
   where
     -- ^ Create a new variable.
-    NewVariable :: pred a => VarId -> Maybe (exp a) -> VariableCMD (Param3 prog exp pred) (Variable a)
+    NewVariable :: pred a => Name -> Maybe (exp a) -> VariableCMD (Param3 prog exp pred) (Variable a)
     -- ^ Fetch the contents of a variable.
     GetVariable :: pred a => Variable a -> VariableCMD (Param3 prog exp pred) (Val a)
     -- ^ Write the value to a variable.
@@ -135,7 +140,7 @@ data Constant a = ConstantC VarId | ConstantE a
 data ConstantCMD fs a
   where
     -- ^ Create a new constant.
-    NewConstant :: pred a => VarId -> exp a -> ConstantCMD (Param3 prog exp pred) (Constant a)
+    NewConstant :: pred a => Name -> exp a -> ConstantCMD (Param3 prog exp pred) (Constant a)
     -- ^ Fetch the value of a constant.
     GetConstant :: pred a => Constant a -> ConstantCMD (Param3 prog exp pred) (Val a)
 
@@ -195,9 +200,9 @@ data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
 data VArrayCMD fs a
   where
     -- ^ Creates an array of given length.
-    NewVArray :: (pred a, Integral i, Ix i) => VarId -> exp i -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    NewVArray :: (pred a, Integral i, Ix i) => Name -> exp i -> VArrayCMD (Param3 prog exp pred) (VArray i a)
     -- ^ Creates an array from the given list of elements.
-    InitVArray :: (pred a, Integral i, Ix i) => VarId -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    InitVArray :: (pred a, Integral i, Ix i) => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray i a)
     -- ^ Fetches the array's value at a specified index.
     GetVArray :: (pred a, Integral i, Ix i) => exp i -> VArray i a -> VArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
@@ -344,7 +349,7 @@ data Signature fs a
   where
     Ret :: prog () -> Signature (Param3 prog exp pred) ()
     Lam :: pred a
-      => VarId
+      => Name
       -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
@@ -378,15 +383,15 @@ instance HBifunctor Signature
 --------------------------------------------------------------------------------
 
 -- | Named components.
-data Component fs a = Component (Maybe VarId) (Signature fs a)
+data Component fs a = Component Name (Signature fs a)
 
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD fs a
   where
     -- ^ ...
     StructComponent
-      :: VarId -> Signature (Param3 prog exp pred) a
-      -> ComponentCMD (Param3 prog exp pred) (Maybe VarId)
+      :: Name -> Signature (Param3 prog exp pred) a
+      -> ComponentCMD (Param3 prog exp pred) Name
     -- ^ ...
     PortMap
       :: Component (Param3 prog exp pred) a -> Arg a
@@ -442,10 +447,10 @@ data StructuralCMD fs (a :: *)
   where
     -- ^ Wraps the program in an entity.
     StructEntity
-      :: VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
+      :: Name -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in an architecture.
     StructArchitecture
-      :: VarId -> VarId -> prog a -> StructuralCMD (Param3 prog exp pred) a
+      :: Name -> Name -> prog a -> StructuralCMD (Param3 prog exp pred) a
     -- ^ Wraps the program in a process.
     StructProcess
       :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()

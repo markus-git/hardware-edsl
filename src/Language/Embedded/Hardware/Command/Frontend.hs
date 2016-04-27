@@ -63,19 +63,19 @@ unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
 -- ports.
 
 -- | Declare port signals of the given mode and assign it initial value.
-initNamedPort, initUniquePort :: (SignalCMD :<: instr, pred a)
+initNamedPort, initExactPort :: (SignalCMD :<: instr, pred a)
   => String -> Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
-initNamedPort  name m = singleInj . NewSignal (Base   name) m . Just
-initUniquePort name m = singleInj . NewSignal (Unique name) m . Just
+initNamedPort name m = singleInj . NewSignal (Base  name) m . Just
+initExactPort name m = singleInj . NewSignal (Exact name) m . Just
 
 initPort :: (SignalCMD :<: instr, pred a) => Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
 initPort = initNamedPort "p"
 
 -- | Declare port signals of the given mode.
-newNamedPort, newUniquePort :: (SignalCMD :<: instr, pred a)
+newNamedPort, newExactPort :: (SignalCMD :<: instr, pred a)
   => String -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
-newNamedPort  name m = singleInj $ NewSignal (Base   name) m Nothing
-newUniquePort name m = singleInj $ NewSignal (Unique name) m Nothing
+newNamedPort name m = singleInj $ NewSignal (Base  name) m Nothing
+newExactPort name m = singleInj $ NewSignal (Exact name) m Nothing
 
 newPort :: (SignalCMD :<: instr, pred a) => Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
 newPort = newNamedPort "p"
@@ -321,17 +321,23 @@ portmap pro arg = singleInj $ PortMap pro arg
 
 --------------------------------------------------------------------------------
 
-uniqueOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-uniqueOutput n = Lam (Unique n) Out
+exactOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactOutput n = Lam (Exact n) Out
+
+namedOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedOutput n = Lam (Base n) Out
 
 output :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-output = Lam (Base "out") Out
+output = namedOutput "out"
 
-uniqueInput  :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-uniqueInput  n = Lam (Unique n) In
+exactInput  :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactInput  n = Lam (Exact n) In
+
+namedInput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedInput n = Lam (Base n) In
 
 input :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-input = Lam (Base "in") In
+input = namedInput "in"
 
 ret :: (ProgramT instr (Param2 exp pred) m) () -> Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred) ()
 ret = ret

@@ -13,14 +13,7 @@ import Data.String
 --------------------------------------------------------------------------------
 
 -- | Variable identifier.
-data VarId
-  = Unique String
-  | Base   String
-
--- | ...
-instance IsString VarId
-  where
-    fromString = Base
+type VarId = String 
 
 --------------------------------------------------------------------------------
 
