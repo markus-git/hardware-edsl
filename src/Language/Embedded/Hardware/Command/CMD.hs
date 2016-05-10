@@ -471,5 +471,14 @@ instance HBifunctor StructuralCMD
     hbimap g f (StructArchitecture e a p) = StructArchitecture e a (g p)
     hbimap g f (StructProcess xs p)       = StructProcess xs (g p)
 
+instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr
+  where
+    reexpressInstrEnv reexp (StructEntity n p)         =
+      ReaderT $ \env -> singleInj $ StructEntity n $ runReaderT p env
+    reexpressInstrEnv reexp (StructArchitecture e n p) =
+      ReaderT $ \env -> singleInj $ StructArchitecture e n $ runReaderT p env
+    reexpressInstrEnv reexp (StructProcess is p)       =
+      ReaderT $ \env -> singleInj $ StructProcess is $ runReaderT p env
+
 --------------------------------------------------------------------------------
 
