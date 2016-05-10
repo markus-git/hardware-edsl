@@ -30,8 +30,6 @@ import qualified Data.IORef    as IR
 import qualified Data.Array.IO as IA
 --import GHC.TypeLits
 
-import Debug.Trace
-
 --------------------------------------------------------------------------------
 -- * Translation of hardware commands into VHDL.
 --------------------------------------------------------------------------------
@@ -66,8 +64,8 @@ compTA range _ =
 --------------------------------------------------------------------------------
 
 newSym :: Name -> VHDL String
-newSym (Base  n) | trace ("sym: " ++ n) True = V.newSym n
-newSym (Exact n) | trace ("sym: " ++ n) True = return   n
+newSym (Base  n) = V.newSym n
+newSym (Exact n) = return   n
 
 freshVar :: forall exp a. HType a => Name -> VHDL (Val a)
 freshVar prefix =
@@ -79,11 +77,11 @@ freshVar prefix =
 --------------------------------------------------------------------------------
 
 ident :: String -> V.Identifier
-ident s | trace ("ident: " ++ s) True = V.Ident s
+ident s = V.Ident s
 
 ident' :: Name -> V.Identifier
-ident' (Base  n) | trace "ident'" True = ident n
-ident' (Exact n) | trace "ident'" True = ident n
+ident' (Base  n) = ident n
+ident' (Exact n) = ident n
 
 range :: Integral a => a -> V.Direction -> a -> V.Range
 range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
@@ -375,7 +373,7 @@ instance InterpBi ComponentCMD IO (Param1 pred)
     interpBi = runComponent
 
 compileComponent :: forall exp a. CompileExp exp => ComponentCMD (Param3 VHDL exp HType) a -> VHDL a
-compileComponent (StructComponent base sig) | trace "compile component" True =
+compileComponent (StructComponent base sig) =
   do comp <- newSym base
      V.component $
        do p <- V.entity (ident comp) (traverseS sig)
@@ -385,8 +383,8 @@ compileComponent (StructComponent base sig) | trace "compile component" True =
        Exact _ -> Exact comp
   where
     traverseS :: Signature (Param3 VHDL exp HType) b ->  VHDL (VHDL ())
-    traverseS (Ret prog)  | trace "ret" True = return prog
-    traverseS (Lam n m f) | trace "lam" True = 
+    traverseS (Ret prog) = return prog
+    traverseS (Lam n m f) = 
       do t <- compTF f
          i <- newSym n
          V.signal (ident i) m t Nothing
@@ -428,11 +426,11 @@ instance InterpBi StructuralCMD IO (Param1 pred)
     interpBi = runStructural
 
 compileStructural :: forall exp a. CompileExp exp => StructuralCMD (Param3 VHDL exp HType) a -> VHDL a
-compileStructural (StructEntity e prog)         | trace "compile entity" True =
+compileStructural (StructEntity e prog)  =
   V.entity (ident' e) prog
-compileStructural (StructArchitecture e a prog) | trace "compile architecture" True =
+compileStructural (StructArchitecture e a prog) =
   V.architecture (ident' e) (ident' a) prog
-compileStructural (StructProcess xs prog)       | trace "compile process" True =
+compileStructural (StructProcess xs prog) =
   do label  <- V.newLabel
      (a, c) <- V.inProcess label (fmap (\(Ident i) -> ident i) xs) prog
      V.addConcurrent (V.ConProcess c)

@@ -39,13 +39,28 @@ type HSig  = Sig CMD HExp HType Identity
 
 tests :: IO ()
 tests = do
-  putStrLn "\n### Identity ###\n"
-  putStrLn $ compile $ testIdentity
-  putStrLn "\n### Component ###\n"
-  putStrLn $ compile $ testComponent
+  putStrLn "\n### Looooop ###\n"
+  icompile testLoop
+--  putStrLn "\n### Identity ###\n"
+--  icompile $ testIdentity
+--  putStrLn "\n### Component ###\n"
+--  icompile $ testComponent
 
 --------------------------------------------------------------------------------
 
+testLoop :: HProg ()
+testLoop = do
+  entity "loop" (return ())
+  architecture "loop" "behav" $ do
+    component looping
+    return ()
+
+looping :: HSig ()
+looping = ret $ do
+  return ()
+
+--------------------------------------------------------------------------------
+{-
 testIdentity :: HProg ()
 testIdentity = do
   (x, y) <- entity "identity" $
@@ -55,7 +70,7 @@ testIdentity = do
   architecture "identity" "behavioural" $
     process (x .: []) $
       do y <=- x
-
+-}
 --------------------------------------------------------------------------------
 
 testComponent :: HProg ()
@@ -66,7 +81,8 @@ testComponent = do
        return (x, y)
   architecture "component" "behavioural" $
     do c <- component invert
-       portmap c (x .> y .> Nill)
+       return ()
+       --portmap c (x .> y .> Nill)
 
 invert :: HSig (Signal Bool -> Signal Bool -> ())
 invert =
