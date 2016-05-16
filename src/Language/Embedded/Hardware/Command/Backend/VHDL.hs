@@ -241,34 +241,40 @@ runVArray :: VArrayCMD (Param3 IO IO pred) a -> IO a
 runVArray (NewVArray _ len) =
   do len' <- len
      arr  <- IA.newArray_ (0, len')
-     return (VArrayE arr)
+     ref  <- IR.newIORef arr
+     return (VArrayE ref)
 runVArray (InitVArray _ is) =
   do arr  <- IA.newListArray (0, fromIntegral $ length is - 1) is
-     return (VArrayE arr)
-runVArray (GetVArray i (VArrayE arr)) =
-  do (l, h) <- IA.getBounds arr
+     ref  <- IR.newIORef arr
+     return (VArrayE ref)
+runVArray (GetVArray i (VArrayE ref)) =
+  do arr    <- IR.readIORef ref
+     (l, h) <- IA.getBounds arr
      ix  <- i
      if (ix < l || ix > h)
         then error "getArr out of bounds"
         else do v <- IA.readArray arr ix
                 return (ValE v)
-runVArray (SetVArray i e (VArrayE arr)) =
-  do (l, h) <- IA.getBounds arr
+runVArray (SetVArray i e (VArrayE ref)) =
+  do arr    <- IR.readIORef ref
+     (l, h) <- IA.getBounds arr
      ix <- i
      e' <- e
      if (ix < l || ix > h)
         then error "setArr out of bounds"
         else IA.writeArray arr (fromIntegral ix) e'
-runVArray (CopyVArray (VArrayE arr) (VArrayE brr) l) =
+runVArray (CopyVArray (VArrayE ra) (VArrayE rb) l) =
   do l'      <- l
+     arr     <- IR.readIORef ra
+     brr     <- IR.readIORef rb
      (0, ha) <- IA.getBounds arr
      (0, hb) <- IA.getBounds brr
      if (l' > hb + 1 || l' > ha + 1)
         then error "copyArr out of bounts"
         else sequence_ [ IA.readArray arr i >>= IA.writeArray brr i
                        | i <- genericTake l' [0..] ]
-runVArray (UnsafeFreezeVArray (VArrayE arr)) = fmap IArrayE $ IA.freeze arr
-runVArray (UnsafeThawVArray (IArrayE arr)) = fmap VArrayE $ IA.thaw arr
+runVArray (UnsafeFreezeVArray (VArrayE ref)) = IR.readIORef ref >>= IA.freeze >>= return . IArrayE
+runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw arr >>= IR.newIORef >>= return . VArrayE
 
 --------------------------------------------------------------------------------
 -- ** Loops.

@@ -52,7 +52,8 @@ icompile = putStrLn . compile
 
 -- | Run a program in 'IO'.
 runIO
-  :: (InterpBi instr IO (Param1 pred), HBifunctor instr, EvaluateExp exp)
+  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
+   . (InterpBi instr IO (Param1 pred), HBifunctor instr, EvaluateExp exp)
   => Program instr (Param2 exp pred) a
   -> IO a
 runIO = interpretBi (return . evalE)

@@ -191,7 +191,7 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr
 -- ** Virtual arrays.
 
 -- | Virtual array reprensentation.
-data VArray i a = VArrayC VarId | VArrayE (IOArray i a)
+data VArray i a = VArrayC VarId | VArrayE (IORef (IOArray i a))
 
 -- | Immutable arrays.
 data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
@@ -354,10 +354,6 @@ data Signature fs a
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
 
-    -- *** correct way of setting kinds without 'Dummy'?
-    D1 :: pred a => prog (exp a) -> Signature (Param3 prog exp pred) ()
-    -- ***
-
 -- | Signature arguments.
 data Arg a
   where
@@ -454,10 +450,6 @@ data StructuralCMD fs (a :: *)
     -- ^ Wraps the program in a process.
     StructProcess
       :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
-    -- *** correct way of setting kinds without 'Dummy'?
-    D2
-      :: pred a => prog (exp a) -> StructuralCMD (Param3 prog exp pred) ()
-    -- ***
 
 instance HFunctor StructuralCMD
   where

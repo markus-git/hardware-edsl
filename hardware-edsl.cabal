@@ -29,9 +29,9 @@ library
     Language.Embedded.Hardware.Expression.Represent,
     Language.Embedded.Hardware.Expression.Represent.Bit,
     Language.Embedded.Hardware.Expression.Syntax,
-    Language.Embedded.Hardware.Interface        
+    Language.Embedded.Hardware.Interface,
     Language.Embedded.Hardware.Command,
-    Language.Embedded.Hardware.Command.Backend.VHDL
+    Language.Embedded.Hardware.Command.Backend.VHDL,
     Language.Embedded.Hardware.Command.CMD,
     Language.Embedded.Hardware.Command.Frontend
 
@@ -49,6 +49,7 @@ library
     FlexibleContexts,
     FlexibleInstances,
     MultiParamTypeClasses,
+    PolyKinds,
     ScopedTypeVariables,
     GeneralizedNewtypeDeriving,
     ConstraintKinds,

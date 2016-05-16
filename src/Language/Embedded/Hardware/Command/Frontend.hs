@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE PolyKinds           #-}
 
 module Language.Embedded.Hardware.Command.Frontend where
 
