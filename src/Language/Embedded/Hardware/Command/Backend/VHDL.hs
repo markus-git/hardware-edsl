@@ -7,6 +7,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE ConstraintKinds       #-}
 
 module Language.Embedded.Hardware.Command.Backend.VHDL () where
 
@@ -40,16 +42,34 @@ evalEM e = maybe (error "empty value") (id) $ fmap evalE e
 compEM :: forall exp a. CompileExp exp => Maybe (exp a) -> VHDL (Maybe V.Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
 
-compTM :: forall exp a. HType a => Maybe (exp a) -> VHDL V.Type
-compTM _ = compT (Proxy :: Proxy a)
+--------------------------------------------------------------------------------
 
-compTF :: forall exp a b. HType a => (exp a -> b) -> VHDL V.Type
-compTF _ = compT (Proxy :: Proxy a)
+class CompileType ct
+  where
+    compileType :: ct a => proxy1 ct -> proxy2 a -> VHDL V.Type
+    compileLit  :: ct a => proxy1 ct ->        a -> VHDL V.Expression
 
-compTA :: forall array i a. HType a => V.Range -> array i a -> VHDL V.Type
-compTA range _ =
+instance CompileType HType
+  where
+    compileType _ = compT
+    compileLit  _ = literal
+
+proxyM :: Maybe (exp a) -> Proxy a
+proxyM _ = Proxy
+
+proxyF :: (exp a -> b) -> Proxy a
+proxyF _ = Proxy
+
+compTM :: forall proxy ct exp a. (CompileType ct, ct a) => proxy ct -> Maybe (exp a) -> VHDL V.Type
+compTM _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
+
+compTF :: forall proxy ct exp a b. (CompileType ct, ct a) => proxy ct -> (exp a -> b) -> VHDL V.Type
+compTF _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
+
+compTA :: forall proxy ct array i a. (CompileType ct, ct a) => proxy ct -> V.Range -> array i a -> VHDL V.Type
+compTA _ range _ =
   do i <- newSym (Base "type")
-     t <- compT (Proxy :: Proxy a)
+     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
      let array = V.constrainedArray (ident i) t range
      V.addType array
      return (typed array)
@@ -67,10 +87,10 @@ newSym :: Name -> VHDL String
 newSym (Base  n) = V.newSym n
 newSym (Exact n) = return   n
 
-freshVar :: forall exp a. HType a => Name -> VHDL (Val a)
-freshVar prefix =
+freshVar :: forall proxy ct exp a. (CompileType ct, ct a) => proxy ct -> Name -> VHDL (Val a)
+freshVar _ prefix =
   do i <- newSym prefix
-     t <- compT (Proxy :: Proxy a)
+     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
      V.variable (ident i) t Nothing
      return (ValC i)
 
@@ -89,15 +109,13 @@ range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
 name :: String -> V.Primary
 name = V.PrimName . V.NSimple . ident
 
---------------------------------------------------------------------------------
-
 fromIdent :: ToIdent a => a -> V.Identifier
 fromIdent a = let (Ident i) = toIdent a in ident i
 
 --------------------------------------------------------------------------------
 -- ** Signals.
 
-instance CompileExp exp => Interp SignalCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp SignalCMD VHDL (Param2 exp ct)
   where
     interp = compileSignal
 
@@ -105,15 +123,15 @@ instance InterpBi SignalCMD IO (Param1 pred)
   where
     interpBi = runSignal
 
-compileSignal :: CompileExp exp => SignalCMD (Param3 VHDL exp HType) a -> VHDL a
+compileSignal :: forall exp ct a. (CompileExp exp, CompileType ct) => SignalCMD (Param3 VHDL exp ct) a -> VHDL a
 compileSignal (NewSignal base mode exp) =
   do v <- compEM exp
-     t <- compTM exp
+     t <- compTM (Proxy::Proxy ct) exp
      i <- newSym base
      V.signal (ident i) mode t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
-  do i <- freshVar (Base "s")
+  do i <- freshVar (Proxy::Proxy ct) (Base "s")
      V.assignVariable (fromIdent i) (lift $ name s)
      return i
 compileSignal (SetSignal (SignalC s) exp) =
@@ -131,7 +149,7 @@ runSignal x@(UnsafeFreezeSignal r)    = runSignal (GetSignal r `asTypeOf` x)
 --------------------------------------------------------------------------------
 -- ** Variables.
 
-instance CompileExp exp => Interp VariableCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp VariableCMD VHDL (Param2 exp ct)
   where
     interp = compileVariable
 
@@ -139,15 +157,15 @@ instance InterpBi VariableCMD IO (Param1 pred)
   where
     interpBi = runVariable
 
-compileVariable :: forall exp a. CompileExp exp => VariableCMD (Param3 VHDL exp HType) a -> VHDL a
+compileVariable :: forall ct exp a. (CompileExp exp, CompileType ct) => VariableCMD (Param3 VHDL exp ct) a -> VHDL a
 compileVariable (NewVariable base exp) =
   do v <- compEM exp
-     t <- compTM exp
+     t <- compTM (Proxy::Proxy ct) exp
      i <- newSym base
      V.variable (ident i) t v
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
-  do i <- freshVar (Base "v")
+  do i <- freshVar (Proxy::Proxy ct) (Base "v")
      V.assignVariable (fromIdent i) (lift $ V.PrimName $ V.NSimple $ ident var)
      return i
 compileVariable (SetVariable (VariableC var) exp) =
@@ -165,7 +183,7 @@ runVariable x@(UnsafeFreezeVariable v)      = runVariable (GetVariable v `asType
 --------------------------------------------------------------------------------
 -- ** Constants.
 
-instance CompileExp exp => Interp ConstantCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp ConstantCMD VHDL (Param2 exp ct)
   where
     interp = compileConstant
 
@@ -173,10 +191,10 @@ instance InterpBi ConstantCMD IO (Param1 pred)
   where
     interpBi = runConstant
 
-compileConstant :: forall exp a. CompileExp exp => ConstantCMD (Param3 VHDL exp HType) a -> VHDL a
-compileConstant (NewConstant base exp) =
+compileConstant :: forall ct exp a. (CompileExp exp, CompileType ct) => ConstantCMD (Param3 VHDL exp ct) a -> VHDL a
+compileConstant (NewConstant base (exp :: exp c)) =
   do v <- compE  exp
-     t <- compT  exp
+     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy c)
      i <- newSym base
      V.constant (ident i) t v
      return (ConstantC i)
@@ -195,7 +213,7 @@ runConstant (GetConstant (ConstantE exp)) = return $ ValE exp
 --------------------------------------------------------------------------------
 -- ** Virtual Arrays.
 
-instance CompileExp exp => Interp VArrayCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp VArrayCMD VHDL (Param2 exp ct)
   where
     interp = compileVArray
 
@@ -203,24 +221,24 @@ instance InterpBi VArrayCMD IO (Param1 pred)
   where
     interpBi = runVArray
 
-compileVArray :: forall exp a. CompileExp exp => VArrayCMD (Param3 VHDL exp HType) a -> VHDL a
+compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct) => VArrayCMD (Param3 VHDL exp ct) a -> VHDL a
 compileVArray (NewVArray base len) =
   do l <- compE len
      let r = V.range (lift l) V.downto (V.point (0 :: Int))
-     t <- compTA r (undefined :: a)
+     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
      V.variable (ident i) t Nothing
      return (VArrayC i)
 compileVArray (InitVArray base is) =
   do let r = V.range (V.point (length is)) V.downto (V.point (0 :: Int))
-     t <- compTA r (undefined :: a)
+     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
-     x <- mapM literal is
+     x <- mapM (compileLit (Proxy::Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
      V.variable (ident i) t (Just $ lift v)
      return (VArrayC i)
 compileVArray (GetVArray ix (VArrayC arr)) =
-  do i <- freshVar (Base "a")
+  do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
      V.assignVariable (fromIdent i) (lift $ V.PrimName $ V.indexed (ident arr) e)
      return i
@@ -279,7 +297,7 @@ runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw arr >>= IR.newIORef >>= r
 --------------------------------------------------------------------------------
 -- ** Loops.
 
-instance CompileExp exp => Interp LoopCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp LoopCMD VHDL (Param2 exp ct)
   where
     interp = compileLoop
 
@@ -287,11 +305,11 @@ instance InterpBi LoopCMD IO (Param1 pred)
   where
     interpBi = runLoop
 
-compileLoop :: forall exp a. CompileExp exp => LoopCMD (Param3 VHDL exp HType) a -> VHDL a
+compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct) => LoopCMD (Param3 VHDL exp ct) a -> VHDL a
 compileLoop (For h step) =  -- (range 0 V.to (evalE r))
   do h'   <- compE h
      let r = V.range (V.point (0 :: Int)) V.to (lift h')
-     i    <- freshVar (Base "l")
+     i    <- freshVar (Proxy::Proxy ct) (Base "l")
      loop <- V.inFor undefined r (step i)
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
@@ -316,7 +334,7 @@ runLoop (While b step) = loop
 --------------------------------------------------------------------------------
 -- ** Conditional.
 
-instance CompileExp exp => Interp ConditionalCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp ConditionalCMD VHDL (Param2 exp ct)
   where
     interp = compileConditional
 
@@ -324,7 +342,7 @@ instance InterpBi ConditionalCMD IO (Param1 pred)
   where
     interpBi = runConditional
 
-compileConditional :: forall exp a. CompileExp exp => ConditionalCMD (Param3 VHDL exp HType) a -> VHDL a
+compileConditional :: forall ct exp a. (CompileExp exp, CompileType ct) => ConditionalCMD (Param3 VHDL exp ct) a -> VHDL a
 compileConditional (If (a, b) cs em) =
   do let (es, ds) = unzip cs
          el       = maybe (return ()) id em
@@ -339,13 +357,13 @@ compileConditional (Case e cs d) =
      s   <- V.inCase ae ce el
      V.addSequential $ V.SCase s
   where
-    compC :: HType b => When b VHDL -> VHDL (V.Choices, VHDL ())
+    compC :: ct b => When b VHDL -> VHDL (V.Choices, VHDL ())
     compC (When (Is e) p)   = do
-      e' <- literal e
+      e' <- compileLit (Proxy::Proxy ct) e
       return $ (V.Choices [V.ChoiceSimple $ lift e'], p)
     compC (When (To l h) p) = do
-      l' <- literal l
-      h' <- literal h
+      l' <- compileLit (Proxy::Proxy ct) l
+      h' <- compileLit (Proxy::Proxy ct) h
       return $ (V.Choices [V.ChoiceRange (V.DRRange (V.range (lift l') V.to (lift h')))], p)
 compileConditional (Null) = V.null
 
@@ -370,7 +388,7 @@ runConditional (Null) = return ()
 --------------------------------------------------------------------------------
 -- ** Components.
 
-instance CompileExp exp => Interp ComponentCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp ComponentCMD VHDL (Param2 exp ct)
   where
     interp = compileComponent
 
@@ -378,7 +396,7 @@ instance InterpBi ComponentCMD IO (Param1 pred)
   where
     interpBi = runComponent
 
-compileComponent :: forall exp a. CompileExp exp => ComponentCMD (Param3 VHDL exp HType) a -> VHDL a
+compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct) => ComponentCMD (Param3 VHDL exp ct) a -> VHDL a
 compileComponent (StructComponent base sig) =
   do comp <- newSym base
      V.component $
@@ -388,10 +406,10 @@ compileComponent (StructComponent base sig) =
        Base  _ -> Base comp
        Exact _ -> Exact comp
   where
-    traverseS :: Signature (Param3 VHDL exp HType) b ->  VHDL (VHDL ())
+    traverseS :: Signature (Param3 VHDL exp ct) b ->  VHDL (VHDL ())
     traverseS (Ret prog) = return prog
     traverseS (Lam n m f) = 
-      do t <- compTF f
+      do t <- compTF (Proxy::Proxy ct) f
          i <- newSym n
          V.signal (ident i) m t Nothing
          traverseS (f (SignalC i))
@@ -403,15 +421,15 @@ compileComponent (PortMap (Component base sig) as) =
      V.declareComponent  (ident i) vs
      V.portMap l (ident i) (assoc sig as)
   where
-    apply :: Signature (Param3 VHDL exp HType) b -> Arg b -> VHDL [V.InterfaceDeclaration]
+    apply :: Signature (Param3 VHDL exp ct) b -> Arg b -> VHDL [V.InterfaceDeclaration]
     apply (Ret _)     (Nill)                      = return []
     apply (Lam n m f) (ArgSignal s@(SignalC i) v) =
-      do t  <- compTF f
+      do t  <- compTF (Proxy::Proxy ct) f
          is <- apply (f s) v
          let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
          return (i : is)
 
-    assoc :: Signature (Param3 VHDL exp HType) b -> Arg b -> [(V.Identifier, V.Identifier)]
+    assoc :: Signature (Param3 VHDL exp ct) b -> Arg b -> [(V.Identifier, V.Identifier)]
     assoc (Ret _)     (Nill)                      = []
     assoc (Lam n _ f) (ArgSignal s@(SignalC i) v) = (ident' n, ident i) : assoc (f s) v
 
@@ -423,7 +441,7 @@ runComponent (PortMap (Component _ sig) args) =
 --------------------------------------------------------------------------------
 -- ** Structural.
 
-instance CompileExp exp => Interp StructuralCMD VHDL (Param2 exp HType)
+instance (CompileExp exp, CompileType ct) => Interp StructuralCMD VHDL (Param2 exp ct)
   where
     interp = compileStructural
 
@@ -431,7 +449,7 @@ instance InterpBi StructuralCMD IO (Param1 pred)
   where
     interpBi = runStructural
 
-compileStructural :: forall exp a. CompileExp exp => StructuralCMD (Param3 VHDL exp HType) a -> VHDL a
+compileStructural :: forall ct exp a. (CompileExp exp, CompileType ct) => StructuralCMD (Param3 VHDL exp ct) a -> VHDL a
 compileStructural (StructEntity e prog)  =
   V.entity (ident' e) prog
 compileStructural (StructArchitecture e a prog) =
