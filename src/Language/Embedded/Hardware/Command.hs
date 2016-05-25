@@ -1,6 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ConstraintKinds     #-}
 
 module Language.Embedded.Hardware.Command
   ( compile
@@ -36,16 +38,24 @@ import qualified GHC.Exts as GHC (Constraint)
 
 -- | Compile a program to VHDL code represented as a string.
 compile
-  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
-   . (Interp instr VHDL (Param2 exp pred), HFunctor instr)
+  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
+     ( Interp instr VHDL (Param2 exp pred)
+     , HFunctor instr
+     , pred Bool
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr)
   => Program instr (Param2 exp pred) a
   -> String
-compile = show . prettyVHDL . interpret
+compile = show . prettyVHDL . interpret . wrap
 
 -- | Compile a program to VHDL code and print it on the screen.
 icompile
-  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
-   . (Interp instr VHDL (Param2 exp pred), HFunctor instr)
+  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
+     ( Interp instr VHDL (Param2 exp pred)
+     , HFunctor instr
+     , pred Bool
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr)
   => Program instr (Param2 exp pred) a
   -> IO ()
 icompile = putStrLn . compile
@@ -57,5 +67,22 @@ runIO
   => Program instr (Param2 exp pred) a
   -> IO a
 runIO = interpretBi (return . evalE)
+
+--------------------------------------------------------------------------------
+
+-- | Wrap a hardware program in an empty architecture/entity.
+wrap
+  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
+     ( StructuralCMD :<: instr
+     , SignalCMD     :<: instr
+     , pred Bool)
+  => Program instr (Param2 exp pred) a
+  -> Program instr (Param2 exp pred) ()
+wrap body = do
+  clk <- entity "main" $
+    newExactPort "clk" VHDL.In :: Program instr (Param2 exp pred) (Signal Bool)
+  architecture "main" "behavioural" $
+    process (clk .: []) $
+      body >> return ()
 
 --------------------------------------------------------------------------------
