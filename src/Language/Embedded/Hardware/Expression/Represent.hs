@@ -69,10 +69,10 @@ instance Rep Bool where
   format False = "\'0\'"
 
 instance Num Bool where
-  (+) = undefined
-  (-) = undefined
-  (*) = undefined
-  abs = id
+  (+)    = error "(+) not implemented for Bool"
+  (-)    = error "(-) not implemented for Bool"
+  (*)    = error "(*) not implemented for Bool"
+  abs    = id
   signum = id
   fromInteger 0 = False
   fromInteger 1 = True

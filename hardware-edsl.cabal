@@ -33,13 +33,13 @@ library
     Language.Embedded.Hardware.Command,
     Language.Embedded.Hardware.Command.Backend.VHDL,
     Language.Embedded.Hardware.Command.CMD,
-    Language.Embedded.Hardware.Command.Frontend
-
-  other-modules:
+    Language.Embedded.Hardware.Command.Frontend,
     Language.Embedded.VHDL,
     Language.Embedded.VHDL.Monad,
     Language.Embedded.VHDL.Monad.Type,
     Language.Embedded.VHDL.Monad.Expression
+
+  --other-modules:
     
   other-extensions:
     GADTs,

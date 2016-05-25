@@ -10,7 +10,7 @@
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE ConstraintKinds       #-}
 
-module Language.Embedded.Hardware.Command.Backend.VHDL () where
+module Language.Embedded.Hardware.Command.Backend.VHDL (CompileType(..)) where
 
 import Control.Monad.Operational.Higher
 
@@ -310,7 +310,7 @@ compileLoop (For h step) =  -- (range 0 V.to (evalE r))
   do h'   <- compE h
      let r = V.range (V.point (0 :: Int)) V.to (lift h')
      i    <- freshVar (Proxy::Proxy ct) (Base "l")
-     loop <- V.inFor undefined r (step i)
+     loop <- V.inFor (error "compileLoop:For") r (step i)
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel
