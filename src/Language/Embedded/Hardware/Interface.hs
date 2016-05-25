@@ -1,7 +1,10 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeFamilies   #-}
 
-module Language.Embedded.Hardware.Interface where
+module Language.Embedded.Hardware.Interface
+  ( VHDL
+  , module Language.Embedded.Hardware.Interface
+  ) where
 
 import Language.VHDL          (Expression)
 import Language.Embedded.VHDL (VHDL, Type)
