@@ -297,7 +297,7 @@ recallBits (UB i) = (B i)
 
 --------------------------------------------------------------------------------
 
-instance Show (UBits n) where
+instance Show UBits where
   showsPrec p (UB x) = showsPrec p x
 
 --------------------------------------------------------------------------------
