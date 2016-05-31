@@ -296,3 +296,8 @@ recallBits :: KnownNat n => UBits -> Bits n
 recallBits (UB i) = (B i)
 
 --------------------------------------------------------------------------------
+
+instance Show (UBits n) where
+  showsPrec p (UB x) = showsPrec p x
+
+--------------------------------------------------------------------------------
