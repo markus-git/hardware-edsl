@@ -68,16 +68,6 @@ instance Rep Bool where
   format True  = "\'1\'"
   format False = "\'0\'"
 
-instance Num Bool where
-  (+)    = error "(+) not implemented for Bool"
-  (-)    = error "(-) not implemented for Bool"
-  (*)    = error "(*) not implemented for Bool"
-  abs    = id
-  signum = id
-  fromInteger 0 = False
-  fromInteger 1 = True
-  fromInteger _ = error "bool-num: >1"
-
 --------------------------------------------------------------------------------
 -- ** Signed
 
@@ -154,5 +144,15 @@ declareFloating :: VHDL ()
 declareFloating =
   do newLibrary "IEEE"
      newImport  "IEEE.float_pkg"
+
+instance Num Bool where
+  (+)    = error "(+) not implemented for Bool"
+  (-)    = error "(-) not implemented for Bool"
+  (*)    = error "(*) not implemented for Bool"
+  abs    = id
+  signum = id
+  fromInteger 0 = False
+  fromInteger 1 = True
+  fromInteger _ = error "bool-num: >1"
 
 --------------------------------------------------------------------------------

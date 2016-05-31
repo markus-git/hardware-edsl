@@ -25,6 +25,8 @@ import Data.IORef    (IORef)
 import Data.Array.IO (IOArray)
 import qualified Data.Array as Arr
 
+import qualified Language.VHDL as V (Expression, Name, Identifier)
+
 --import GHC.TypeLits
 import qualified GHC.Exts as GHC (Constraint)
 
@@ -69,6 +71,7 @@ data SignalCMD fs a
     SetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching a signal.
     UnsafeFreezeSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
+    -- *** ...
 
 instance HFunctor SignalCMD
   where
@@ -89,7 +92,7 @@ instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr
     reexpressInstrEnv reexp (NewSignal n m e) = lift . singleInj . NewSignal n m =<< swapM (fmap reexp e)
     reexpressInstrEnv reexp (GetSignal s) = lift $ singleInj $ GetSignal s
     reexpressInstrEnv reexp (SetSignal s e) = lift . singleInj . SetSignal s =<< reexp e
-    reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s    
+    reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -174,18 +177,38 @@ data Array i a = ArrayC VarId | ArrayE (IOArray i a)
 
 -- | Commands for signal arrays.
 data ArrayCMD fs a
+  where
+    -- *** ...
+    GetRange
+      :: (pred i, Integral i, Ix i, pred UBits)
+      => exp i -> exp i -> Signal (Bits n)
+      -> ArrayCMD (Param3 prog exp pred) (Val UBits)
+    SetRange
+      :: (pred i, Integral i, Ix i, pred UBits)
+      => exp i -> exp i -> Signal (Bits n) -> exp UBits
+      -> ArrayCMD (Param3 prog exp pred) ()
 
 instance HFunctor ArrayCMD 
   where
-    hfmap _ _ = undefined
+    hfmap _ (GetRange l h s)   = GetRange l h s
+    hfmap _ (SetRange l h s e) = SetRange l h s e
 
 instance HBifunctor ArrayCMD
   where
-    hbimap _ _ _ = undefined
+    hbimap _ f (GetRange r1 r2 s)   = GetRange (f r1) (f r2) s
+    hbimap _ f (SetRange r1 r2 s e) = SetRange (f r1) (f r2) s (f e)
 
 instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr
   where
-    reexpressInstrEnv _ _ = undefined
+    reexpressInstrEnv reexp (GetRange r1 r2 s) =
+      do r1' <- reexp r1
+         r2' <- reexp r2
+         lift $ singleInj $ GetRange r1' r2' s
+    reexpressInstrEnv reexp (SetRange r1 r2 s e) =
+      do r1' <- reexp r1
+         r2' <- reexp r2
+         e'  <- reexp e
+         lift $ singleInj $ SetRange r1' r2' s e'
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -296,6 +319,8 @@ data ConditionalCMD fs a
     Case :: pred a => exp a -> [When a prog] -> Maybe (prog ()) -> ConditionalCMD (Param3 prog exp pred) ()
     -- ^ ...
     Null :: ConditionalCMD (Param3 prog exp pred) ()
+    -- ***
+    WhenRising :: pred Bool => Signal Bool -> prog () -> ConditionalCMD (Param3 prog exp pred) ()
 
 instance HFunctor ConditionalCMD
   where
@@ -303,6 +328,8 @@ instance HFunctor ConditionalCMD
     hfmap f (Case e xs d) = Case e (fmap (wmap f) xs) (fmap f d)
       where wmap f (When a p) = When a (f p)
     hfmap _ (Null)        = Null
+    -- *** ...
+    hfmap f (WhenRising s p) = WhenRising s (f p)
 
 instance HBifunctor ConditionalCMD
   where
@@ -311,6 +338,8 @@ instance HBifunctor ConditionalCMD
     hbimap g f (Case e xs d) = Case (f e) (fmap wmap xs) (fmap g d)
       where wmap (When a p) = When a (g p)
     hbimap _ _ (Null) = Null
+    -- *** ...
+    hbimap g f (WhenRising s p) = WhenRising s (g p)
 
 instance (ConditionalCMD :<: instr) => Reexpressible ConditionalCMD instr
   where
@@ -334,6 +363,9 @@ instance (ConditionalCMD :<: instr) => Reexpressible ConditionalCMD instr
                (zipWhen xs ys')
                (fmap (flip runReaderT env) d)
     reexpressInstrEnv reexp (Null) = lift $ singleInj $ Null
+    -- ***
+    reexpressInstrEnv reexp (WhenRising n p) =
+      ReaderT $ \env -> singleInj $ WhenRising n $ runReaderT p env
 
 unzipWhen :: [When a p] -> ([Constraint a], [p ()])
 unzipWhen = unzip . fmap (\(When a p) -> (a, p))
@@ -472,5 +504,39 @@ instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr
     reexpressInstrEnv reexp (StructProcess is p)       =
       ReaderT $ \env -> singleInj $ StructProcess is $ runReaderT p env
 
+--------------------------------------------------------------------------------
+-- ** VHDL.
+{-
+class Argument arg pred
+  where
+    mkArg   :: arg pred -> VHDL V.Expression
+    mkParam :: arg pred -> V.Identifier
+
+data FunArg exp pred
+  where
+    SignalArg :: pred a => Signal a -> FunArg exp pred
+
+data VHDL_CMD fs a
+  where
+    CallFun :: pred a => String -> [FunArg exp pred] -> VHDL_CMD (Param3 prog exp pred) (Val a)
+
+instance HFunctor VHDL_CMD
+  where
+    hfmap _ (CallFun n as) = CallFun n as
+
+instance HBifunctor VHDL_CMD
+  where
+    hbimap _ f (CallFun n as) = CallFun n (map (mapFunArg f) as)
+
+instance (VHDL_CMD :<: instr) => Reexpressible VHDL_CMD instr
+  where
+    reexpressInstrEnv reexp (CallFun n as) = lift . singleInj . CallFun n =<< mapM (mapFunArgM reexp) as
+
+mapFunArg :: (forall a. exp1 a -> exp2 a) -> FunArg exp1 pred -> FunArg exp2 pred
+mapFunArg f (SignalArg s) = SignalArg s
+
+mapFunArgM :: Monad m => (forall a. exp1 a -> m (exp2 a)) -> FunArg exp1 pred -> m (FunArg exp2 pred)
+mapFunArgM f (SignalArg s) = return $ SignalArg s
+-}
 --------------------------------------------------------------------------------
 

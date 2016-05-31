@@ -4,6 +4,7 @@
 {-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving  #-}
 
 module Language.Embedded.Hardware.Expression.Represent.Bit
   ( Bit
@@ -36,6 +37,10 @@ module Language.Embedded.Hardware.Expression.Represent.Bit
   , bitToList
   , bitShowBin
   , bitShowHex
+
+  , UBits
+  , forgetBits
+  , recallBits
   )
   where
 
@@ -266,5 +271,28 @@ instance KnownNat n => Ix (Bits n) where
   range   = undefined
   index   = undefined
   inRange = undefined
+
+--------------------------------------------------------------------------------
+-- *
+--------------------------------------------------------------------------------
+
+newtype UBits = UB Integer
+  deriving (Eq, Enum, Ord, Num, Real, Integral)
+
+instance Rep UBits
+  where
+    declare = declareUBits
+    format  = error "vhdl: format UBits"
+
+declareUBits :: proxy UBits -> VHDL Type
+declareUBits _ = declareBoolean >> return std_logic_uvector
+
+--------------------------------------------------------------------------------
+
+forgetBits :: Bits n -> UBits
+forgetBits b = UB (bitToInteger b)
+
+recallBits :: KnownNat n => UBits -> Bits n
+recallBits (UB i) = (B i)
 
 --------------------------------------------------------------------------------

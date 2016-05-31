@@ -61,6 +61,11 @@ unsafeFreezeSignal :: (SignalCMD :<: instr, pred a, FreeExp exp, PredicateExp ex
 unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
 
 --------------------------------------------------------------------------------
+-- *** Signal attributes.
+
+-- ...
+
+--------------------------------------------------------------------------------
 -- ports.
 
 -- | Declare port signals of the given mode and assign it initial value.
@@ -171,6 +176,13 @@ constant = initNamedConstant
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
+getRange :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
+  => exp i -> exp i -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
+getRange low high = fmap valToExp . singleInj . GetRange low high
+
+setRange :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i)
+  => exp i -> exp i -> Signal (Bits n) -> exp UBits -> ProgramT instr (Param2 exp pred) m ()
+setRange low high s = singleInj . SetRange low high s
 -- ...
 
 --------------------------------------------------------------------------------
@@ -272,6 +284,16 @@ ifE
   -> (exp Bool, ProgramT instr (Param2 exp pred) m ())
   -> ProgramT instr (Param2 exp pred) m ()
 ifE a b = conditional a [b] (Nothing)
+
+--------------------------------------------------------------------------------
+
+-- | ...
+risingEdge
+  :: (ConditionalCMD :<: instr, pred Bool)
+  => Signal Bool
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+risingEdge s p = singleInj $ WhenRising s p
 
 --------------------------------------------------------------------------------
 

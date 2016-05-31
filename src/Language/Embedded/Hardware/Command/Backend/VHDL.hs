@@ -208,7 +208,30 @@ runConstant (GetConstant (ConstantE exp)) = return $ ValE exp
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
--- ....
+instance (CompileExp exp, CompileType ct) => Interp ArrayCMD VHDL (Param2 exp ct)
+  where
+    interp = compileArray
+
+instance InterpBi ArrayCMD IO (Param1 pred)
+  where
+    interpBi = runArray
+
+compileArray :: forall ct exp a. (CompileExp exp, CompileType ct) => ArrayCMD (Param3 VHDL exp ct) a -> VHDL a
+compileArray (GetRange r1 r2 (SignalC s)) =
+  do i <- freshVar (Proxy::Proxy ct) (Base "r")
+     l <- compE r1
+     h <- compE r2
+     V.assignSignal (fromIdent i) (lift $ V.name $ V.slice (ident s) (lift l, lift h))
+     return i
+compileArray (SetRange r1 r2 (SignalC s) e) =
+  do l  <- compE r1
+     h  <- compE r2
+     e' <- compE e
+     let r = V.range (lift l) V.downto (lift h)
+     V.assignSignalRange (ident s) r e'
+
+runArray :: ArrayCMD (Param3 IO IO pred) a -> IO a
+runArray = error "vhdl-todo: evaluate Array"
 
 --------------------------------------------------------------------------------
 -- ** Virtual Arrays.
@@ -366,6 +389,11 @@ compileConditional (Case e cs d) =
       h' <- compileLit (Proxy::Proxy ct) h
       return $ (V.Choices [V.ChoiceRange (V.DRRange (V.range (lift l') V.to (lift h')))], p)
 compileConditional (Null) = V.null
+-- *** ...
+compileConditional (WhenRising (SignalC s) p) =
+  do let c = V.function (V.Ident "rising_edge") [lift $ V.name $ V.NSimple $ V.Ident s]
+     s <- V.inConditional (lift c, p) [] (return ())
+     V.addSequential $ V.SIf s
 
 runConditional :: ConditionalCMD (Param3 IO IO pred) a -> IO a
 runConditional (If (a, b) cs em) =
@@ -384,6 +412,9 @@ runConditional (Case e cs d) =
     loop v ((When (Is u)   p):cs) = if v == u         then p else loop v cs
     loop v ((When (To l h) p):cs) = if v > l && v < h then p else loop v cs
 runConditional (Null) = return ()
+-- *** ...
+runConditional (WhenRising s p) =
+  do error "vhdl: cannot evaluate 'rising_edge'"
 
 --------------------------------------------------------------------------------
 -- ** Components.
@@ -467,3 +498,28 @@ runStructural (StructProcess xs prog)       =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
 --------------------------------------------------------------------------------
+-- ** VHDL.
+{-
+data SignalArg pred where
+  SigArg :: pred a => Signal a -> SignalArg pred
+
+instance Argument SignalArg pred where
+  mkArg   (SigArg (SignalC s)) = lift $ V.name $ V.NSimple $ V.Ident s
+  mkParam (SigArg (SignalC s)) = V.Ident s
+-}
+--------------------------------------------------------------------------------
+{-     
+instance (CompileExp exp, CompileType ct) => Interp VHDL_CMD VHDL (Param2 exp ct)
+  where
+    interp = compileVHDL
+
+instance InterpBi VHDL_CMD IO (Param1 pred)
+  where
+    interpBi = runVHDL
+
+compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDL_CMD (Param3 VHDL exp ct) a -> VHDL a
+compileVHDL (CallFun n as) = undefined
+
+runVHDL :: VHDL_CMD (Param3 IO IO pred) a -> IO a
+runVHDL = undefined
+-}

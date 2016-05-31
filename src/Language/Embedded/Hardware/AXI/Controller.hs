@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeOperators       #-}
 
 module Language.Embedded.Hardware.AXI.Controller where
-
+{-
 import Language.Embedded.Hardware
 
 import Control.Monad.Identity (Identity)
@@ -267,5 +267,5 @@ axi_light
     isHigh, isLow :: HExp Bit -> HExp Bit
     isHigh = undefined
     isLow  = undefined
-
+-}
 --------------------------------------------------------------------------------

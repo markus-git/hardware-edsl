@@ -2,7 +2,7 @@ module Language.Embedded.VHDL.Monad.Type
   ( Type
   , Kind(..)
 
-  , std_logic, std_logic_vector
+  , std_logic, std_logic_vector, std_logic_uvector
   , signed2,  signed4,  signed8,  signed16,  signed32,  signed64
   , usigned2, usigned4, usigned8, usigned16, usigned32, usigned64
   , float, double
@@ -37,6 +37,11 @@ std_logic_vector range = SubtypeIndication Nothing
   (TMType (NSlice (SliceName
     (PName (NSimple (Ident "std_logic_vector")))
     (DRRange (RSimple (upper range) DownTo zero)))))
+  (Nothing)
+
+std_logic_uvector :: Type
+std_logic_uvector = SubtypeIndication Nothing
+  (TMType (NSimple (Ident "std_logic_vector")))
   (Nothing)
 
 --------------------------------------------------------------------------------

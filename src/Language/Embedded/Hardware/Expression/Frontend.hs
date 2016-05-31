@@ -120,11 +120,11 @@ cat = sugarT Cat
 true, false :: HExp Bool
 true  = value True
 false = value False
-
+{-
 -- *** ...
 risingEdge :: HExp a -> HExp Bool
 risingEdge = sugarT (Function "rising_edge" $ \_ -> True)
-
+-}
 --------------------------------------------------------------------------------
 
 instance (HType a, Eq a) => Eq (HExp a)
