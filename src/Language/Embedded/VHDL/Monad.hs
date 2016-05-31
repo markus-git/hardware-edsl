@@ -42,7 +42,6 @@ module Language.Embedded.VHDL.Monad (
     -- ^ common things
   , constant, signal, variable, unconstrainedArray, constrainedArray
   , assignSignal, assignVariable, assignArray
-  , assignSignalRange
   , portMap
   ) where
 
@@ -537,19 +536,19 @@ constrainedArray name typ range = compositeTypeDeclaration name $
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable.
 
-assignSignal :: MonadV m => Identifier -> Expression -> m ()
-assignSignal i e = addSequential $ SSignalAss $ 
+assignSignal :: MonadV m => Name -> Expression -> m ()
+assignSignal n e = addSequential $ SSignalAss $ 
   SignalAssignmentStatement
     (Nothing)
-    (TargetName (NSimple i))
+    (TargetName n)
     (Nothing)
     (WaveElem [WaveEExp e Nothing])
 
-assignVariable :: MonadV m => Identifier -> Expression -> m ()
-assignVariable i e = addSequential $ SVarAss $
+assignVariable :: MonadV m => Name -> Expression -> m ()
+assignVariable n e = addSequential $ SVarAss $
   VariableAssignmentStatement
     (Nothing)
-    (TargetName (NSimple i))
+    (TargetName n)
     (e)
 
 assignArray :: MonadV m => Name -> Expression -> m ()
@@ -557,18 +556,6 @@ assignArray i e = addSequential $ SSignalAss $
   SignalAssignmentStatement
     (Nothing)
     (TargetName i)
-    (Nothing)
-    (WaveElem [WaveEExp e Nothing])
-
-----------------------------------------
-
-assignSignalRange :: MonadV m => Identifier -> Range -> Expression -> m ()
-assignSignalRange i r e = addSequential $ SSignalAss $ 
-  SignalAssignmentStatement
-    (Nothing)
-    (TargetName (NSlice (SliceName
-      (PName (NSimple i))
-      (DRRange r))))
     (Nothing)
     (WaveElem [WaveEExp e Nothing])
 

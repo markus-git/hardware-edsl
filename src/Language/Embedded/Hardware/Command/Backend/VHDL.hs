@@ -112,6 +112,9 @@ name = V.PrimName . V.NSimple . ident
 fromIdent :: ToIdent a => a -> V.Identifier
 fromIdent a = let (Ident i) = toIdent a in ident i
 
+simpleName :: ToIdent a => a -> V.Name
+simpleName = V.NSimple . fromIdent
+
 --------------------------------------------------------------------------------
 -- ** Signals.
 
@@ -132,10 +135,10 @@ compileSignal (NewSignal base mode exp) =
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "s")
-     V.assignVariable (fromIdent i) (lift $ name s)
+     V.assignVariable (simpleName i) (lift $ name s)
      return i
 compileSignal (SetSignal (SignalC s) exp) =
-  do V.assignSignal (ident s) =<< compE exp
+  do V.assignSignal (V.NSimple $ ident s) =<< compE exp
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ ValC s
 
@@ -166,10 +169,10 @@ compileVariable (NewVariable base exp) =
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "v")
-     V.assignVariable (fromIdent i) (lift $ V.PrimName $ V.NSimple $ ident var)
+     V.assignVariable (simpleName i) (lift $ V.PrimName $ V.NSimple $ ident var)
      return i
 compileVariable (SetVariable (VariableC var) exp) =
-  do V.assignVariable (ident var) =<< compE exp
+  do V.assignVariable (V.NSimple $ ident var) =<< compE exp
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ ValC v
 
@@ -221,14 +224,24 @@ compileArray (GetRange r1 r2 (SignalC s)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "r")
      l <- compE r1
      h <- compE r2
-     V.assignSignal (fromIdent i) (lift $ V.name $ V.slice (ident s) (lift l, lift h))
+     V.assignSignal (simpleName i) (lift $ V.name $ V.slice (ident s) (lift l, lift h))
      return i
 compileArray (SetRange r1 r2 (SignalC s) e) =
   do l  <- compE r1
      h  <- compE r2
      e' <- compE e
-     let r = V.range (lift l) V.downto (lift h)
-     V.assignSignalRange (ident s) r e'
+     V.assignSignal (V.slice (ident s) (lift l, lift h)) e'
+compileArray (GetRangeV r1 r2 (VariableC s)) =
+  do i <- freshVar (Proxy::Proxy ct) (Base "r")
+     l <- compE r1
+     h <- compE r2
+     V.assignVariable (simpleName i) (lift $ V.name $ V.slice (ident s) (lift l, lift h))
+     return i
+compileArray (SetRangeV r1 r2 (VariableC s) e) =
+  do l  <- compE r1
+     h  <- compE r2
+     e' <- compE e
+     V.assignVariable (V.slice (ident s) (lift l, lift h)) e'
 
 runArray :: ArrayCMD (Param3 IO IO pred) a -> IO a
 runArray = error "vhdl-todo: evaluate Array"
@@ -263,7 +276,7 @@ compileVArray (InitVArray base is) =
 compileVArray (GetVArray ix (VArrayC arr)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
-     V.assignVariable (fromIdent i) (lift $ V.PrimName $ V.indexed (ident arr) e)
+     V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident arr) e)
      return i
 compileVArray (SetVArray i e (VArrayC arr)) =
   do i' <- compE i

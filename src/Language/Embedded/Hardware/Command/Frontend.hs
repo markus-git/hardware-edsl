@@ -176,13 +176,25 @@ constant = initNamedConstant
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
-getRange :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
+getSignalRange
+  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
   => exp i -> exp i -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
-getRange low high = fmap valToExp . singleInj . GetRange low high
+getSignalRange low high = fmap valToExp . singleInj . GetRange low high
 
-setRange :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i)
+setSignalRange
+  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i)
   => exp i -> exp i -> Signal (Bits n) -> exp UBits -> ProgramT instr (Param2 exp pred) m ()
-setRange low high s = singleInj . SetRange low high s
+setSignalRange low high s = singleInj . SetRange low high s
+
+getVariableRange
+  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
+  => exp i -> exp i -> Variable (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
+getVariableRange low high = fmap valToExp . singleInj . GetRangeV low high
+
+setVariableRange
+  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i)
+  => exp i -> exp i -> Variable (Bits n) -> exp UBits -> ProgramT instr (Param2 exp pred) m ()
+setVariableRange low high v = singleInj . SetRangeV low high v
 -- ...
 
 --------------------------------------------------------------------------------

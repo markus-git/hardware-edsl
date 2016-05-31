@@ -73,8 +73,8 @@ simple =
      let low  = litE 0 :: HExp Integer
          high = litE 1 :: HExp Integer
      
-     r <- getRange low high d
-     setRange (low + 1) (high + 1) d r
+     r <- getSignalRange low high d
+     setSignalRange (low + 1) (high + 1) d r
      
      return ()
 
