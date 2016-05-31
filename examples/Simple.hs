@@ -1,5 +1,6 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators    #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DataKinds        #-}
 
 module Simple where
 
@@ -23,7 +24,7 @@ import Prelude hiding (and, or, not)
 type CMD =
       SignalCMD
   :+: VariableCMD
---  :+: ArrayCMD
+  :+: ArrayCMD
   :+: VArrayCMD
   :+: LoopCMD
   :+: ConditionalCMD
@@ -35,61 +36,48 @@ type HProg = Program CMD (Param2 HExp HType)
 type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
--- ** Example VHDL programs.
+-- ** ...
 
-tests :: IO ()
-tests = do
-  putStrLn "\n### Looooop ###\n"
-  icompile testLoop
---  putStrLn "\n### Identity ###\n"
---  icompile $ testIdentity
---  putStrLn "\n### Component ###\n"
---  icompile $ testComponent
+simple :: HProg ()
+simple =
+  do let zero = litE (bitFromInteger 0) :: HExp (Bits 2)
+         one  = litE (bitFromInteger 1) :: HExp (Bits 2)
+         two  = litE (bitFromInteger 2) :: HExp (Bits 4)
 
---------------------------------------------------------------------------------
+         high = litE True  :: HExp Bit
+         low  = litE False :: HExp Bit
 
-testLoop :: HProg ()
-testLoop = do
-  entity "loop" (return ())
-  architecture "loop" "behav" $ do
-    component looping
-    return ()
+     ----------------------------------------
+     -- Bit vectors.
+     --
+     a <- initVariable zero :: HProg (Variable (Bits 2))
+     b <- initVariable one  :: HProg (Variable (Bits 2))
 
-looping :: HSig ()
-looping = ret $ do
-  return ()
+     u <- getVariable a :: HProg (HExp (Bits 2))
+     v <- getVariable b :: HProg (HExp (Bits 2))
 
---------------------------------------------------------------------------------
-{-
-testIdentity :: HProg ()
-testIdentity = do
-  (x, y) <- entity "identity" $
-    do x <- newPort In  :: HProg (Signal Int8)
-       y <- newPort Out :: HProg (Signal Int8)
-       return (x, y)
-  architecture "identity" "behavioural" $
-    process (x .: []) $
-      do y <=- x
--}
---------------------------------------------------------------------------------
+     setVariable a (u + v)
+     setVariable b (u - v)
 
-testComponent :: HProg ()
-testComponent = do
-  (x, y) <- entity "component" $
-    do x <- newPort In  :: HProg (Signal Bool)
-       y <- newPort Out :: HProg (Signal Bool)
-       return (x, y)
-  architecture "component" "behavioural" $
-    do c <- component invert
-       return ()
-       --portmap c (x .> y .> Nill)
+     ----------------------------------------
+     -- Clock stuff.
+     --
+     s <- initSignal high :: HProg (Signal Bit)     
+     risingEdge s $ setSignal s low
 
-invert :: HSig (Signal Bool -> Signal Bool -> ())
-invert =
-  input  $ \i ->
-  output $ \o ->
-  ret    $ do
-    v <- getSignal i
-    setSignal o (not v)
+     ----------------------------------------
+     -- Ranges.
+     --
+     d <- initSignal two  :: HProg (Signal (Bits 4))
+
+     let low  = litE 0 :: HExp Integer
+         high = litE 1 :: HExp Integer
+     
+     r <- getRange low high d
+     setRange (low + 1) (high + 1) d r
+     
+     return ()
+
+testSimgle = icompile simple
 
 --------------------------------------------------------------------------------
