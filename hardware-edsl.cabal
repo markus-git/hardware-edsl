@@ -20,8 +20,8 @@ source-repository head
 library
   exposed-modules:
     Language.Embedded.Hardware,
-    Language.Embedded.Hardware.AXI,
-    Language.Embedded.Hardware.AXI.Controller,
+--    Language.Embedded.Hardware.AXI,
+--    Language.Embedded.Hardware.AXI.Controller,
     Language.Embedded.Hardware.Expression,
     Language.Embedded.Hardware.Expression.Backend.VHDL,
     Language.Embedded.Hardware.Expression.Frontend,
