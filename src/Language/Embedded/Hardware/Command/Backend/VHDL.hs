@@ -220,28 +220,35 @@ instance InterpBi ArrayCMD IO (Param1 pred)
     interpBi = runArray
 
 compileArray :: forall ct exp a. (CompileExp exp, CompileType ct) => ArrayCMD (Param3 VHDL exp ct) a -> VHDL a
-compileArray (GetRange r1 r2 (SignalC s)) =
-  do i <- freshVar (Proxy::Proxy ct) (Base "r")
-     l <- compE r1
-     h <- compE r2
-     V.assignSignal (simpleName i) (lift $ V.name $ V.slice (ident s) (lift l, lift h))
+compileArray (GetArray ix (SignalC s)) =
+  do i <- freshVar (Proxy::Proxy ct) (Base "a")
+     e <- compE ix
+     V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident s) e)
      return i
-compileArray (SetRange r1 r2 (SignalC s) e) =
-  do l  <- compE r1
-     h  <- compE r2
-     e' <- compE e
-     V.assignSignal (V.slice (ident s) (lift l, lift h)) e'
-compileArray (GetRangeV r1 r2 (VariableC s)) =
-  do i <- freshVar (Proxy::Proxy ct) (Base "r")
-     l <- compE r1
-     h <- compE r2
-     V.assignVariable (simpleName i) (lift $ V.name $ V.slice (ident s) (lift l, lift h))
-     return i
-compileArray (SetRangeV r1 r2 (VariableC s) e) =
-  do l  <- compE r1
-     h  <- compE r2
-     e' <- compE e
-     V.assignVariable (V.slice (ident s) (lift l, lift h)) e'
+compileArray (GetRangeS to (l, u) s) =
+  do i   <- newSym (Base "v")
+     to' <- compE to
+     l'  <- compE l
+     u'  <- compE u
+     V.variable (ident i) (vector $ lift to') Nothing
+     V.assignVariable (V.NSimple $ ident i) (lift $ V.name $ V.slice (fromIdent s) (lift l', lift u'))
+     return (ValC i)
+   where
+     vector exp = V.SubtypeIndication Nothing
+       (V.TMType (V.NSlice (V.SliceName
+         (V.PName (V.NSimple (V.Ident "std_logic_vector")))
+           (V.DRRange (V.RSimple (exp) (V.DownTo)
+             (V.SimpleExpression Nothing
+               (V.Term (V.FacPrim (V.lit "0") (Nothing)) []) []))))))
+       (Nothing)
+compileArray (SetRangeS (t1, t2) a (f1, f2) b) =
+  do t1' <- compE t1
+     t2' <- compE t2
+     f1' <- compE f1
+     f2' <- compE f2
+     let v1 = V.slice (fromIdent a) (lift t1', lift t2')
+         v2 = V.name $ V.slice (fromIdent b) (lift f1', lift f2')
+     V.assignSignal v1 (lift v2)
 
 runArray :: ArrayCMD (Param3 IO IO pred) a -> IO a
 runArray = error "vhdl-todo: evaluate Array"
@@ -342,11 +349,12 @@ instance InterpBi LoopCMD IO (Param1 pred)
     interpBi = runLoop
 
 compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct) => LoopCMD (Param3 VHDL exp ct) a -> VHDL a
-compileLoop (For h step) =  -- (range 0 V.to (evalE r))
-  do h'   <- compE h
+compileLoop (For h step) =
+  do --i    <- freshVar (Proxy::Proxy ct) (Base "l")
+     i    <- newSym (Base "l")
+     h'   <- compE h
      let r = V.range (V.point (0 :: Int)) V.to (lift h')
-     i    <- freshVar (Proxy::Proxy ct) (Base "l")
-     loop <- V.inFor (error "compileLoop:For") r (step i)
+     loop <- V.inFor (ident i) r (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel

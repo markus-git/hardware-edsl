@@ -26,6 +26,12 @@ import GHC.TypeLits
 -- * ...
 --------------------------------------------------------------------------------
 
+class Value exp where
+  value :: HType a => a -> exp a
+
+instance Value HExp where
+  value = sugarT . Literal
+
 -- | ...
 name :: HType a => V.Name -> HExp a
 name n = sugarT (Name n)
@@ -33,18 +39,26 @@ name n = sugarT (Name n)
 -- | Creates a variable from a string.
 var :: HType a => String -> HExp a
 var = name . V.NSimple . V.Ident
-
+{-
 -- | Lifts a typed value to an expression.
 value :: HType a => a -> HExp a
 value i = sugarT (Literal i)
-
+-}
 -- | Casts an expression using supplied conversion function.
 cast  :: (HType a, HType b) => (a -> b) -> HExp a -> HExp b
 cast f = sugarT (Conversion f)
 
 --------------------------------------------------------------------------------
 
-type Hardware exp = (Expr exp, Rel exp, Shift exp, Simple exp, Term exp, Factor exp, Primary exp)
+type Hardware exp =
+  ( Value   exp
+  , Expr    exp
+  , Rel     exp
+  , Shift   exp
+  , Simple  exp
+  , Term    exp
+  , Factor  exp
+  , Primary exp)
 
 -- | Logical operators.
 class Expr exp where
@@ -141,9 +155,11 @@ instance Factor HExp where
 
 -- | ...
 class Primary exp where
+  -- *** Should probably not be here. Replace when adding function calls.
   risingEdge :: exp a -> exp Bool
 
 instance Primary HExp where
+
   risingEdge = sugarT (Function "rising_edge" $ \_ -> error "vhdl-todo: cannot evaluate 'risingEdge'")
 
 --------------------------------------------------------------------------------

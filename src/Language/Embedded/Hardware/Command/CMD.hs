@@ -178,60 +178,46 @@ data Array i a = ArrayC VarId | ArrayE (IOArray i a)
 -- | Commands for signal arrays.
 data ArrayCMD fs a
   where
+    GetArray :: (pred Bit, Integral i, Ix i) => exp i -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) (Val Bit)
     -- *** ...
-    GetRange
-      :: (pred i, Integral i, Ix i, pred UBits)
-      => exp i -> exp i -> Signal (Bits n)
+    GetRangeS :: (pred i, Integral i, Ix i, pred UBits)
+      => exp i          -- size
+      -> (exp i, exp i) -- range
+      -> Signal (Bits n)
       -> ArrayCMD (Param3 prog exp pred) (Val UBits)
-    SetRange
-      :: (pred i, Integral i, Ix i, pred UBits)
-      => exp i -> exp i -> Signal (Bits n) -> exp UBits
+    SetRangeS :: (pred i, Integral i, Ix i)
+      => (exp i, exp i) -- our
+      -> Signal (Bits n)
+      -> (exp i, exp i) -- other
+      -> Signal (Bits m)
       -> ArrayCMD (Param3 prog exp pred) ()
-    -- *** !!...
-    GetRangeV
-      :: (pred i, Integral i, Ix i, pred UBits)
-      => exp i -> exp i -> Variable (Bits n)
-      -> ArrayCMD (Param3 prog exp pred) (Val UBits)
-    SetRangeV
-      :: (pred i, Integral i, Ix i, pred UBits)
-      => exp i -> exp i -> Variable (Bits n) -> exp UBits
-      -> ArrayCMD (Param3 prog exp pred) ()
-        
 
 instance HFunctor ArrayCMD 
   where
-    hfmap _ (GetRange l h s)    = GetRange l h s
-    hfmap _ (SetRange l h s e)  = SetRange l h s e
-    hfmap _ (GetRangeV l h s)   = GetRangeV l h s
-    hfmap _ (SetRangeV l h s e) = SetRangeV l h s e
+    hfmap _ (GetArray i s) = GetArray i s
+    hfmap _ (GetRangeS to   fr s) = GetRangeS to   fr s
+    hfmap _ (SetRangeS to a fr b) = SetRangeS to a fr b
 
 instance HBifunctor ArrayCMD
   where
-    hbimap _ f (GetRange r1 r2 s)    = GetRange (f r1) (f r2) s
-    hbimap _ f (SetRange r1 r2 s e)  = SetRange (f r1) (f r2) s (f e)
-    hbimap _ f (GetRangeV r1 r2 s)   = GetRangeV (f r1) (f r2) s
-    hbimap _ f (SetRangeV r1 r2 s e) = SetRangeV (f r1) (f r2) s (f e)
+    hbimap _ f (GetArray i s) = GetArray (f i) s
+    hbimap _ f (GetRangeS to         (f1, f2) s) = GetRangeS (f to)         (f f1, f f2) s
+    hbimap _ f (SetRangeS (t1, t2) a (f1, f2) b) = SetRangeS (f t1, f t2) a (f f1, f f2) b
 
 instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr
   where
-    reexpressInstrEnv reexp (GetRange r1 r2 s) =
-      do r1' <- reexp r1
-         r2' <- reexp r2
-         lift $ singleInj $ GetRange r1' r2' s
-    reexpressInstrEnv reexp (SetRange r1 r2 s e) =
-      do r1' <- reexp r1
-         r2' <- reexp r2
-         e'  <- reexp e
-         lift $ singleInj $ SetRange r1' r2' s e'
-    reexpressInstrEnv reexp (GetRangeV r1 r2 s) =
-      do r1' <- reexp r1
-         r2' <- reexp r2
-         lift $ singleInj $ GetRangeV r1' r2' s
-    reexpressInstrEnv reexp (SetRangeV r1 r2 s e) =
-      do r1' <- reexp r1
-         r2' <- reexp r2
-         e'  <- reexp e
-         lift $ singleInj $ SetRangeV r1' r2' s e'
+    reexpressInstrEnv reexp (GetArray i s) = do i' <- reexp i; lift $ singleInj $ GetArray i' s
+    reexpressInstrEnv reexp (GetRangeS to (f1, f2) s) =
+      do to' <- reexp to
+         f1' <- reexp f1
+         f2' <- reexp f2
+         lift $ singleInj $ GetRangeS to' (f1', f2') s
+    reexpressInstrEnv reexp (SetRangeS (t1, t2) a (f1, f2) b) =
+      do t1' <- reexp t1
+         t2' <- reexp t2
+         f1' <- reexp f1
+         f2' <- reexp f2
+         lift $ singleInj $ SetRangeS (t1', t2') a (f1', f2') b
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.

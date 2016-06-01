@@ -11,12 +11,14 @@ import Language.Embedded.Hardware
 
 import Control.Monad.Identity (Identity)
 import Control.Monad.Operational.Higher hiding (when)
+import Data.Typeable
 import Data.Int
 import Data.Word
 import Data.Bits ()
 import Data.Ix (Ix)
 
 import GHC.TypeLits
+import qualified GHC.Exts as GHC (Constraint)
 
 import Prelude hiding (not, and, or, div, null)
 
@@ -33,8 +35,10 @@ axi_light_signature
   :: forall instr exp pred. (
        SignalCMD      :<: instr
      , ConstantCMD    :<: instr
+     , ArrayCMD       :<: instr
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
+     , LoopCMD        :<: instr
      , Hardware exp
      , FreeExp exp
      , pred (Bit),     PredicateExp exp (Bit)
@@ -42,7 +46,8 @@ axi_light_signature
      , pred (Bits 3),  PredicateExp exp (Bits 3)
      , pred (Bits 4),  PredicateExp exp (Bits 4)
      , pred (Bits 32), PredicateExp exp (Bits 32)
-     , pred (Integer)
+     , pred (UBits),   PredicateExp exp (UBits)
+     , pred (Integer), PredicateExp exp (Integer)
      , Num (exp Integer)
      )
   => Sig instr exp pred Identity (
@@ -105,8 +110,10 @@ axi_light
   :: forall instr exp pred n. (
        SignalCMD      :<: instr
      , ConstantCMD    :<: instr
+     , ArrayCMD       :<: instr
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
+     , LoopCMD        :<: instr
      , Hardware exp
      , FreeExp exp
      , pred (Bit),     PredicateExp exp (Bit)
@@ -114,7 +121,8 @@ axi_light
      , pred (Bits 3),  PredicateExp exp (Bits 3)
      , pred (Bits 4),  PredicateExp exp (Bits 4)
      , pred (Bits 32), PredicateExp exp (Bits 32)
-     , pred (Integer)
+     , pred (UBits),   PredicateExp exp (UBits)
+     , pred (Integer), PredicateExp exp (Integer)
      , Num (exp Integer)
      )
   => Signal Bit       -- ^ Global clock signal.
@@ -211,7 +219,6 @@ axi_light
                    (do awready <== high)
                    (do awready <== low))
 
-{-
        ----------------------------------------
        -- AXI_AWADDR latching.
        --
@@ -220,7 +227,7 @@ axi_light
          rst <- get s_axi_aresetn
          when (risingEdge clk) $ do
            iff (isLow rst)
-             (do awaddr <== (others low))
+             (do awaddr <== zeroes)
              (do rdy <- get awready
                  awv <- get s_axi_awvalid
                  wv  <- get s_axi_wvalid
@@ -228,8 +235,7 @@ axi_light
                        isHigh awv `and`
                        isHigh wv) $
                    awaddr <=- s_axi_awaddr)
--}
-{-
+
        ----------------------------------------
        -- AXI_AWREADY generation.
        --
@@ -247,8 +253,7 @@ axi_light
                       isHigh wv)
                    (wready <== high)
                    (wready <== low))
--}
-{-
+
        ----------------------------------------
        -- Slave register logic.
        --
@@ -257,36 +262,175 @@ axi_light
          rst   <- get s_axi_aresetn
          when (risingEdge clk) $ do
            iff (isLow rst)
-             (do reg_0 <== others low
-                 reg_1 <== others low
-                 reg_2 <== others low
-                 reg_3 <== others low)
-             (do clsb  <- getConstant addr_lsb
-                 cbits <- getConstant addr_bits
-                 slice <- undefined --getSlice awaddr (R :: Range 1 (1 + 2))
-                 wren  <- get reg_wren
-                 when (isHigh wren) $ do
-                   i <- undefined --integer slice
-                   switched (low) []
-                     (do reg_0 <=- reg_0
-                         reg_1 <=- reg_1
-                         reg_2 <=- reg_2
-                         reg_3 <=- reg_3))
--}
+             (do reg_0 <== zeroes
+                 reg_1 <== zeroes
+                 reg_2 <== zeroes
+                 reg_3 <== zeroes)
+             (do clsb     <- getConstant addr_lsb
+                 cbits    <- getConstant addr_bits
+                 loc_addr <- getSignalRange cbits (clsb + cbits, clsb) awaddr
+                 rwren    <- get reg_wren
+                 when (isHigh rwren) $
+                   do switched loc_addr
+                        [ is (fromInteger 0) $ for (value (3 :: Integer)) $ \ix ->
+                            do b <- getArray ix s_axi_wstrb
+                               when (isHigh b) $
+                                 setSignalRange
+                                   (ix*8+7, ix*8) reg_0
+                                   (ix*8+7, ix*8) s_axi_wdata
+                        , is (fromInteger 1) $ for (value (3 :: Integer)) $ \ix ->
+                            do b <- getArray ix s_axi_wstrb
+                               when (isHigh b) $
+                                 setSignalRange
+                                   (ix*8+7, ix*8) reg_1
+                                   (ix*8+7, ix*8) s_axi_wdata
+                        , is (fromInteger 2) $ for (value (3 :: Integer)) $ \ix ->
+                            do b <- getArray ix s_axi_wstrb
+                               when (isHigh b) $
+                                 setSignalRange
+                                   (ix*8+7, ix*8) reg_2
+                                   (ix*8+7, ix*8) s_axi_wdata
+                        , is (fromInteger 3) $ for (value (3 :: Integer)) $ \ix ->
+                            do b <- getArray ix s_axi_wstrb
+                               when (isHigh b) $
+                                 setSignalRange
+                                   (ix*8+7, ix*8) reg_3
+                                   (ix*8+7, ix*8) s_axi_wdata
+                        ]
+                        (do reg_0 <=- reg_0
+                            reg_1 <=- reg_1
+                            reg_2 <=- reg_2
+                            reg_3 <=- reg_3))
 
+       ----------------------------------------
+       -- Write response logic.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do bvalid <== low
+                 bresp  <==  zeroes)
+             (do awr <- get awready
+                 awv <- get s_axi_awvalid
+                 wr  <- get wready
+                 wv  <- get s_axi_wvalid
+                 bv  <- get bvalid
+                 br  <- get s_axi_bready
+                 ifE (isHigh awr `and` isHigh awv `and` isHigh wr  `and` isHigh wv  `and` isLow bv,
+                   do bvalid <== high
+                      bresp  <== zeroes)
+                     (isHigh br `and` isHigh bv,
+                   do setSignal bvalid low))
 
-       return ()
-  where
+       ----------------------------------------
+       -- AXI_AWREADY generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do arready <== low
+                 araddr  <== ones)
+             (do arr <- get arready
+                 arv <- get s_axi_arvalid
+                 iff (isLow arr `and` isHigh arv)
+                   (do arready <== high
+                       araddr  <=- s_axi_araddr)
+                   (do arready <== low))
 
-    get :: (PredicateExp exp a, pred a) => Signal a -> Prog instr exp pred (exp a)
-    get = unsafeFreezeSignal
+       ----------------------------------------
+       -- AXI_ARVALID generation.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (do rvalid <== low
+                 rresp  <== zeroes)
+             (do arr <- get arready
+                 arv <- get s_axi_arvalid
+                 rv  <- get rvalid
+                 rr  <- get s_axi_rready
+                 ifE (isHigh arr `and` isHigh arv,
+                   do rvalid <== high
+                      rresp  <== zeroes)
+                     (isHigh rv  `and` isHigh rr,
+                   do rvalid <== low))
 
-    high, low :: exp Bit
-    high = true
-    low  = false
+       ----------------------------------------
+       -- Memory mapped rigister select and
+       -- read logic generaiton.
+       --
+       process (reg_0 .: reg_1 .: reg_2 .: reg_3 .: araddr .: s_axi_aresetn .: reg_rden .: []) $ do
+         clsb     <- getConstant addr_lsb
+         cbits    <- getConstant addr_bits
+         loc_addr <- getSignalRange cbits (clsb + cbits, clsb) araddr
+         switched loc_addr
+           [ is (fromInteger 0) $
+               do reg_out <=- reg_0
+           , is (fromInteger 1) $
+               do reg_out <=- reg_1
+           , is (fromInteger 2) $
+               do reg_out <=- reg_2
+           , is (fromInteger 3) $
+               do reg_out <=- reg_3
+           ]
+           (do reg_out <== zeroes)
 
-    isHigh, isLow :: exp Bit -> exp Bit
-    isHigh = undefined
-    isLow  = undefined
+       ----------------------------------------
+       -- Output register of memory read data.
+       --
+       process (s_axi_aclk .: []) $ do
+         clk   <- get s_axi_aclk
+         rst   <- get s_axi_aresetn
+         when (risingEdge clk) $ do
+           iff (isLow rst)
+             (rdata <== zeroes)
+             (do rden <- get reg_rden
+                 when (isHigh rden) $
+                   rdata <=- reg_out)
+
+--------------------------------------------------------------------------------
+
+type HCMD =
+      SignalCMD
+  :+: StructuralCMD
+  :+: ConditionalCMD
+  :+: ConstantCMD
+  :+: ComponentCMD
+  :+: ArrayCMD
+  :+: LoopCMD
+
+axi :: Prog HCMD HExp HType ()
+axi = do c <- component axi_light_signature
+         return ()
+
+test = icompile axi
+
+--------------------------------------------------------------------------------
+
+get
+  :: (PredicateExp exp a, pred a, FreeExp exp, SignalCMD :<: instr)
+  => Signal a -> Prog instr exp pred (exp a)
+get = unsafeFreezeSignal
+
+high, low :: Expr exp => exp Bit
+high = true
+low  = false
+
+isHigh, isLow :: (Expr exp, Rel exp) => exp Bit -> exp Bit
+isHigh = flip eq high
+isLow  = flip eq low
+
+zeroes :: (Value exp, Typeable n, KnownNat n) => exp (Bits n)
+zeroes = value 0
+
+ones   :: forall exp n. (Value exp, Typeable n, KnownNat n) => exp (Bits n)
+ones   = value $ bitFromInteger (read (concat $ take size $ repeat "1") :: Integer)
+  where size = fromIntegral (ni (Proxy::Proxy n)) - 1
 
 --------------------------------------------------------------------------------

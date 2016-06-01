@@ -9,6 +9,7 @@
 module Language.Embedded.Hardware.Expression.Represent.Bit
   ( Bit
   , Bits
+  , ni
   , bitFromInteger
   , bitToInteger
   , bitAdd
@@ -58,6 +59,7 @@ import qualified Data.Bits as Bit (Bits)
 import Control.Monad   (guard)
 import Control.DeepSeq (NFData(..))
 
+import Data.Char (intToDigit)
 import qualified Numeric as N
 
 import GHC.TypeLits
@@ -72,8 +74,8 @@ newtype Bits (n :: Nat) = B Integer
 
 instance forall n. KnownNat n => Rep (Bits n)
   where
-    declare = declareBits
-    format  = bitShowBin
+    declare  = declareBits
+    format b = '\"' : (tail $ bitShowBin b) ++ ['\"'] -- *** why tail?
 
 deriving instance Typeable (Bits n)
 
@@ -282,10 +284,15 @@ newtype UBits = UB Integer
 instance Rep UBits
   where
     declare = declareUBits
-    format  = error "vhdl: format UBits"
+    -- *** This is bad and produces a warning in vhdl as there's no guarantee
+    --     that the lenght of the printed binary will be the expected one.
+    --     Give UB an extra 'Maybe Integer' for storing the length whenever its
+    --     available.
+    format (UB i) = '\"' : (N.showIntAtBase 2 intToDigit i "") ++ ['\"']
+    
 
 declareUBits :: proxy UBits -> VHDL Type
-declareUBits _ = declareBoolean >> return std_logic_uvector
+declareUBits _ = declareBoolean >> return (std_logic) -- error "vhdl-todo: declare ubits" --std_logic_vector
 
 --------------------------------------------------------------------------------
 

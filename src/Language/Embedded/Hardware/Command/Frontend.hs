@@ -176,26 +176,21 @@ constant = initNamedConstant
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
-getSignalRange
+getArray :: (ArrayCMD :<: instr, pred Bit, pred i, Integral i, Ix i, PredicateExp exp Bit, FreeExp exp, Monad m)
+  => exp i -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Bit)
+getArray i = fmap valToExp . singleInj . GetArray i
+
+-- | ...
+getSignalRange 
   :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
-  => exp i -> exp i -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
-getSignalRange low high = fmap valToExp . singleInj . GetRange low high
+  => exp i -> (exp i, exp i) -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
+getSignalRange size range = fmap valToExp . singleInj . GetRangeS size range
 
-setSignalRange
-  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i)
-  => exp i -> exp i -> Signal (Bits n) -> exp UBits -> ProgramT instr (Param2 exp pred) m ()
-setSignalRange low high s = singleInj . SetRange low high s
-
-getVariableRange
-  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
-  => exp i -> exp i -> Variable (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
-getVariableRange low high = fmap valToExp . singleInj . GetRangeV low high
-
-setVariableRange
-  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i)
-  => exp i -> exp i -> Variable (Bits n) -> exp UBits -> ProgramT instr (Param2 exp pred) m ()
-setVariableRange low high v = singleInj . SetRangeV low high v
--- ...
+-- | ...
+setSignalRange 
+  :: (ArrayCMD :<: instr, pred i, Integral i, Ix i, FreeExp exp, Monad m)
+  => (exp i, exp i) -> Signal (Bits x) -> (exp i, exp i) -> Signal (Bits y) -> ProgramT instr (Param2 exp pred) m ()
+setSignalRange from a to = singleInj . SetRangeS from a to
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
