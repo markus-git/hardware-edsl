@@ -32,8 +32,8 @@ import GHC.TypeLits hiding (Symbol)
 type Dom =
       Expression
   :+: Relational
-  :+: Shift
-  :+: Simple
+  :+: ShiftExpression
+  :+: SimpleExpression
   :+: Term
   :+: Factor
   :+: Primary
@@ -89,23 +89,23 @@ data Relational sig
     Gte  :: (HType a, Ord a) => Relational (a :-> a :-> Full Bool)
 
 -- | Bit vector expressions.
-data Shift sig
+data ShiftExpression sig
   where
-    Sll :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Srl :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Sla :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Sra :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Rol :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
-    Ror :: (HType a, B.Bits a, HType b, Integral b) => Shift (a :-> b :-> Full a)
+    Sll :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
+    Srl :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
+    Sla :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
+    Sra :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
+    Rol :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
+    Ror :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
 
 -- | Numerical expressions.
-data Simple sig
+data SimpleExpression sig
   where
-    Neg :: (HType a, Num a) => Simple (a :->       Full a)
-    Pos :: (HType a, Num a) => Simple (a :->       Full a)
-    Add :: (HType a, Num a) => Simple (a :-> a :-> Full a)
-    Sub :: (HType a, Num a) => Simple (a :-> a :-> Full a)
-    Cat :: (KnownNat n, KnownNat m) => Simple (Bits n :-> Bits m :-> Full (Bits (n + m)))
+    Neg :: (HType a, Num a) => SimpleExpression (a :->       Full a)
+    Pos :: (HType a, Num a) => SimpleExpression (a :->       Full a)
+    Add :: (HType a, Num a) => SimpleExpression (a :-> a :-> Full a)
+    Sub :: (HType a, Num a) => SimpleExpression (a :-> a :-> Full a)
+    Cat :: (KnownNat n, KnownNat m) => SimpleExpression (Bits n :-> Bits m :-> Full (Bits (n + m)))
 
 -- | Integral expressions.
 data Term sig
@@ -223,10 +223,10 @@ instance Eval Relational
 
 instance EvalEnv Relational env
 
-instance Equality   Shift
-instance StringTree Shift
+instance Equality   ShiftExpression
+instance StringTree ShiftExpression
 
-instance Symbol Shift
+instance Symbol ShiftExpression
   where
     symSig Sll = signature
     symSig Srl = signature
@@ -235,7 +235,7 @@ instance Symbol Shift
     symSig Rol = signature
     symSig Ror = signature
 
-instance Render Shift
+instance Render ShiftExpression
   where
     renderSym Sll = "sll"
     renderSym Srl = "srl"
@@ -244,7 +244,7 @@ instance Render Shift
     renderSym Rol = "rol"
     renderSym Ror = "ror"
 
-instance Eval Shift
+instance Eval ShiftExpression
   where
     evalSym Sll = \x i -> B.shiftL x (fromIntegral i)
     evalSym Srl = \x i -> shiftLR     x (fromIntegral i)
@@ -259,12 +259,12 @@ instance Eval Shift
     evalSym Rol = \x i -> B.rotateL x (fromIntegral i)
     evalSym Ror = \x i -> B.rotateR x (fromIntegral i)
 
-instance EvalEnv Shift env
+instance EvalEnv ShiftExpression env
 
-instance Equality   Simple
-instance StringTree Simple
+instance Equality   SimpleExpression
+instance StringTree SimpleExpression
 
-instance Symbol Simple
+instance Symbol SimpleExpression
   where
     symSig Neg = signature
     symSig Pos = signature
@@ -272,7 +272,7 @@ instance Symbol Simple
     symSig Sub = signature
     symSig Cat = signature
 
-instance Render Simple
+instance Render SimpleExpression
   where
     renderSym Neg = "(-)"
     renderSym Pos = "id"
@@ -280,7 +280,7 @@ instance Render Simple
     renderSym Sub = "(-)"
     renderSym Cat = "(&)"
 
-instance Eval Simple
+instance Eval SimpleExpression
   where
     evalSym Neg = negate
     evalSym Pos = id
@@ -288,7 +288,7 @@ instance Eval Simple
     evalSym Sub = (-)
     evalSym Cat = bitJoin
 
-instance EvalEnv Simple env
+instance EvalEnv SimpleExpression env
 
 instance Equality   Term
 instance StringTree Term

@@ -1,13 +1,14 @@
-{-# LANGUAGE TypeOperators #-}
-
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE ConstraintKinds   #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts  #-}
 
 module Language.Embedded.Hardware.Expression.Frontend where
 
 import qualified Language.VHDL as V
 
 import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Syntax
+import Language.Embedded.Hardware.Expression.Syntax hiding (Term, Factor, Primary)
 import Language.Embedded.Hardware.Expression.Hoist
 import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit
@@ -41,64 +42,109 @@ value i = sugarT (Literal i)
 cast  :: (HType a, HType b) => (a -> b) -> HExp a -> HExp b
 cast f = sugarT (Conversion f)
 
-true, false :: HExp Bool
-true  = value True
-false = value False
-
 --------------------------------------------------------------------------------
 
--- logical operators
-and, or, xor, xnor, nand, nor :: HExp Bool -> HExp Bool -> HExp Bool
-and  = sugarT And
-or   = sugarT Or
-xor  = sugarT Xor
-xnor = sugarT Xnor
-nand = sugarT Nand
-nor  = sugarT Nor
+type Hardware exp = (Expr exp, Rel exp, Shift exp, Simple exp, Term exp, Factor exp, Primary exp)
 
--- relational operators
-eq, neq :: (HType a, Eq a) => HExp a -> HExp a -> HExp Bool
-eq  = sugarT Eq
-neq = sugarT Neq
+-- | Logical operators.
+class Expr exp where
+  true  :: exp Bool
+  false :: exp Bool
+  and   :: exp Bool -> exp Bool -> exp Bool
+  or    :: exp Bool -> exp Bool -> exp Bool
+  xor   :: exp Bool -> exp Bool -> exp Bool
+  xnor  :: exp Bool -> exp Bool -> exp Bool
+  nand  :: exp Bool -> exp Bool -> exp Bool
+  nor   :: exp Bool -> exp Bool -> exp Bool
 
-lt, lte, gt, gte :: (HType a, Ord a) => HExp a -> HExp a -> HExp Bool
-lt  = sugarT Lt
-lte = sugarT Lte
-gt  = sugarT Gt
-gte = sugarT Gte
+instance Expr HExp where
+  true  = value True
+  false = value False
+  and   = sugarT And
+  or    = sugarT Or
+  xor   = sugarT Xor
+  xnor  = sugarT Xnor
+  nand  = sugarT Nand
+  nor   = sugarT Nor
 
--- shift operators
-sll, srl, sla, sra, rol, ror :: (HType a, B.Bits a, HType b, Integral b) => HExp a -> HExp b -> HExp a
-sll = sugarT Sll
-srl = sugarT Srl
-sla = sugarT Sla
-sra = sugarT Sra
-rol = sugarT Rol
-ror = sugarT Ror
+-- | Relational operators.
+class Rel exp where
+  eq  :: (HType a, Eq a) => exp a -> exp a -> exp Bool
+  neq :: (HType a, Eq a) => exp a -> exp a -> exp Bool
+  lt  :: (HType a, Ord a) => exp a -> exp a -> exp Bool
+  lte :: (HType a, Ord a) => exp a -> exp a -> exp Bool
+  gt  :: (HType a, Ord a) => exp a -> exp a -> exp Bool
+  gte :: (HType a, Ord a) => exp a -> exp a -> exp Bool
 
--- adding operators
-add, sub :: (HType a, Num a) => HExp a -> HExp a -> HExp a
-add = sugarT Add
-sub = sugarT Sub
+instance Rel HExp where
+  eq  = sugarT Eq
+  neq = sugarT Neq
+  lt  = sugarT Lt
+  lte = sugarT Lte
+  gt  = sugarT Gt
+  gte = sugarT Gte
 
--- multiplying operators
-mul :: (HType a, Num a) => HExp a -> HExp a -> HExp a
-mul = sugarT Mul
+-- | Shift operators.
+class Shift exp where
+  sll :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
+  srl :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
+  sla :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
+  sra :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
+  rol :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
+  ror :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
 
-div, mod, rem :: (HType a, Integral a) => HExp a -> HExp a -> HExp a
-div = sugarT Div
-mod = sugarT Mod
-rem = sugarT Rem
+instance Shift HExp where
+  sll = sugarT Sll
+  srl = sugarT Srl
+  sla = sugarT Sla
+  sra = sugarT Sra
+  rol = sugarT Rol
+  ror = sugarT Ror
 
--- miscellaneous operators
-exp :: (HType a, Num a, HType b, Integral b) => HExp a -> HExp b -> HExp a
-exp = sugarT Exp
+-- | Adding operators.
+class Simple exp where
+  neg :: (HType a, Num a) => exp a -> exp a
+  add :: (HType a, Num a) => exp a -> exp a -> exp a
+  sub :: (HType a, Num a) => exp a -> exp a -> exp a
+  cat :: ( KnownNat n, KnownNat m, KnownNat (n + m), Typeable (n + m))
+      => exp (Bits n) -> exp (Bits m) -> exp (Bits (n + m))
 
-abs :: (HType a, Num a) => HExp a -> HExp a
-abs = sugarT Abs
+instance Simple HExp where
+  neg = sugarT Neg
+  add = sugarT Add
+  sub = sugarT Sub
+  cat = sugarT Cat
 
-not :: HExp Bool -> HExp Bool
-not = sugarT Not
+-- | Multiplying operators.
+class Term exp where
+  mul :: (HType a, Num a)      => exp a -> exp a -> exp a
+  div :: (HType a, Integral a) => exp a -> exp a -> exp a
+  mod :: (HType a, Integral a) => exp a -> exp a -> exp a
+  rem :: (HType a, Integral a) => exp a -> exp a -> exp a
+
+instance Term HExp where
+  mul = sugarT Mul
+  div = sugarT Div
+  mod = sugarT Mod
+  rem = sugarT Rem
+
+-- | Miscellaneous operators.
+class Factor exp where
+  exp :: (HType a, Num a, HType b, Integral b) => exp a -> exp b -> exp a
+  abs :: (HType a, Num a) => exp a -> exp a
+  not :: exp Bool -> exp Bool
+
+instance Factor HExp where
+  exp = sugarT Exp
+  abs = sugarT Abs
+  not = sugarT Not
+
+-- | ...
+class Primary exp where
+  risingEdge :: exp a -> exp Bool
+
+instance Primary HExp where
+  risingEdge = sugarT (Function "rising_edge" $ \_ -> error "vhdl-todo: cannot evaluate 'risingEdge'")
 
 --------------------------------------------------------------------------------
 -- These are a bit strange. Wonder when they'll add Typeable for type literals.
@@ -108,18 +154,6 @@ others = sugarT Others
 
 slice :: (KnownNat n, Typeable n) => HExp (Bits n) -> (Integer, Integer) -> HExp (Bits m)
 slice = undefined
-
-cat
-  :: ( KnownNat n
-     , KnownNat m
-     , KnownNat (n + m)
-     , Typeable (n + m)
-     )
-  => HExp (Bits n) -> HExp (Bits m) -> HExp (Bits (n + m))
-cat = sugarT Cat
-
-risingEdge :: HExp a -> HExp Bool
-risingEdge = sugarT (Function "rising_edge" $ \_ -> error "vhdl-todo: cannot evaluate 'risingEdge'")
 
 --------------------------------------------------------------------------------
 
@@ -151,7 +185,7 @@ instance (HType a, Num a) => Num (HExp a)
   where
     fromInteger = value . fromInteger
     (+)         = add
-    (-)         = sub
+    (-)         = undefined --sub
     (*)         = mul
     abs         = abs
     signum      = error "VHDL: signum is not supported"

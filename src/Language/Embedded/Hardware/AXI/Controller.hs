@@ -35,6 +35,7 @@ axi_light_signature
      , ConstantCMD    :<: instr
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
+     , Hardware exp
      , FreeExp exp
      , pred (Bit),     PredicateExp exp (Bit)
      , pred (Bits 2),  PredicateExp exp (Bits 2)
@@ -106,6 +107,7 @@ axi_light
      , ConstantCMD    :<: instr
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
+     , Hardware exp
      , FreeExp exp
      , pred (Bit),     PredicateExp exp (Bit)
      , pred (Bits 2),  PredicateExp exp (Bits 2)
@@ -174,10 +176,10 @@ axi_light
        reg_1     <- signal "slv_reg1"              :: Prog instr exp pred (Signal (Bits 32))
        reg_2     <- signal "slv_reg2"              :: Prog instr exp pred (Signal (Bits 32))
        reg_3     <- signal "slv_reg3"              :: Prog instr exp pred (Signal (Bits 32))
-       reg_rden  <- signal "slv_reg_rden"          :: Prog instr exp pred (Signal Bit)
-       reg_wren  <- signal "slv_reg_wren"          :: Prog instr exp pred (Signal Bit)
+       reg_rden  <- signal "slv_reg_rden"          :: Prog instr exp pred (Signal (Bit))
+       reg_wren  <- signal "slv_reg_wren"          :: Prog instr exp pred (Signal (Bit))
        reg_out   <- signal "reg_data_out"          :: Prog instr exp pred (Signal (Bits 32))
-       reg_index <- signal "byte_index"            :: Prog instr exp pred (Signal Integer)
+       reg_index <- signal "byte_index"            :: Prog instr exp pred (Signal (Integer))
 
        ----------------------------------------
        -- I/O Connections.
