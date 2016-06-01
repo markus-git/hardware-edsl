@@ -2,9 +2,11 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE PolyKinds           #-}
 
 module Language.Embedded.Hardware.AXI.Controller where
-{-
+
 import Language.Embedded.Hardware
 
 import Control.Monad.Identity (Identity)
@@ -22,22 +24,27 @@ import Prelude hiding (not, and, or, div, null)
 -- * AXI-light Controller.
 --------------------------------------------------------------------------------
 
--- | ...
-type HSig  instr = Sig instr HExp HType Identity
-
--- | ...
-type HProg instr = ProgramT instr (Param2 HExp HType) Identity
+type Prog instr exp pred = Program instr (Param2 exp pred)
 
 --------------------------------------------------------------------------------
 -- ** Signature.
 
 axi_light_signature
-  :: ( SignalCMD      :<: instr,
-       ConstantCMD    :<: instr,
-       ConditionalCMD :<: instr,
-       StructuralCMD  :<: instr
+  :: forall instr exp pred. (
+       SignalCMD      :<: instr
+     , ConstantCMD    :<: instr
+     , ConditionalCMD :<: instr
+     , StructuralCMD  :<: instr
+     , FreeExp exp
+     , pred (Bit),     PredicateExp exp (Bit)
+     , pred (Bits 2),  PredicateExp exp (Bits 2)
+     , pred (Bits 3),  PredicateExp exp (Bits 3)
+     , pred (Bits 4),  PredicateExp exp (Bits 4)
+     , pred (Bits 32), PredicateExp exp (Bits 32)
+     , pred (Integer)
+     , Num (exp Integer)
      )
-  => HSig instr (
+  => Sig instr exp pred Identity (
           Signal Bit       -- ^ Global clock signal.
        -> Signal Bit       -- ^ Global reset signal.
        -> Signal (Bits 4)  -- ^ Write address.
@@ -94,11 +101,19 @@ axi_light_signature =
 -- ** Implementation.
 
 axi_light
-  :: forall instr. (
-       SignalCMD      :<: instr,
-       ConstantCMD    :<: instr,
-       ConditionalCMD :<: instr,
-       StructuralCMD  :<: instr
+  :: forall instr exp pred n. (
+       SignalCMD      :<: instr
+     , ConstantCMD    :<: instr
+     , ConditionalCMD :<: instr
+     , StructuralCMD  :<: instr
+     , FreeExp exp
+     , pred (Bit),     PredicateExp exp (Bit)
+     , pred (Bits 2),  PredicateExp exp (Bits 2)
+     , pred (Bits 3),  PredicateExp exp (Bits 3)
+     , pred (Bits 4),  PredicateExp exp (Bits 4)
+     , pred (Bits 32), PredicateExp exp (Bits 32)
+     , pred (Integer)
+     , Num (exp Integer)
      )
   => Signal Bit       -- ^ Global clock signal.
   -> Signal Bit       -- ^ Global reset signal.
@@ -121,7 +136,7 @@ axi_light
   -> Signal (Bits 2)  -- ^ Read response.
   -> Signal Bit       -- ^ Read valid.
   -> Signal Bit       -- ^ Read ready.    
-  -> HProg instr ()
+  -> Program instr (Param2 exp pred) ()
 axi_light
     s_axi_aclk   s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready s_axi_wdata s_axi_wstrb s_axi_wvalid s_axi_wready
@@ -133,36 +148,36 @@ axi_light
        ----------------------------------------
        -- AXI Light signals.
        --
-       awaddr  <- signal "axi_awaddr"  :: HProg instr (Signal (Bits 4))
-       awready <- signal "axi_awready" :: HProg instr (Signal Bit)
-       wready  <- signal "axi_wready"  :: HProg instr (Signal Bit)
-       bresp   <- signal "axi_bresp"   :: HProg instr (Signal (Bits 2))
-       bvalid  <- signal "axi_bvalid"  :: HProg instr (Signal Bit)
-       araddr  <- signal "axi_araddr"  :: HProg instr (Signal (Bits 4))
-       arready <- signal "axi_arready" :: HProg instr (Signal Bit)
-       rdata   <- signal "axi_rdata"   :: HProg instr (Signal (Bits 32))
-       rresp   <- signal "axi_rresp"   :: HProg instr (Signal (Bits 2))
-       rvalid  <- signal "axi_rvalid"  :: HProg instr (Signal Bit)
+       awaddr  <- signal "axi_awaddr"              :: Prog instr exp pred (Signal (Bits 4))
+       awready <- signal "axi_awready"             :: Prog instr exp pred (Signal (Bit))
+       wready  <- signal "axi_wready"              :: Prog instr exp pred (Signal (Bit))
+       bresp   <- signal "axi_bresp"               :: Prog instr exp pred (Signal (Bits 2))
+       bvalid  <- signal "axi_bvalid"              :: Prog instr exp pred (Signal (Bit))
+       araddr  <- signal "axi_araddr"              :: Prog instr exp pred (Signal (Bits 4))
+       arready <- signal "axi_arready"             :: Prog instr exp pred (Signal (Bit))
+       rdata   <- signal "axi_rdata"               :: Prog instr exp pred (Signal (Bits 32))
+       rresp   <- signal "axi_rresp"               :: Prog instr exp pred (Signal (Bits 2))
+       rvalid  <- signal "axi_rvalid"              :: Prog instr exp pred (Signal (Bit))
 
        ----------------------------------------
        -- Application-specific design signals.
        --
-       addr_lsb  <- constant "ADDR_LSB"          2 :: HProg instr (Constant Integer)
-       addr_bits <- constant "OPT_MEM_ADDR_BITS" 1 :: HProg instr (Constant Integer)
-       
+       addr_lsb  <- constant "ADDR_LSB"          2 :: Prog instr exp pred (Constant Integer)
+       addr_bits <- constant "OPT_MEM_ADDR_BITS" 1 :: Prog instr exp pred (Constant Integer)
+
        ----------------------------------------
        -- Signals for user logic registers.
        --
-       -- *** Generate these from a signature ***
+       -- *** ToDo: Generate these from a signature
        --
-       reg_0     <- signal "slv_reg0"     :: HProg instr (Signal (Bits 32))
-       reg_1     <- signal "slv_reg1"     :: HProg instr (Signal (Bits 32))
-       reg_2     <- signal "slv_reg2"     :: HProg instr (Signal (Bits 32))
-       reg_3     <- signal "slv_reg3"     :: HProg instr (Signal (Bits 32))
-       reg_rden  <- signal "slv_reg_rden" :: HProg instr (Signal Bit)
-       reg_wren  <- signal "slv_reg_wren" :: HProg instr (Signal Bit)
-       reg_out   <- signal "reg_data_out" :: HProg instr (Signal (Bits 32))
-       reg_index <- signal "byte_index"   :: HProg instr (Signal Integer)
+       reg_0     <- signal "slv_reg0"              :: Prog instr exp pred (Signal (Bits 32))
+       reg_1     <- signal "slv_reg1"              :: Prog instr exp pred (Signal (Bits 32))
+       reg_2     <- signal "slv_reg2"              :: Prog instr exp pred (Signal (Bits 32))
+       reg_3     <- signal "slv_reg3"              :: Prog instr exp pred (Signal (Bits 32))
+       reg_rden  <- signal "slv_reg_rden"          :: Prog instr exp pred (Signal Bit)
+       reg_wren  <- signal "slv_reg_wren"          :: Prog instr exp pred (Signal Bit)
+       reg_out   <- signal "reg_data_out"          :: Prog instr exp pred (Signal (Bits 32))
+       reg_index <- signal "byte_index"            :: Prog instr exp pred (Signal Integer)
 
        ----------------------------------------
        -- I/O Connections.
@@ -194,6 +209,7 @@ axi_light
                    (do awready <== high)
                    (do awready <== low))
 
+{-
        ----------------------------------------
        -- AXI_AWADDR latching.
        --
@@ -210,7 +226,8 @@ axi_light
                        isHigh awv `and`
                        isHigh wv) $
                    awaddr <=- s_axi_awaddr)
-       
+-}
+{-
        ----------------------------------------
        -- AXI_AWREADY generation.
        --
@@ -228,7 +245,8 @@ axi_light
                       isHigh wv)
                    (wready <== high)
                    (wready <== low))
-
+-}
+{-
        ----------------------------------------
        -- Slave register logic.
        --
@@ -252,20 +270,21 @@ axi_light
                          reg_1 <=- reg_1
                          reg_2 <=- reg_2
                          reg_3 <=- reg_3))
+-}
 
 
-
-       undefined
+       return ()
   where
-    get :: HType a => Signal a -> HProg instr (HExp a)
+
+    get :: (PredicateExp exp a, pred a) => Signal a -> Prog instr exp pred (exp a)
     get = unsafeFreezeSignal
 
-    high, low :: HExp Bit
+    high, low :: exp Bit
     high = true
     low  = false
 
-    isHigh, isLow :: HExp Bit -> HExp Bit
+    isHigh, isLow :: exp Bit -> exp Bit
     isHigh = undefined
     isLow  = undefined
--}
+
 --------------------------------------------------------------------------------

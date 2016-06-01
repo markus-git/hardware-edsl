@@ -41,6 +41,10 @@ value i = sugarT (Literal i)
 cast  :: (HType a, HType b) => (a -> b) -> HExp a -> HExp b
 cast f = sugarT (Conversion f)
 
+true, false :: HExp Bool
+true  = value True
+false = value False
+
 --------------------------------------------------------------------------------
 
 -- logical operators
@@ -114,17 +118,9 @@ cat
   => HExp (Bits n) -> HExp (Bits m) -> HExp (Bits (n + m))
 cat = sugarT Cat
 
-
---------------------------------------------------------------------------------
-
-true, false :: HExp Bool
-true  = value True
-false = value False
-{-
--- *** ...
 risingEdge :: HExp a -> HExp Bool
-risingEdge = sugarT (Function "rising_edge" $ \_ -> True)
--}
+risingEdge = sugarT (Function "rising_edge" $ \_ -> error "vhdl-todo: cannot evaluate 'risingEdge'")
+
 --------------------------------------------------------------------------------
 
 instance (HType a, Eq a) => Eq (HExp a)

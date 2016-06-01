@@ -298,7 +298,7 @@ ifE
 ifE a b = conditional a [b] (Nothing)
 
 --------------------------------------------------------------------------------
-
+{-
 -- | ...
 risingEdge
   :: (ConditionalCMD :<: instr, pred Bool)
@@ -306,7 +306,7 @@ risingEdge
   -> ProgramT instr (Param2 exp pred) m ()
   -> ProgramT instr (Param2 exp pred) m ()
 risingEdge s p = singleInj $ WhenRising s p
-
+-}
 --------------------------------------------------------------------------------
 
 switch :: (ConditionalCMD :<: instr, pred a, Eq a, Ord a)
