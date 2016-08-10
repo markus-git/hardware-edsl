@@ -20,8 +20,6 @@ source-repository head
 library
   exposed-modules:
     Language.Embedded.Hardware,
---    Language.Embedded.Hardware.AXI,
---    Language.Embedded.Hardware.AXI.Controller,
     Language.Embedded.Hardware.Expression,
     Language.Embedded.Hardware.Expression.Backend.VHDL,
     Language.Embedded.Hardware.Expression.Frontend,
@@ -37,7 +35,8 @@ library
     Language.Embedded.VHDL,
     Language.Embedded.VHDL.Monad,
     Language.Embedded.VHDL.Monad.Type,
-    Language.Embedded.VHDL.Monad.Expression
+    Language.Embedded.VHDL.Monad.Expression,
+    Language.Embedded.Hardware.Common.AXI
 
   --other-modules:
     
@@ -58,7 +57,7 @@ library
     UndecidableInstances
     
   build-depends:
-    base >=4.8 && <4.9,
+    base >=4.8 && <5,
     mtl >=2.2 && <2.3,
     array >=0.5 && <0.6,
     containers >=0.5 && <0.6,
@@ -66,7 +65,7 @@ library
     bytestring >=0.10 && <0.11,
     deepseq >=1.4,
     constraints >=0.6,
-    syntactic >=3.2,
+    syntactic >=3.6.1,
     operational-alacarte >=0.2,
     language-vhdl >=0.1.2.8
     

@@ -169,7 +169,7 @@ others :: (KnownNat n, Typeable n) => HExp Bit -> HExp (Bits n)
 others = sugarT Others
 
 slice :: (KnownNat n, Typeable n) => HExp (Bits n) -> (Integer, Integer) -> HExp (Bits m)
-slice = undefined
+slice = error "slice"
 
 --------------------------------------------------------------------------------
 
@@ -201,7 +201,7 @@ instance (HType a, Num a) => Num (HExp a)
   where
     fromInteger = value . fromInteger
     (+)         = add
-    (-)         = undefined --sub
+    (-)         = sub
     (*)         = mul
     abs         = abs
     signum      = error "VHDL: signum is not supported"

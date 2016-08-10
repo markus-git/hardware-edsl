@@ -17,7 +17,7 @@ import Control.Monad.Operational.Higher
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Hoist
 import Language.Embedded.Hardware.Expression.Represent
-import Language.Embedded.Hardware.Expression.Represent.Bit (Bits)
+import Language.Embedded.Hardware.Expression.Represent.Bit (Bits, ni)
 import Language.Embedded.Hardware.Command.CMD
 
 import Language.Embedded.VHDL (VHDL)
@@ -30,7 +30,8 @@ import Data.Proxy
 import Data.Word     (Word8)
 import qualified Data.IORef    as IR
 import qualified Data.Array.IO as IA
---import GHC.TypeLits
+
+import GHC.TypeLits (KnownNat)
 
 --------------------------------------------------------------------------------
 -- * Translation of hardware commands into VHDL.
@@ -225,6 +226,10 @@ compileArray (GetArray ix (SignalC s)) =
      e <- compE ix
      V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident s) e)
      return i
+compileArray (SetArray ix e (SignalC v)) =
+  do ix' <- compE ix
+     e'  <- compE e
+     V.assignSignal (V.indexed (ident v) ix') e'
 compileArray (GetRangeS to (l, u) s) =
   do i   <- newSym (Base "v")
      to' <- compE to
@@ -249,6 +254,19 @@ compileArray (SetRangeS (t1, t2) a (f1, f2) b) =
      let v1 = V.slice (fromIdent a) (lift t1', lift t2')
          v2 = V.name $ V.slice (fromIdent b) (lift f1', lift f2')
      V.assignSignal v1 (lift v2)
+compileArray (AsSigned sig@(SignalC s)) =
+  do i <- newSym (Base "v")
+     let x = bound sig
+         r = V.range (lift $ V.lit $ show $ negate x) V.to
+                     (lift $ V.lit $ show $ x - 1)
+     V.variable (ident i) (V.integer $ Just r) Nothing
+     V.assignVariable (V.NSimple $ ident i) $
+       lift $ V.function (ident "TO_INTEGER") [
+         lift $ V.cast V.signed2 $ lift $ V.name $ V.NSimple $ ident s]
+     return (ValC i)
+  where
+    bound :: forall n. KnownNat n => Signal (Bits n) -> Integer
+    bound _ = 2 ^ (ni (Proxy::Proxy n) - 1)
 
 runArray :: ArrayCMD (Param3 IO IO pred) a -> IO a
 runArray = error "vhdl-todo: evaluate Array"
@@ -539,8 +557,8 @@ instance InterpBi VHDL_CMD IO (Param1 pred)
     interpBi = runVHDL
 
 compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDL_CMD (Param3 VHDL exp ct) a -> VHDL a
-compileVHDL (CallFun n as) = undefined
+compileVHDL (CallFun n as) =
 
 runVHDL :: VHDL_CMD (Param3 IO IO pred) a -> IO a
-runVHDL = undefined
+runVHDL = 
 -}

@@ -27,7 +27,7 @@ import qualified Data.Array as Arr
 
 import qualified Language.VHDL as V (Expression, Name, Identifier)
 
---import GHC.TypeLits
+import GHC.TypeLits (KnownNat)
 import qualified GHC.Exts as GHC (Constraint)
 
 --------------------------------------------------------------------------------
@@ -72,6 +72,7 @@ data SignalCMD fs a
     -- ^ Unsafe version of fetching a signal.
     UnsafeFreezeSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
     -- *** ...
+    ConcurrentSetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
 
 instance HFunctor SignalCMD
   where
@@ -79,6 +80,8 @@ instance HFunctor SignalCMD
     hfmap _ (GetSignal s) = GetSignal s
     hfmap _ (SetSignal s e) = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
+    --
+    hfmap _ (ConcurrentSetSignal s e) = ConcurrentSetSignal s e
 
 instance HBifunctor SignalCMD
   where
@@ -86,13 +89,17 @@ instance HBifunctor SignalCMD
     hbimap _ _ (GetSignal s) = GetSignal s
     hbimap _ f (SetSignal s e) = SetSignal s (f e)
     hbimap _ _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
+    --
+    hbimap _ f (ConcurrentSetSignal s e) = ConcurrentSetSignal s (f e)
 
-instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr
+instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
   where
     reexpressInstrEnv reexp (NewSignal n m e) = lift . singleInj . NewSignal n m =<< swapM (fmap reexp e)
     reexpressInstrEnv reexp (GetSignal s) = lift $ singleInj $ GetSignal s
     reexpressInstrEnv reexp (SetSignal s e) = lift . singleInj . SetSignal s =<< reexp e
     reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s
+    --
+    reexpressInstrEnv reexp (ConcurrentSetSignal s e) = lift . singleInj . ConcurrentSetSignal s =<< reexp e
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -126,7 +133,7 @@ instance HBifunctor VariableCMD
     hbimap _ f (SetVariable v e) = SetVariable v (f e)
     hbimap _ _ (UnsafeFreezeVariable v) = UnsafeFreezeVariable v
 
-instance (VariableCMD :<: instr) => Reexpressible VariableCMD instr
+instance (VariableCMD :<: instr) => Reexpressible VariableCMD instr env
   where
     reexpressInstrEnv reexp (NewVariable n e) = lift . singleInj . NewVariable n =<< swapM (fmap reexp e)
     reexpressInstrEnv reexp (GetVariable v) = lift $ singleInj $ GetVariable v
@@ -157,7 +164,7 @@ instance HBifunctor ConstantCMD
     hbimap _ f (NewConstant n e) = NewConstant n (f e)
     hbimap _ _ (GetConstant c)   = GetConstant c
 
-instance (ConstantCMD :<: instr) => Reexpressible ConstantCMD instr
+instance (ConstantCMD :<: instr) => Reexpressible ConstantCMD instr env
   where
     reexpressInstrEnv reexp (NewConstant n e) = lift . singleInj . NewConstant n =<< reexp e
     reexpressInstrEnv reexp (GetConstant c) = lift $ singleInj $ GetConstant c
@@ -178,8 +185,12 @@ data Array i a = ArrayC VarId | ArrayE (IOArray i a)
 -- | Commands for signal arrays.
 data ArrayCMD fs a
   where
-    GetArray :: (pred Bit, Integral i, Ix i) => exp i -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) (Val Bit)
-    -- *** ...
+    -- *** For signals.
+    GetArray :: (pred Bit, Integral i, Ix i)
+      => exp i -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) (Val Bit)
+    SetArray :: (pred Bit, Integral i, Ix i)
+      => exp i -> exp Bit -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) ()
+    -- *** I'm not sure about these + no type safety. But deadlines.
     GetRangeS :: (pred i, Integral i, Ix i, pred UBits)
       => exp i          -- size
       -> (exp i, exp i) -- range
@@ -191,22 +202,34 @@ data ArrayCMD fs a
       -> (exp i, exp i) -- other
       -> Signal (Bits m)
       -> ArrayCMD (Param3 prog exp pred) ()
+    -- *** Same.
+    AsSigned :: (KnownNat n)
+      => Signal (Bits n)
+      -> ArrayCMD (Param3 prog exp pred) (Val Integer)
 
 instance HFunctor ArrayCMD 
   where
-    hfmap _ (GetArray i s) = GetArray i s
+    hfmap _ (GetArray i s)   = GetArray i s
+    hfmap _ (SetArray i e s) = SetArray i e s
+    -- 
     hfmap _ (GetRangeS to   fr s) = GetRangeS to   fr s
     hfmap _ (SetRangeS to a fr b) = SetRangeS to a fr b
+    hfmap _ (AsSigned s) = AsSigned s
 
 instance HBifunctor ArrayCMD
   where
-    hbimap _ f (GetArray i s) = GetArray (f i) s
+    hbimap _ f (GetArray i s)   = GetArray (f i) s
+    hbimap _ f (SetArray i e s) = SetArray (f i) (f e) s
+    --
     hbimap _ f (GetRangeS to         (f1, f2) s) = GetRangeS (f to)         (f f1, f f2) s
     hbimap _ f (SetRangeS (t1, t2) a (f1, f2) b) = SetRangeS (f t1, f t2) a (f f1, f f2) b
+    hbimap _ f (AsSigned s) = AsSigned s
 
-instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr
+instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
   where
-    reexpressInstrEnv reexp (GetArray i s) = do i' <- reexp i; lift $ singleInj $ GetArray i' s
+    reexpressInstrEnv reexp (GetArray i s)   = do i' <- reexp i; lift $ singleInj $ GetArray i' s
+    reexpressInstrEnv reexp (SetArray i e s) = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetArray i' e' s
+    --
     reexpressInstrEnv reexp (GetRangeS to (f1, f2) s) =
       do to' <- reexp to
          f1' <- reexp f1
@@ -218,6 +241,7 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr
          f1' <- reexp f1
          f2' <- reexp f2
          lift $ singleInj $ SetRangeS (t1', t2') a (f1', f2') b
+    reexpressInstrEnv reexp (AsSigned s) = lift $ singleInj $ AsSigned s
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -266,7 +290,7 @@ instance HBifunctor VArrayCMD
     hbimap _ _ (UnsafeFreezeVArray a) = UnsafeFreezeVArray a
     hbimap _ _ (UnsafeThawVArray a) = UnsafeThawVArray a
 
-instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr
+instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
   where
     reexpressInstrEnv reexp (NewVArray n i) = lift . singleInj . NewVArray n =<< reexp i
     reexpressInstrEnv reexp (InitVArray n is) = lift $ singleInj $ InitVArray n is
@@ -297,7 +321,7 @@ instance HBifunctor LoopCMD
     hbimap g f (For r step) = For (f r) (g . step)
     hbimap g f (While cont step) = While (g $ fmap f cont) (g step)
 
-instance (LoopCMD :<: instr) => Reexpressible LoopCMD instr
+instance (LoopCMD :<: instr) => Reexpressible LoopCMD instr env
   where
     reexpressInstrEnv reexp (For r step) = do
       r' <- reexp r
@@ -350,7 +374,7 @@ instance HBifunctor ConditionalCMD
     -- *** ...
     hbimap g f (WhenRising s p) = WhenRising s (g p)
 
-instance (ConditionalCMD :<: instr) => Reexpressible ConditionalCMD instr
+instance (ConditionalCMD :<: instr) => Reexpressible ConditionalCMD instr env
   where
     reexpressInstrEnv reexp (If (c, a) cs b) =
       do let (xs, ys) = unzip cs
@@ -444,7 +468,7 @@ instance HBifunctor ComponentCMD
     hbimap g f (StructComponent n sig)        = StructComponent n (hbimap g f sig)
     hbimap g f (PortMap (Component m sig) as) = PortMap (Component m (hbimap g f sig)) as
 
-instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr
+instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
   where
     reexpressInstrEnv reexp (StructComponent n sig) =
       ReaderT $ \env ->
@@ -504,7 +528,7 @@ instance HBifunctor StructuralCMD
     hbimap g f (StructArchitecture e a p) = StructArchitecture e a (g p)
     hbimap g f (StructProcess xs p)       = StructProcess xs (g p)
 
-instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr
+instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr env
   where
     reexpressInstrEnv reexp (StructEntity n p)         =
       ReaderT $ \env -> singleInj $ StructEntity n $ runReaderT p env

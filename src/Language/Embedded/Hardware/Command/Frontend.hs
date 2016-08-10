@@ -23,6 +23,8 @@ import Data.Word
 
 import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 
+import GHC.TypeLits (KnownNat)
+
 --------------------------------------------------------------------------------
 -- *
 --------------------------------------------------------------------------------
@@ -180,6 +182,12 @@ getArray :: (ArrayCMD :<: instr, pred Bit, pred i, Integral i, Ix i, PredicateEx
   => exp i -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Bit)
 getArray i = fmap valToExp . singleInj . GetArray i
 
+setArray :: (ArrayCMD :<: instr, pred Bit, pred i, Integral i, Ix i, PredicateExp exp Bit, FreeExp exp, Monad m)
+  => exp i -> exp Bit -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m ()
+setArray i e = singleInj . SetArray i e
+
+----------------------------------------
+
 -- | ...
 getSignalRange 
   :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
@@ -191,6 +199,11 @@ setSignalRange
   :: (ArrayCMD :<: instr, pred i, Integral i, Ix i, FreeExp exp, Monad m)
   => (exp i, exp i) -> Signal (Bits x) -> (exp i, exp i) -> Signal (Bits y) -> ProgramT instr (Param2 exp pred) m ()
 setSignalRange from a to = singleInj . SetRangeS from a to
+
+asSigned
+  :: (ArrayCMD :<: instr, KnownNat n, FreeExp exp, PredicateExp exp Integer, Monad m)
+  => Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Integer)
+asSigned = fmap valToExp . singleInj . AsSigned
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -293,16 +306,6 @@ ifE
 ifE a b = conditional a [b] (Nothing)
 
 --------------------------------------------------------------------------------
-{-
--- | ...
-risingEdge
-  :: (ConditionalCMD :<: instr, pred Bool)
-  => Signal Bool
-  -> ProgramT instr (Param2 exp pred) m ()
-  -> ProgramT instr (Param2 exp pred) m ()
-risingEdge s p = singleInj $ WhenRising s p
--}
---------------------------------------------------------------------------------
 
 switch :: (ConditionalCMD :<: instr, pred a, Eq a, Ord a)
   => exp a -> [When a (ProgramT instr (Param2 exp pred) m)] -> ProgramT instr (Param2 exp pred) m ()
@@ -335,15 +338,35 @@ type Sig  instr exp pred m = Signature (Param3 (ProgramT instr (Param2 exp pred)
 type Comp instr exp pred m = Component (Param3 (ProgramT instr (Param2 exp pred) m) exp pred)
 
 -- | Wrap a signed program in a new component.
-namedComponent :: (ComponentCMD :<: instr, Monad m) => String -> Sig instr exp pred m a
+namedComponent
+  :: ( ComponentCMD  :<: instr
+     , StructuralCMD :<: instr
+     , Monad m)
+  => String -> Sig instr exp pred m a
   -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
 namedComponent name sig =
   do n <- singleInj $ StructComponent (Base name) sig
      return $ Component n sig
 
-component :: (ComponentCMD :<: instr, Monad m) => Sig instr exp pred m a
+component
+  :: ( ComponentCMD  :<: instr
+     , StructuralCMD :<: instr
+     , Monad m)
+  => Sig instr exp pred m a
   -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
 component = namedComponent "comp"
+
+
+-- | Wrap a signed program in a new component.
+namedComponent' :: (ComponentCMD :<: instr, Monad m) => String -> Sig instr exp pred m a
+  -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
+namedComponent' name sig =
+  do n <- singleInj $ StructComponent (Base name) sig
+     return $ Component n sig
+
+component' :: (ComponentCMD :<: instr, Monad m) => Sig instr exp pred m a
+  -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
+component' = namedComponent' "comp"
 
 -- | Map signals to some component.
 portmap :: (ComponentCMD :<: instr) => Comp instr exp pred m a -> Arg a -> ProgramT instr (Param2 exp pred) m ()
