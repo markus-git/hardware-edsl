@@ -60,24 +60,17 @@ simple =
      setVariable b (u - v)
 
      ----------------------------------------
-     -- Clock stuff.
+     -- ...
      --
-     s <- initSignal high :: HProg (Signal Bit)     
-     risingEdge s $ setSignal s low
-
-     ----------------------------------------
-     -- Ranges.
-     --
-     d <- initSignal two  :: HProg (Signal (Bits 4))
-
-     let low  = litE 0 :: HExp Integer
-         high = litE 1 :: HExp Integer
-     
-     r <- getSignalRange low high d
-     setSignalRange (low + 1) (high + 1) d r
+     x <- initSignal two :: HProg (Signal (Bits 4))
+     y <- asSigned x
+     switch y
+       [ is 1 $ setVariable a u
+       , is 2 $ setVariable a v
+       ]
      
      return ()
 
-testSimgle = icompile simple
+test = icompile simple
 
 --------------------------------------------------------------------------------

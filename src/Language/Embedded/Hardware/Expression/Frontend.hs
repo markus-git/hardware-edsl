@@ -159,7 +159,6 @@ class Primary exp where
   risingEdge :: exp a -> exp Bool
 
 instance Primary HExp where
-
   risingEdge = sugarT (Function "rising_edge" $ \_ -> error "vhdl-todo: cannot evaluate 'risingEdge'")
 
 --------------------------------------------------------------------------------
