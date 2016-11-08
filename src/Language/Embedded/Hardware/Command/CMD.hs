@@ -20,6 +20,7 @@ import Language.Embedded.Hardware.Expression.Represent.Bit
 import Control.Monad.Reader (ReaderT(..), runReaderT, lift)
 import Control.Monad.Operational.Higher
 
+import Data.Typeable (Typeable)
 import Data.Ix       (Ix)
 import Data.IORef    (IORef)
 import Data.Array.IO (IOArray)
@@ -248,9 +249,11 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
 
 -- | Virtual array reprensentation.
 data VArray i a = VArrayC VarId | VArrayE (IORef (IOArray i a))
+  deriving (Eq, Typeable)
 
 -- | Immutable arrays.
 data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
+  deriving (Show, Typeable)
 
 -- | Commands for variable arrays.
 data VArrayCMD fs a
