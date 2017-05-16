@@ -167,7 +167,7 @@ cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion (unrange t)
 -- ** Utility
 
 resize :: Expression -> Expression -> Primary
-resize size exp = PrimFun $ FunctionCall name $ Just $ AssociationList [assoc size, assoc exp]
+resize exp size = PrimFun $ FunctionCall name $ Just $ AssociationList [assoc exp, assoc size]
   where
     name  = NSimple $ Ident "resize"
     assoc = AssociationElement Nothing . APDesignator . ADExpression

@@ -87,7 +87,7 @@ float  = floating 32
 double = floating 64
 
 --------------------------------------------------------------------------------
--- ** ...
+-- ** Integers.
 
 integer :: Maybe Range -> Type
 integer r = SubtypeIndication Nothing
