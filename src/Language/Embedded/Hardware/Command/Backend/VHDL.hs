@@ -307,11 +307,14 @@ compileVArray (SetVArray i e (VArrayC arr)) =
   do i' <- compE i
      e' <- compE e
      V.assignArray (V.indexed (ident arr) i') e'
-compileVArray (CopyVArray (VArrayC a) (VArrayC b) l) =
-  do len <- compE l
-     let slice = (lift (V.lit "0"), lift len)
-         dest  = V.slice (ident a) slice
-         src   = V.slice (ident b) slice
+compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
+  do oa' <- compE oa
+     ob' <- compE ob
+     len <- compE l
+     let slice_a = (lift oa', lift len)
+         slice_b = (lift ob', lift len)
+         dest    = V.slice (ident a) slice_a
+         src     = V.slice (ident b) slice_b
      V.assignArray src (lift $ V.PrimName dest)
 compileVArray (UnsafeFreezeVArray (VArrayC arr)) = return $ IArrayC arr
 compileVArray (UnsafeThawVArray (IArrayC arr)) = return $ VArrayC arr
@@ -342,15 +345,17 @@ runVArray (SetVArray i e (VArrayE ref)) =
      if (ix < l || ix > h)
         then error "setArr out of bounds"
         else IA.writeArray arr (fromIntegral ix) e'
-runVArray (CopyVArray (VArrayE ra) (VArrayE rb) l) =
-  do l'      <- l
+runVArray (CopyVArray (VArrayE ra, oa) (VArrayE rb, ob) l) =
+  do oa'     <- oa
+     ob'     <- ob
+     l'      <- l
      arr     <- IR.readIORef ra
      brr     <- IR.readIORef rb
      (0, ha) <- IA.getBounds arr
      (0, hb) <- IA.getBounds brr
-     if (l' > hb + 1 || l' > ha + 1)
+     if (l' > hb + 1 - oa' || l' > ha + 1 - ob')
         then error "copyArr out of bounts"
-        else sequence_ [ IA.readArray arr i >>= IA.writeArray brr i
+        else sequence_ [ IA.readArray brr (i+ob') >>= IA.writeArray arr (i+oa')
                        | i <- genericTake l' [0..] ]
 runVArray (UnsafeFreezeVArray (VArrayE ref)) = IR.readIORef ref >>= IA.freeze >>= return . IArrayE
 runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw arr >>= IR.newIORef >>= return . VArrayE

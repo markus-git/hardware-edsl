@@ -267,7 +267,7 @@ data VArrayCMD fs a
     -- ^ Writes a value to an array at some specified index.
     SetVArray :: (pred a, Integral i, Ix i) => exp i -> exp a -> VArray i a -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
-    CopyVArray:: (pred a, Integral i, Ix i) => VArray i a -> VArray i a -> exp i -> VArrayCMD (Param3 prog exp pred) ()
+    CopyVArray:: (pred a, Integral i, Ix i) => (VArray i a, exp i) -> (VArray i a, exp i) -> exp i -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching an array's value.
     UnsafeFreezeVArray :: (pred a, Integral i, Ix i) => VArray i a -> VArrayCMD (Param3 prog exp pred) (IArray i a)
     -- ^ ...
@@ -289,19 +289,27 @@ instance HBifunctor VArrayCMD
     hbimap _ _ (InitVArray n is) = InitVArray n is
     hbimap _ f (GetVArray i a) = GetVArray (f i) a
     hbimap _ f (SetVArray i e a) = SetVArray (f i) (f e) a
-    hbimap _ f (CopyVArray a b l) = CopyVArray a b (f l)
+    hbimap _ f (CopyVArray (a, oa) (b, ob) l) = CopyVArray (a, f oa) (b, f ob) (f l)
     hbimap _ _ (UnsafeFreezeVArray a) = UnsafeFreezeVArray a
     hbimap _ _ (UnsafeThawVArray a) = UnsafeThawVArray a
 
 instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
   where
-    reexpressInstrEnv reexp (NewVArray n i) = lift . singleInj . NewVArray n =<< reexp i
-    reexpressInstrEnv reexp (InitVArray n is) = lift $ singleInj $ InitVArray n is
-    reexpressInstrEnv reexp (GetVArray i a) = do i' <- reexp i; lift $ singleInj $ GetVArray i' a
-    reexpressInstrEnv reexp (SetVArray i e a) = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetVArray i' e' a
-    reexpressInstrEnv reexp (CopyVArray a b l) = lift . singleInj . CopyVArray a b =<< reexp l
-    reexpressInstrEnv reexp (UnsafeFreezeVArray a) = lift $ singleInj $ UnsafeFreezeVArray a
-    reexpressInstrEnv reexp (UnsafeThawVArray a) = lift $ singleInj $ UnsafeThawVArray a
+    reexpressInstrEnv reexp (NewVArray n i)
+      = lift . singleInj . NewVArray n =<< reexp i
+    reexpressInstrEnv reexp (InitVArray n is)
+      = lift $ singleInj $ InitVArray n is
+    reexpressInstrEnv reexp (GetVArray i a)
+      = do i' <- reexp i; lift $ singleInj $ GetVArray i' a
+    reexpressInstrEnv reexp (SetVArray i e a)
+      = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetVArray i' e' a
+    reexpressInstrEnv reexp (CopyVArray (a, oa) (b, ob) l)
+      = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
+           lift $ singleInj $ CopyVArray (a, oa') (b, ob') l'
+    reexpressInstrEnv reexp (UnsafeFreezeVArray a)
+      = lift $ singleInj $ UnsafeFreezeVArray a
+    reexpressInstrEnv reexp (UnsafeThawVArray a)
+      = lift $ singleInj $ UnsafeThawVArray a
 
 --------------------------------------------------------------------------------
 -- ** Looping.
@@ -310,18 +318,18 @@ instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
 data LoopCMD fs a
   where
     -- ^ Creates a new for loop.
-    For   :: (pred n, Integral n) => exp n -> (Val n -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
+    For   :: (pred n, Integral n) => exp n -> exp n -> (Val n -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
     -- ^ Creates a new while loop.
     While :: prog (exp Bool) -> prog () -> LoopCMD (Param3 prog exp pred) ()
 
 instance HFunctor LoopCMD
   where
-    hfmap f (For r step)      = For r (f . step)
+    hfmap f (For l u step)    = For l u (f . step)
     hfmap f (While cont step) = While (f cont) (f step)
 
 instance HBifunctor LoopCMD
   where
-    hbimap g f (For r step) = For (f r) (g . step)
+    hbimap g f (For l u step)    = For (f l) (f u) (g . step)
     hbimap g f (While cont step) = While (g $ fmap f cont) (g step)
 
 instance (LoopCMD :<: instr) => Reexpressible LoopCMD instr env

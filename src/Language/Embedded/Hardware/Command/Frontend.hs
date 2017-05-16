@@ -240,29 +240,46 @@ setVArray i a = singleInj . SetVArray i a
 
 -- | Copy a slice of one array to another.
 copyVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
-  => VArray i a -> VArray i a -> exp i -> ProgramT instr (Param2 exp pred) m ()
+  => (VArray i a, exp i) -- ^ destination and its offset.
+  -> (VArray i a, exp i) -- ^ source and its offset.
+  -> exp i               -- ^ number of elements to copy.
+  -> ProgramT instr (Param2 exp pred) m ()
 copyVArray dest src = singleInj . CopyVArray dest src
 
 -- | Freeze a mutable array into an immutable one by copying.
-freezeArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i, Monad m)
+freezeVArray :: (VArrayCMD :<: instr, pred a, pred i, Num (exp i), Integral i, Ix i, Monad m)
   => VArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (IArray i a)
-freezeArray array len =
+freezeVArray array len =
   do copy <- newVArray len
-     copyVArray copy array len
+     copyVArray (copy,0) (array,0) len
      unsafeFreezeVArray copy
 
--- | Unsafe version of fetching the contents of an array's index.
+-- | Thaw an immutable array into a mutable one by copying.
+thawVArray :: (VArrayCMD :<: instr, pred a, pred i, Num (exp i), Integral i, Ix i, Monad m)
+  => IArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (VArray i a)
+thawVArray iarray len =
+  do array <- unsafeThawVArray iarray
+     copy  <- newVArray len
+     copyVArray (copy,0) (array,0) len
+     return copy
+
+-- | Freeze a mutable array to an immuatable one without making a copy.
 unsafeFreezeVArray :: (pred a, pred i, Integral i, Ix i, VArrayCMD :<: instr)
   => VArray i a -> ProgramT instr (Param2 exp pred) m (IArray i a)
 unsafeFreezeVArray = singleInj . UnsafeFreezeVArray
+
+-- | Thaw an immutable array to a mutable one without making a copy.
+unsafeThawVArray :: (pred a, pred i, Integral i, Ix i, VArrayCMD :<: instr)
+  => IArray i a -> ProgramT instr (Param2 exp pred) m (VArray i a)
+unsafeThawVArray = singleInj . UnsafeThawVArray
 
 --------------------------------------------------------------------------------
 -- ** Looping.
 
 -- | For loop.
 for :: (LoopCMD :<: instr, pred n, Integral n, PredicateExp exp n, FreeExp exp, Monad m)
-  => exp n -> (exp n -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
-for range body = singleInj $ For range (body . valToExp)
+  => exp n -> exp n -> (exp n -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
+for lower upper body = singleInj $ For lower upper (body . valToExp)
 
 -- | While loop.
 while :: (LoopCMD :<: instr, pred Bool)
