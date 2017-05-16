@@ -35,8 +35,8 @@ library
     Language.Embedded.VHDL,
     Language.Embedded.VHDL.Monad,
     Language.Embedded.VHDL.Monad.Type,
-    Language.Embedded.VHDL.Monad.Expression,
-    Language.Embedded.Hardware.Common.AXI
+    Language.Embedded.VHDL.Monad.Expression
+--    Language.Embedded.Hardware.Common.AXI
 
   --other-modules:
     

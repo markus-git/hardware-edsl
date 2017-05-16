@@ -372,11 +372,12 @@ instance InterpBi LoopCMD IO (Param1 pred)
     interpBi = runLoop
 
 compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct) => LoopCMD (Param3 VHDL exp ct) a -> VHDL a
-compileLoop (For h step) =
+compileLoop (For l u step) =
   do --i    <- freshVar (Proxy::Proxy ct) (Base "l")
      i    <- newSym (Base "l")
-     h'   <- compE h
-     let r = V.range (V.point (0 :: Int)) V.to (lift h')
+     l'   <- compE l
+     u'   <- compE u
+     let r = V.range (lift l') V.to (lift u')
      loop <- V.inFor (ident i) r (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
@@ -389,10 +390,13 @@ compileLoop (While cont step) =
      V.addSequential $ V.SLoop $ loop
 
 runLoop :: LoopCMD (Param3 IO IO pred) a -> IO a
-runLoop (For r step) = r >>= loop
+runLoop (For l u step) =
+  do l' <- l
+     u' <- u
+     loop l' u'
   where
-    loop i | i > 0     = step (ValE i) >> loop (i - 1)
-           | otherwise = return ()
+    loop l u | l <= u    = step (ValE l) >> loop (l + 1) u
+             | otherwise = return ()
 runLoop (While b step) = loop
   where
     loop = do e <- join b

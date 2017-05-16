@@ -334,10 +334,11 @@ instance HBifunctor LoopCMD
 
 instance (LoopCMD :<: instr) => Reexpressible LoopCMD instr env
   where
-    reexpressInstrEnv reexp (For r step) = do
-      r' <- reexp r
+    reexpressInstrEnv reexp (For l u step) = do
+      l' <- reexp l
+      u' <- reexp u
       ReaderT $ \env -> singleInj $
-        For r' (flip runReaderT env . step)
+        For l' u' (flip runReaderT env . step)
     reexpressInstrEnv reexp (While cont step) = do
       ReaderT $ \env -> singleInj $
         While (runReaderT (cont >>= reexp) env)
