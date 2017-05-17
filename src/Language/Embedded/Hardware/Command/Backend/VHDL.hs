@@ -317,11 +317,11 @@ compileVArray (SetVArray i e (VArrayC arr)) =
      e' <- compE e
      V.assignArray (V.indexed (ident arr) (V.asDec i')) e'
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
-  do oa' <- compE oa
-     ob' <- compE ob
-     len <- compE l
-     let slice_a = (lift (V.asDec oa'), lift len)
-         slice_b = (lift (V.asDec ob'), lift len)
+  do oa' <- V.asDec <$> compE oa
+     ob' <- V.asDec <$> compE ob
+     len <- V.asDec <$> compE l
+     let slice_a = (lift oa', lift len)
+         slice_b = (lift ob', lift len)
          dest    = V.slice (ident a) slice_a
          src     = V.slice (ident b) slice_b
      V.assignArray src (lift $ V.PrimName dest)
