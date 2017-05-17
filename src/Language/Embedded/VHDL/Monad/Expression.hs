@@ -187,7 +187,8 @@ to     = To
 
 -- changes all literals in an expression to decimal form.
 asDec :: Expression -> Expression
-asDec = expDec
+asDec (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim (PrimExp e) Nothing) []) []) Nothing) Nothing) Nothing) = asDec e
+asDec e = expDec e
   where
     expDec :: Expression -> Expression
     expDec e = case e of
