@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds        #-}
 
-module Simple where
+module Bits where
 
 import Language.VHDL (Mode(..))
 import Language.Embedded.Hardware
@@ -17,10 +17,10 @@ import Text.PrettyPrint
 import Prelude hiding (and, or, not)
 
 --------------------------------------------------------------------------------
--- * ...
+-- * Example of a program that words with variable length bit arrarys.
 --------------------------------------------------------------------------------
 
--- | Command set used for our 'simple' programs.
+-- | Command set used for our programs.
 type CMD =
       SignalCMD
   :+: VariableCMD
@@ -36,10 +36,9 @@ type HProg = Program CMD (Param2 HExp HType)
 type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
--- ** ...
 
-simple :: HProg ()
-simple =
+bits :: HProg ()
+bits =
   do let zero = litE (bitFromInteger 0) :: HExp (Bits 2)
          one  = litE (bitFromInteger 1) :: HExp (Bits 2)
          two  = litE (bitFromInteger 2) :: HExp (Bits 4)
@@ -59,18 +58,8 @@ simple =
      setVariable a (u + v)
      setVariable b (u - v)
 
-     ----------------------------------------
-     -- ...
-     --
-     x <- initSignal two :: HProg (Signal (Bits 4))
-     y <- asSigned x
-     switch y
-       [ is 1 $ setVariable a u
-       , is 2 $ setVariable a v
-       ]
-     
-     return ()
+--------------------------------------------------------------------------------
 
-test = icompile simple
+test = icompile bits
 
 --------------------------------------------------------------------------------

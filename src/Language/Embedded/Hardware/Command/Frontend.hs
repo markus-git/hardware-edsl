@@ -188,23 +188,22 @@ setArray i e = singleInj . SetArray i e
 
 ----------------------------------------
 
--- | ...
 getSignalRange 
   :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
   => exp i -> (exp i, exp i) -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
 getSignalRange size range = fmap valToExp . singleInj . GetRangeS size range
 
--- | ...
 setSignalRange 
   :: (ArrayCMD :<: instr, pred i, Integral i, Ix i, FreeExp exp, Monad m)
   => (exp i, exp i) -> Signal (Bits x) -> (exp i, exp i) -> Signal (Bits y) -> ProgramT instr (Param2 exp pred) m ()
 setSignalRange from a to = singleInj . SetRangeS from a to
 
+{-
 asSigned
   :: (ArrayCMD :<: instr, KnownNat n, FreeExp exp, PredicateExp exp Integer, Monad m)
   => Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Integer)
 asSigned = fmap valToExp . singleInj . AsSigned
-
+-}
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
 
