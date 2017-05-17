@@ -19,6 +19,8 @@ import Language.Embedded.VHDL (VHDL)
 import qualified Language.VHDL          as VHDL
 import qualified Language.Embedded.VHDL as VHDL
 
+import Data.Proxy (Proxy(..))
+
 import Control.Applicative
 
 --------------------------------------------------------------------------------
@@ -50,19 +52,27 @@ instance CompileExp HExp
   where
     compE  = compHExp
 
-compHType :: forall a. HType a => HExp a -> VHDL VHDL.Type
+compHType :: forall a . HType a => HExp a -> VHDL VHDL.Type
 compHType _ = declare (undefined :: proxy a)
 
-compHExp  :: forall a. HExp a -> VHDL VHDL.Expression
-compHExp  e = Hoist.lift <$> compSimple e
+compHTypeFun :: forall a b . (HType a, HType b) => (a -> b) -> VHDL VHDL.Type
+compHTypeFun _ = declare (undefined :: proxy a)
+
+compHExp :: forall a . HExp a -> VHDL VHDL.Expression
+compHExp e = Hoist.lift <$> compSimple e
   where
     compSimple :: HExp b -> VHDL Kind
     compSimple = simpleMatch (\(T s) -> compDomain s) . unHExp
 
-    compLoop   :: ASTF T b -> VHDL Kind
-    compLoop   = compSimple . HExp
+    compLoop :: ASTF T b -> VHDL Kind
+    compLoop = compSimple . HExp
 
-    compDomain :: forall sig. HType (DenResult sig) => Dom sig -> Args (AST T) sig -> VHDL Kind
+    compDomain
+      :: forall sig
+       . HType (DenResult sig)
+      => Dom sig
+      -> Args (AST T) sig
+      -> VHDL Kind
     compDomain expr (x :* y :* _)
       | Just And  <- prj expr = go $ \a b -> VHDL.and  [a, b]
       | Just Or   <- prj expr = go $ \a b -> VHDL.or   [a, b]
@@ -76,6 +86,7 @@ compHExp  e = Hoist.lift <$> compSimple e
           x' <- Hoist.lift <$> compLoop x
           y' <- Hoist.lift <$> compLoop y
           return $ Hoist.E $ f x' y'
+
     compDomain relate (x :* y :* _)
       | Just Eq  <- prj relate = go VHDL.eq
       | Just Neq <- prj relate = go VHDL.neq
@@ -89,6 +100,7 @@ compHExp  e = Hoist.lift <$> compSimple e
           x' <- Hoist.lift <$> compLoop x
           y' <- Hoist.lift <$> compLoop y
           return $ Hoist.R $ f x' y'
+
     compDomain shift (x :* y :* _)
       | Just Sll <- prj shift = go $ VHDL.sll
       | Just Srl <- prj shift = go $ VHDL.srl
@@ -102,6 +114,7 @@ compHExp  e = Hoist.lift <$> compSimple e
           x' <- Hoist.lift <$> compLoop x
           y' <- Hoist.lift <$> compLoop y
           return $ Hoist.Sh $ f x' y'
+
     compDomain simple (x :* y :* _)
       | Just Add <- prj simple = go VHDL.add
       | Just Sub <- prj simple = go VHDL.sub
@@ -119,6 +132,7 @@ compHExp  e = Hoist.lift <$> compSimple e
       | Just Pos <- prj simple = do
           x' <- Hoist.lift <$> compLoop x
           return $ Hoist.Si x'
+
     compDomain term (x :* y :* _)
       | Just Mul <- prj term = go VHDL.mul
       | Just Div <- prj term = go VHDL.div
@@ -130,6 +144,7 @@ compHExp  e = Hoist.lift <$> compSimple e
           x' <- Hoist.lift <$> compLoop x
           y' <- Hoist.lift <$> compLoop y
           return $ Hoist.T $ f [x', y']
+
     compDomain factor (x :* y :* _)
       | Just Exp <- prj factor = do
           x' <- Hoist.lift <$> compLoop x
@@ -148,14 +163,44 @@ compHExp  e = Hoist.lift <$> compSimple e
           f  <- compHType (undefined :: HExp (DenResult sig))
           x' <- Hoist.lift <$> compLoop x
           return $ Hoist.P $ VHDL.qualified f x'
-      | Just (Conversion f) <- prj primary = do
-          t  <- compHType (undefined :: HExp (DenResult sig))
-          x' <- Hoist.lift <$> compLoop x
-          return $ x'
-          --return $ Hoist.P $ VHDL.cast t x' *** Apply cast ***
       | Just (Others) <- prj primary = do
           x' <- Hoist.lift <$> compLoop x
           return $ Hoist.P $ VHDL.aggregate $ VHDL.others x'
+      | Just (Conversion f) <- prj primary = do
+          tt <- compHType    (undefined :: HExp (DenResult sig))
+          tf <- compHTypeFun (f)
+          x' <- Hoist.lift <$> compLoop x
+          return $ Hoist.P $ cast x' tf tt
+      where
+        cast :: VHDL.Expression -> VHDL.Type -> VHDL.Type -> VHDL.Primary
+        cast exp from to = case (VHDL.isInteger from) of
+          Just True -> case (VHDL.isSigned to) of
+            Just True  -> VHDL.toSigned   exp $ size to
+            Just False -> VHDL.toUnsigned exp $ size to
+            Nothing    -> Hoist.lift exp -- what if different sizes?
+          Nothing   -> case (VHDL.isSigned from) of
+            -- I'm signed.
+            Just True  -> case (VHDL.isSigned to) of
+              Just True  -> resize exp from to -- same sign.
+              Just False -> resize (Hoist.lift $ VHDL.asUnsigned exp) from to
+              Nothing    -> VHDL.toInteger exp
+            -- I'm unsigned.
+            Just False -> case (VHDL.isSigned to) of
+              Just False -> resize exp from to  -- same sign.
+              Just True  -> resize (Hoist.lift $ VHDL.asSigned exp) from to
+              Nothing    -> VHDL.toInteger exp
+            -- I'm what now?
+            Nothing -> error "hardware-edsl: missing sym for type casting."
+        -- this is a bit verbose, I'll fix that later.
+        
+        resize :: VHDL.Expression -> VHDL.Type -> VHDL.Type -> VHDL.Primary
+        resize exp from to
+          | VHDL.width from == VHDL.width to = Hoist.lift exp
+          | otherwise = VHDL.resize exp $ size to
+
+        size :: VHDL.Type -> VHDL.Expression
+        size = Hoist.lift . VHDL.lit . show . VHDL.width
+
     compDomain primary args
       | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i

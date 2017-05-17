@@ -91,12 +91,18 @@ data Relational sig
 -- | Bit vector expressions.
 data ShiftExpression sig
   where
-    Sll :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
-    Srl :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
-    Sla :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
-    Sra :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
-    Rol :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
-    Ror :: (HType a, B.Bits a, HType b, Integral b) => ShiftExpression (a :-> b :-> Full a)
+    Sll :: (HType a, B.Bits a, HType b, Integral b)
+        => ShiftExpression (a :-> b :-> Full a)
+    Srl :: (HType a, B.Bits a, HType b, Integral b)
+        => ShiftExpression (a :-> b :-> Full a)
+    Sla :: (HType a, B.Bits a, HType b, Integral b)
+        => ShiftExpression (a :-> b :-> Full a)
+    Sra :: (HType a, B.Bits a, HType b, Integral b)
+        => ShiftExpression (a :-> b :-> Full a)
+    Rol :: (HType a, B.Bits a, HType b, Integral b)
+        => ShiftExpression (a :-> b :-> Full a)
+    Ror :: (HType a, B.Bits a, HType b, Integral b)
+        => ShiftExpression (a :-> b :-> Full a)
 
 -- | Numerical expressions.
 data SimpleExpression sig
@@ -105,7 +111,8 @@ data SimpleExpression sig
     Pos :: (HType a, Num a) => SimpleExpression (a :->       Full a)
     Add :: (HType a, Num a) => SimpleExpression (a :-> a :-> Full a)
     Sub :: (HType a, Num a) => SimpleExpression (a :-> a :-> Full a)
-    Cat :: (KnownNat n, KnownNat m) => SimpleExpression (Bits n :-> Bits m :-> Full (Bits (n + m)))
+    Cat :: (KnownNat n, KnownNat m)
+        => SimpleExpression (Bits n :-> Bits m :-> Full (Bits (n + m)))
 
 -- | Integral expressions.
 data Term sig
@@ -130,7 +137,7 @@ data Primary sig
     Aggregate  :: (HType a) => V.Aggregate -> Primary (Full a)
     -- expanded aggregate
     Others     :: Primary (Bit :-> Full (Bits n))
-    --
+    -- ...
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
     Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
     Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)

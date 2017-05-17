@@ -8,7 +8,7 @@ module Language.Embedded.VHDL.Monad.Type
   , float, double
   , integer
 
-  , width
+  , isSigned, isInteger, width
   , literal, point
   ) where
 
@@ -96,6 +96,17 @@ integer r = SubtypeIndication Nothing
 
 --------------------------------------------------------------------------------
 -- ** Helpers.
+
+isSigned :: Type -> Maybe Bool
+isSigned (SubtypeIndication _ (TMType (NSlice (SliceName (PName (NSimple (Ident typ))) _))) _) = case typ of
+  "signed"   -> Just True
+  "unsigned" -> Just False
+isSigned _ = Nothing
+
+isInteger :: Type -> Maybe Bool
+isInteger (SubtypeIndication _ (TMType (NSimple (Ident typ))) _) = case typ of
+  "integer" -> Just True
+isInteger _ = Nothing
 
 width :: Type -> Int
 width (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)

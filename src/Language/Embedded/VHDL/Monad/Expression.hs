@@ -11,8 +11,9 @@ module Language.Embedded.VHDL.Monad.Expression
   , function
   , qualified
   , cast
-  , resize
+  , resize, asSigned, asUnsigned, toSigned, toUnsigned, toInteger
   , range, downto, to
+  
   , asDec, litAsDec
   , maybeLit
 
@@ -25,7 +26,7 @@ import Data.List  (foldl')
 
 import Language.VHDL
 
-import Prelude hiding (and, or, div, mod, rem, exp, abs, not, null)
+import Prelude hiding (and, or, div, mod, rem, exp, abs, not, null, toInteger)
 
 --------------------------------------------------------------------------------
 -- * Expressions and their sub-layers.
@@ -172,10 +173,24 @@ cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion (unrange t)
 -- ** Utility
 
 resize :: Expression -> Expression -> Primary
-resize exp size = PrimFun $ FunctionCall name $ Just $ AssociationList [assoc exp, assoc size]
-  where
-    name  = NSimple $ Ident "resize"
-    assoc = AssociationElement Nothing . APDesignator . ADExpression
+resize exp size = function (Ident "resize") [exp, size]
+
+asSigned :: Expression -> Primary
+asSigned exp = function (Ident "signed") [exp]
+
+asUnsigned :: Expression -> Primary
+asUnsigned exp = function (Ident "unsigned") [exp]
+
+toSigned :: Expression -> Expression -> Primary
+toSigned exp size = function (Ident "to_signed") [exp, size]
+
+toUnsigned :: Expression -> Expression -> Primary
+toUnsigned exp size = function (Ident "to_unsigned") [exp, size]
+
+toInteger :: Expression -> Primary
+toInteger exp = function (Ident "to_integer") [exp]
+
+--------------------------------------------------------------------------------
 
 range :: SimpleExpression -> Direction -> SimpleExpression -> Range
 range  = RSimple
@@ -186,11 +201,13 @@ to     = To
 
 --------------------------------------------------------------------------------
 
+-- hmm...
 maybeLit :: Expression -> Maybe Primary
 maybeLit (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p@(PrimLit i) Nothing) []) []) Nothing) Nothing) Nothing) = Just p
 maybeLit _ = Nothing
 
--- changes all literals in an expression to decimal form.
+-- *** todo: this is a more general kind of traversal,
+--     I could expose that later on.
 asDec :: Expression -> Expression
 asDec (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim (PrimExp e) Nothing) []) []) Nothing) Nothing) Nothing) = asDec e
 asDec e = expDec e

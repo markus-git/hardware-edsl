@@ -309,13 +309,13 @@ compileVArray (InitVArray base is) =
      return (VArrayC i)
 compileVArray (GetVArray ix (VArrayC arr)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
-     e <- compE ix
+     e <- V.asDec <$> compE ix
      V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident arr) e)
      return i
 compileVArray (SetVArray i e (VArrayC arr)) =
   do i' <- compE i
      e' <- compE e
-     V.assignArray (V.indexed (ident arr) (V.asDec i')) e'
+     V.assignVariable (V.indexed (ident arr) (V.asDec i')) e'
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
   do oa' <- V.asDec <$> compE oa
      ob' <- V.asDec <$> compE ob
@@ -324,7 +324,8 @@ compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
          slice_b = (lift ob', lift len)
          dest    = V.slice (ident a) slice_a
          src     = V.slice (ident b) slice_b
-     V.assignArray src (lift $ V.PrimName dest)
+     V.assignVariable src (lift $ V.PrimName dest)
+--   V.assignArray src (lift $ V.PrimName dest)
 compileVArray (UnsafeFreezeVArray (VArrayC arr)) = return $ IArrayC arr
 compileVArray (UnsafeThawVArray (IArrayC arr)) = return $ VArrayC arr
 
@@ -382,14 +383,20 @@ instance InterpBi LoopCMD IO (Param1 pred)
 
 compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct) => LoopCMD (Param3 VHDL exp ct) a -> VHDL a
 compileLoop (For l u step) =
-  do --i    <- freshVar (Proxy::Proxy ct) (Base "l")
+  do -- *** todo: temp solution, should check if signed and size.
      i    <- newSym (Base "l")
+     j    <- newSym (Base "li")
      l'   <- compE l
      u'   <- compE u
-     let rl = V.asDec l'
-         ru = V.asDec u'
-         r = V.range (lift rl) V.to (lift ru)
-     loop <- V.inFor (ident i) r (step (ValC i))
+     V.variable (ident j) (V.usigned8) (Nothing)
+     let r = V.range (lift $ V.asDec l') V.to (lift $ V.asDec u')
+     loop <- V.inFor (ident i) r $
+       do V.assignVariable
+            (V.NSimple (ident j))
+            (lift $ V.toUnsigned
+              (lift $ V.name $ V.NSimple (ident i))
+              (lift $ V.point (8 :: Int)))
+          step (ValC j)
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel

@@ -14,7 +14,7 @@ import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit
 import qualified Language.Embedded.VHDL.Monad.Expression as V
 
-import Data.Typeable
+import Data.Typeable (Typeable)
 import qualified Data.Bits as B (Bits)
 
 import Prelude hiding (not, and, or, abs, rem, div, mod, exp)
@@ -26,33 +26,8 @@ import GHC.TypeLits
 -- * ...
 --------------------------------------------------------------------------------
 
-class Value exp where
-  value :: HType a => a -> exp a
-
-instance Value HExp where
-  value = sugarT . Literal
-
--- | ...
-name :: HType a => V.Name -> HExp a
-name n = sugarT (Name n)
-
--- | Creates a variable from a string.
-var :: HType a => String -> HExp a
-var = name . V.NSimple . V.Ident
-{-
--- | Lifts a typed value to an expression.
-value :: HType a => a -> HExp a
-value i = sugarT (Literal i)
--}
--- | Casts an expression using supplied conversion function.
-cast  :: (HType a, HType b) => (a -> b) -> HExp a -> HExp b
-cast f = sugarT (Conversion f)
-
---------------------------------------------------------------------------------
-
 type Hardware exp =
-  ( Value   exp
-  , Expr    exp
+  ( Expr    exp
   , Rel     exp
   , Shift   exp
   , Simple  exp
@@ -60,6 +35,7 @@ type Hardware exp =
   , Factor  exp
   , Primary exp)
 
+--------------------------------------------------------------------------------
 -- | Logical operators.
 class Expr exp where
   true  :: exp Bool
@@ -81,6 +57,7 @@ instance Expr HExp where
   nand  = sugarT Nand
   nor   = sugarT Nor
 
+--------------------------------------------------------------------------------
 -- | Relational operators.
 class Rel exp where
   eq  :: (HType a, Eq a) => exp a -> exp a -> exp Bool
@@ -98,6 +75,7 @@ instance Rel HExp where
   gt  = sugarT Gt
   gte = sugarT Gte
 
+--------------------------------------------------------------------------------
 -- | Shift operators.
 class Shift exp where
   sll :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
@@ -115,6 +93,7 @@ instance Shift HExp where
   rol = sugarT Rol
   ror = sugarT Ror
 
+--------------------------------------------------------------------------------
 -- | Adding operators.
 class Simple exp where
   neg :: (HType a, Num a) => exp a -> exp a
@@ -129,6 +108,7 @@ instance Simple HExp where
   sub = sugarT Sub
   cat = sugarT Cat
 
+--------------------------------------------------------------------------------
 -- | Multiplying operators.
 class Term exp where
   mul :: (HType a, Num a)      => exp a -> exp a -> exp a
@@ -142,6 +122,7 @@ instance Term HExp where
   mod = sugarT Mod
   rem = sugarT Rem
 
+--------------------------------------------------------------------------------
 -- | Miscellaneous operators.
 class Factor exp where
   exp :: (HType a, Num a, HType b, Integral b) => exp a -> exp b -> exp a
@@ -153,13 +134,33 @@ instance Factor HExp where
   abs = sugarT Abs
   not = sugarT Not
 
+--------------------------------------------------------------------------------
 -- | ...
 class Primary exp where
-  -- *** Should probably not be here. Replace when adding function calls.
-  risingEdge :: exp a -> exp Bool
-
+  value :: HType a => a -> exp a
+  name  :: HType a => V.Name -> exp a
+  cast  :: (HType a, HType b) => (a -> b) -> exp a -> exp b
+  
 instance Primary HExp where
-  risingEdge = sugarT (Function "rising_edge" $ \_ -> error "vhdl-todo: cannot evaluate 'risingEdge'")
+  value  = sugarT . Literal
+  name n = sugarT (Name n)
+  cast f = sugarT (Conversion f)
+
+-- | Creates a variable from a string.
+var :: HType a => String -> HExp a
+var = name . V.NSimple . V.Ident
+
+-- | Converts an integral (signed/unsigned/integer) to an integer.
+toInteger :: (HType a, Integral a) => HExp a -> HExp Integer
+toInteger = cast (fromIntegral)
+
+-- | Converts an integral to a signed value.
+toSigned :: (HType a, HType b, Integral a, Num b) => HExp a -> HExp b
+toSigned = cast (fromIntegral)
+
+-- | Converts an integral to a unsigned value.
+toUnsigned :: (HType a, HType b, Integral a, Num b) => HExp a -> HExp b
+toUnsigned = cast (fromIntegral)
 
 --------------------------------------------------------------------------------
 -- These are a bit strange. Wonder when they'll add Typeable for type literals.
@@ -167,10 +168,10 @@ instance Primary HExp where
 others :: (KnownNat n, Typeable n) => HExp Bit -> HExp (Bits n)
 others = sugarT Others
 
-slice :: (KnownNat n, Typeable n) => HExp (Bits n) -> (Integer, Integer) -> HExp (Bits m)
-slice = error "slice"
-
 --------------------------------------------------------------------------------
+-- I should probably not support most of these, as they can't implement the
+-- interfaces fully. Would perhaps be better to implement my own versions
+-- of the type classes.
 
 instance (HType a, Eq a) => Eq (HExp a)
   where
