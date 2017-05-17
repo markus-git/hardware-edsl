@@ -67,7 +67,7 @@ compTM _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 compTF :: forall proxy ct exp a b. (CompileType ct, ct a) => proxy ct -> (exp a -> b) -> VHDL V.Type
 compTF _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 
-compTA :: forall proxy ct array i a. (CompileType ct, ct a) => proxy ct -> V.Range -> array i a -> VHDL V.Type
+compTA :: forall proxy ct array i a. (CompileType ct, ct a) => proxy ct -> V.Range -> array a -> VHDL V.Type
 compTA _ range _ =
   do i <- newSym (Base "type")
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
@@ -238,6 +238,7 @@ compileArray (SetArray ix e (SignalC v)) =
   do ix' <- compE ix
      e'  <- compE e
      V.assignSignal (V.indexed (ident v) ix') e'
+{-
 compileArray (GetRangeS to (l, u) s) =
   do i   <- newSym (Base "v")
      to' <- compE to
@@ -275,7 +276,7 @@ compileArray (AsSigned sig@(SignalC s)) =
   where
     bound :: forall n. KnownNat n => Signal (Bits n) -> Integer
     bound _ = 2 ^ (ni (Proxy::Proxy n) - 1)
-
+-}
 runArray :: ArrayCMD (Param3 IO IO pred) a -> IO a
 runArray = error "vhdl-todo: evaluate Array"
 
@@ -293,14 +294,13 @@ instance InterpBi VArrayCMD IO (Param1 pred)
 compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct) => VArrayCMD (Param3 VHDL exp ct) a -> VHDL a
 compileVArray (NewVArray base len) =
   do l <- compE len
-     let u = V.asDec l
-         r = V.range (lift u) V.downto (V.point (0 :: Int))
+     let r = V.range (lift l) V.downto (V.point (0 :: Int))
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
      V.variable (ident i) t Nothing
      return (VArrayC i)
 compileVArray (InitVArray base is) =
-  do let r = V.range (V.point (length is)) V.downto (V.point (0 :: Int))
+  do let r = V.range (V.point (length is - 1)) V.downto (V.point (0 :: Int))
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
      x <- mapM (compileLit (Proxy::Proxy ct)) is
@@ -309,23 +309,22 @@ compileVArray (InitVArray base is) =
      return (VArrayC i)
 compileVArray (GetVArray ix (VArrayC arr)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
-     e <- V.asDec <$> compE ix
+     e <- compE ix
      V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident arr) e)
      return i
 compileVArray (SetVArray i e (VArrayC arr)) =
   do i' <- compE i
      e' <- compE e
-     V.assignVariable (V.indexed (ident arr) (V.asDec i')) e'
+     V.assignVariable (V.indexed (ident arr) i') e'
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
-  do oa' <- V.asDec <$> compE oa
-     ob' <- V.asDec <$> compE ob
-     len <- V.asDec <$> compE l
+  do oa' <- compE oa
+     ob' <- compE ob
+     len <- compE l
      let slice_a = (lift oa', lift len)
          slice_b = (lift ob', lift len)
          dest    = V.slice (ident a) slice_a
          src     = V.slice (ident b) slice_b
      V.assignVariable src (lift $ V.PrimName dest)
---   V.assignArray src (lift $ V.PrimName dest)
 compileVArray (UnsafeFreezeVArray (VArrayC arr)) = return $ IArrayC arr
 compileVArray (UnsafeThawVArray (IArrayC arr)) = return $ VArrayC arr
 
@@ -385,18 +384,10 @@ compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct) => LoopCMD (Par
 compileLoop (For l u step) =
   do -- *** todo: temp solution, should check if signed and size.
      i    <- newSym (Base "l")
-     j    <- newSym (Base "li")
      l'   <- compE l
      u'   <- compE u
-     V.variable (ident j) (V.usigned8) (Nothing)
-     let r = V.range (lift $ V.asDec l') V.to (lift $ V.asDec u')
-     loop <- V.inFor (ident i) r $
-       do V.assignVariable
-            (V.NSimple (ident j))
-            (lift $ V.toUnsigned
-              (lift $ V.name $ V.NSimple (ident i))
-              (lift $ V.point (8 :: Int)))
-          step (ValC j)
+     let r = V.range (lift l') V.to (lift u')
+     loop <- V.inFor (ident i) r (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel
@@ -437,10 +428,7 @@ compileConditional (If (a, b) cs em) =
          el       = maybe (return ()) id em
      ae  <- compE a
      ese <- mapM compE es
-     -- *** test! original was simply ae
-     let ae' = V.asDec ae
-     s   <- V.inConditional (ae', b) (zip ese ds) el
-     -- *** end.
+     s   <- V.inConditional (ae, b) (zip ese ds) el
      V.addSequential $ V.SIf s
 compileConditional (Case e cs d) =
   do let el = maybe (return ()) id d

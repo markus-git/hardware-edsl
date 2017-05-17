@@ -177,21 +177,19 @@ instance (ConstantCMD :<: instr) => Reexpressible ConstantCMD instr env
 class CompArrayIx exp
   where
     -- | Generate code for an array indexing operation
-    compArrayIx :: PredicateExp exp a => exp i -> Array i a -> Maybe (exp a)
+    compArrayIx :: PredicateExp exp a => exp Integer -> Array a -> Maybe (exp a)
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array i a = ArrayC VarId | ArrayE (IOArray i a)
+data Array a = ArrayC VarId | ArrayE (IOArray Integer a)
 
 -- | Commands for signal arrays.
 data ArrayCMD fs a
   where
     -- *** For signals.
-    GetArray :: (pred Bit, Integral i, Ix i)
-      => exp i -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) (Val Bit)
-    SetArray :: (pred Bit, Integral i, Ix i)
-      => exp i -> exp Bit -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) ()
-    -- *** I'm not sure about these + no type safety. But deadlines.
+    GetArray :: pred Bit => exp Integer -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) (Val Bit)
+    SetArray :: pred Bit => exp Integer -> exp Bit -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) ()
+{-
     GetRangeS :: (pred i, Integral i, Ix i, pred UBits)
       => exp i          -- size
       -> (exp i, exp i) -- range
@@ -203,34 +201,33 @@ data ArrayCMD fs a
       -> (exp i, exp i) -- other
       -> Signal (Bits m)
       -> ArrayCMD (Param3 prog exp pred) ()
-    -- *** Same.
     AsSigned :: (KnownNat n)
       => Signal (Bits n)
       -> ArrayCMD (Param3 prog exp pred) (Val Integer)
-
+-}
 instance HFunctor ArrayCMD 
   where
     hfmap _ (GetArray i s)   = GetArray i s
     hfmap _ (SetArray i e s) = SetArray i e s
-    -- 
+{-
     hfmap _ (GetRangeS to   fr s) = GetRangeS to   fr s
     hfmap _ (SetRangeS to a fr b) = SetRangeS to a fr b
     hfmap _ (AsSigned s) = AsSigned s
-
+-}
 instance HBifunctor ArrayCMD
   where
     hbimap _ f (GetArray i s)   = GetArray (f i) s
     hbimap _ f (SetArray i e s) = SetArray (f i) (f e) s
-    --
+{-
     hbimap _ f (GetRangeS to         (f1, f2) s) = GetRangeS (f to)         (f f1, f f2) s
     hbimap _ f (SetRangeS (t1, t2) a (f1, f2) b) = SetRangeS (f t1, f t2) a (f f1, f f2) b
     hbimap _ f (AsSigned s) = AsSigned s
-
+-}
 instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
   where
     reexpressInstrEnv reexp (GetArray i s)   = do i' <- reexp i; lift $ singleInj $ GetArray i' s
     reexpressInstrEnv reexp (SetArray i e s) = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetArray i' e' s
-    --
+{-
     reexpressInstrEnv reexp (GetRangeS to (f1, f2) s) =
       do to' <- reexp to
          f1' <- reexp f1
@@ -243,35 +240,35 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
          f2' <- reexp f2
          lift $ singleInj $ SetRangeS (t1', t2') a (f1', f2') b
     reexpressInstrEnv reexp (AsSigned s) = lift $ singleInj $ AsSigned s
-
+-}
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
 
 -- | Virtual array reprensentation.
-data VArray i a = VArrayC VarId | VArrayE (IORef (IOArray i a))
+data VArray a = VArrayC VarId | VArrayE (IORef (IOArray Integer a))
   deriving (Eq, Typeable)
 
 -- | Immutable arrays.
-data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
+data IArray a = IArrayC VarId | IArrayE (Arr.Array Integer a)
   deriving (Show, Typeable)
 
 -- | Commands for variable arrays.
 data VArrayCMD fs a
   where
     -- ^ Creates an array of given length.
-    NewVArray :: (pred a, Integral i, Ix i) => Name -> exp i -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    NewVArray :: pred a => Name -> exp Integer -> VArrayCMD (Param3 prog exp pred) (VArray a)
     -- ^ Creates an array from the given list of elements.
-    InitVArray :: (pred a, Integral i, Ix i) => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    InitVArray :: pred a => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray a)
     -- ^ Fetches the array's value at a specified index.
-    GetVArray :: (pred a, Integral i, Ix i) => exp i -> VArray i a -> VArrayCMD (Param3 prog exp pred) (Val a)
+    GetVArray :: pred a => exp Integer -> VArray a -> VArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetVArray :: (pred a, Integral i, Ix i) => exp i -> exp a -> VArray i a -> VArrayCMD (Param3 prog exp pred) ()
+    SetVArray :: pred a => exp Integer -> exp a -> VArray a -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
-    CopyVArray:: (pred a, Integral i, Ix i) => (VArray i a, exp i) -> (VArray i a, exp i) -> exp i -> VArrayCMD (Param3 prog exp pred) ()
+    CopyVArray:: pred a => (VArray a, exp Integer) -> (VArray a, exp Integer) -> exp Integer -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching an array's value.
-    UnsafeFreezeVArray :: (pred a, Integral i, Ix i) => VArray i a -> VArrayCMD (Param3 prog exp pred) (IArray i a)
+    UnsafeFreezeVArray :: pred a => VArray a -> VArrayCMD (Param3 prog exp pred) (IArray a)
     -- ^ ...
-    UnsafeThawVArray :: (pred a, Integral i, Ix i) => IArray i a -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    UnsafeThawVArray :: pred a => IArray a -> VArrayCMD (Param3 prog exp pred) (VArray a)
 
 instance HFunctor VArrayCMD
   where
@@ -318,7 +315,7 @@ instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
 data LoopCMD fs a
   where
     -- ^ Creates a new for loop.
-    For   :: (pred n, Integral n) => exp n -> exp n -> (Val n -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
+    For   :: pred Integer => exp Integer -> exp Integer -> (Val Integer -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
     -- ^ Creates a new while loop.
     While :: prog (exp Bool) -> prog () -> LoopCMD (Param3 prog exp pred) ()
 
@@ -506,8 +503,8 @@ instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
 instance ToIdent (Signal   a) where toIdent (SignalC   i) = Ident i
 instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
 instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
-instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
-instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
+instance ToIdent (Array    a) where toIdent (ArrayC    i) = Ident i
+instance ToIdent (VArray   a) where toIdent (VArrayC   i) = Ident i
 
 -- | Construct the untyped signal list for processes.
 (.:) :: ToIdent a => a -> [Ident] -> [Ident]

@@ -178,16 +178,15 @@ constant = initNamedConstant
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
-getArray :: (ArrayCMD :<: instr, pred Bit, pred i, Integral i, Ix i, PredicateExp exp Bit, FreeExp exp, Monad m)
-  => exp i -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Bit)
+getArray :: (ArrayCMD :<: instr, pred Bit, pred Integer, PredicateExp exp Bit, FreeExp exp, Monad m)
+  => exp Integer -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Bit)
 getArray i = fmap valToExp . singleInj . GetArray i
 
-setArray :: (ArrayCMD :<: instr, pred Bit, pred i, Integral i, Ix i, PredicateExp exp Bit, FreeExp exp, Monad m)
-  => exp i -> exp Bit -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m ()
+setArray :: (ArrayCMD :<: instr, pred Bit, pred Integer, PredicateExp exp Bit, FreeExp exp, Monad m)
+  => exp Integer -> exp Bit -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m ()
 setArray i e = singleInj . SetArray i e
 
-----------------------------------------
-
+{-
 getSignalRange 
   :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
   => exp i -> (exp i, exp i) -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
@@ -198,7 +197,6 @@ setSignalRange
   => (exp i, exp i) -> Signal (Bits x) -> (exp i, exp i) -> Signal (Bits y) -> ProgramT instr (Param2 exp pred) m ()
 setSignalRange from a to = singleInj . SetRangeS from a to
 
-{-
 asSigned
   :: (ArrayCMD :<: instr, KnownNat n, FreeExp exp, PredicateExp exp Integer, Monad m)
   => Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Integer)
@@ -208,54 +206,54 @@ asSigned = fmap valToExp . singleInj . AsSigned
 -- ** Virtual arrays.
 
 -- | Create an initialized named virtual array.
-initNamedVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
-  => String -> [a] -> ProgramT instr (Param2 exp pred) m (VArray i a)  
+initNamedVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => String -> [a] -> ProgramT instr (Param2 exp pred) m (VArray a)  
 initNamedVArray name = singleInj . InitVArray (Base name)
 
 -- | Create an initialized virtual array.
-initVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
-  => [a] -> ProgramT instr (Param2 exp pred) m (VArray i a)
+initVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => [a] -> ProgramT instr (Param2 exp pred) m (VArray a)
 initVArray = initNamedVArray "a"
 
 -- | Create an uninitialized named virtual array.
-newNamedVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
-  => String -> exp i -> ProgramT instr (Param2 exp pred) m (VArray i a)
+newNamedVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => String -> exp Integer -> ProgramT instr (Param2 exp pred) m (VArray a)
 newNamedVArray name = singleInj . NewVArray (Base name)
 
 -- | Create an uninitialized virtual array.
-newVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
-  => exp i -> ProgramT instr (Param2 exp pred) m (VArray i a) 
+newVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => exp Integer -> ProgramT instr (Param2 exp pred) m (VArray a) 
 newVArray = newNamedVArray "a"
 
 -- | Get an element of an array.
-getVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i, PredicateExp exp a, FreeExp exp, Monad m)
-  => exp i -> VArray i a -> ProgramT instr (Param2 exp pred) m (exp a)
+getVArray :: (VArrayCMD :<: instr, pred a, pred Integer, PredicateExp exp a, FreeExp exp, Monad m)
+  => exp Integer -> VArray a -> ProgramT instr (Param2 exp pred) m (exp a)
 getVArray i = fmap valToExp . singleInj . GetVArray i
 
 -- | Set an element of an array.
-setVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
-  => exp i -> exp a -> VArray i a -> ProgramT instr (Param2 exp pred) m ()
+setVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => exp Integer -> exp a -> VArray a -> ProgramT instr (Param2 exp pred) m ()
 setVArray i a = singleInj . SetVArray i a
 
 -- | Copy a slice of one array to another.
-copyVArray :: (VArrayCMD :<: instr, pred a, pred i, Integral i, Ix i)
-  => (VArray i a, exp i) -- ^ destination and its offset.
-  -> (VArray i a, exp i) -- ^ source and its offset.
-  -> exp i               -- ^ number of elements to copy.
+copyVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => (VArray a, exp Integer) -- ^ destination and its offset.
+  -> (VArray a, exp Integer) -- ^ source and its offset.
+  -> exp Integer             -- ^ number of elements to copy.
   -> ProgramT instr (Param2 exp pred) m ()
 copyVArray dest src = singleInj . CopyVArray dest src
 
 -- | Freeze a mutable array into an immutable one by copying.
-freezeVArray :: (VArrayCMD :<: instr, pred a, pred i, Num (exp i), Integral i, Ix i, Monad m)
-  => VArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (IArray i a)
+freezeVArray :: (VArrayCMD :<: instr, pred a, pred Integer, Num (exp Integer), Monad m)
+  => VArray a -> exp Integer -> ProgramT instr (Param2 exp pred) m (IArray a)
 freezeVArray array len =
   do copy <- newVArray len
      copyVArray (copy,0) (array,0) len
      unsafeFreezeVArray copy
 
 -- | Thaw an immutable array into a mutable one by copying.
-thawVArray :: (VArrayCMD :<: instr, pred a, pred i, Num (exp i), Integral i, Ix i, Monad m)
-  => IArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (VArray i a)
+thawVArray :: (VArrayCMD :<: instr, pred a, pred Integer, Num (exp Integer), Monad m)
+  => IArray a -> exp Integer -> ProgramT instr (Param2 exp pred) m (VArray a)
 thawVArray iarray len =
   do array <- unsafeThawVArray iarray
      copy  <- newVArray len
@@ -263,21 +261,21 @@ thawVArray iarray len =
      return copy
 
 -- | Freeze a mutable array to an immuatable one without making a copy.
-unsafeFreezeVArray :: (pred a, pred i, Integral i, Ix i, VArrayCMD :<: instr)
-  => VArray i a -> ProgramT instr (Param2 exp pred) m (IArray i a)
+unsafeFreezeVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => VArray a -> ProgramT instr (Param2 exp pred) m (IArray a)
 unsafeFreezeVArray = singleInj . UnsafeFreezeVArray
 
 -- | Thaw an immutable array to a mutable one without making a copy.
-unsafeThawVArray :: (pred a, pred i, Integral i, Ix i, VArrayCMD :<: instr)
-  => IArray i a -> ProgramT instr (Param2 exp pred) m (VArray i a)
+unsafeThawVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
+  => IArray a -> ProgramT instr (Param2 exp pred) m (VArray a)
 unsafeThawVArray = singleInj . UnsafeThawVArray
 
 --------------------------------------------------------------------------------
 -- ** Looping.
 
 -- | For loop.
-for :: (LoopCMD :<: instr, pred n, Integral n, PredicateExp exp n, FreeExp exp, Monad m)
-  => exp n -> exp n -> (exp n -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
+for :: (LoopCMD :<: instr, pred Integer, PredicateExp exp Integer, FreeExp exp, Monad m)
+  => exp Integer -> exp Integer -> (exp Integer -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
 for lower upper body = singleInj $ For lower upper (body . valToExp)
 
 -- | While loop.
