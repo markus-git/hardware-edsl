@@ -120,9 +120,13 @@ instance Rep Double where
 --------------------------------------------------------------------------------
 -- ** ...
 
+instance Rep Int where
+  declare _ = return (integer Nothing)
+  format  i = show i --"10#" ++ show i ++ "#"
+
 instance Rep Integer where
   declare _ = return (integer Nothing)
-  format    = show
+  format  i = show i --"10#" ++ show i ++ "#"
 
 --------------------------------------------------------------------------------
 

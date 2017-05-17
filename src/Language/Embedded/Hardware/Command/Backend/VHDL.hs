@@ -285,7 +285,8 @@ instance InterpBi VArrayCMD IO (Param1 pred)
 compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct) => VArrayCMD (Param3 VHDL exp ct) a -> VHDL a
 compileVArray (NewVArray base len) =
   do l <- compE len
-     let r = V.range (lift l) V.downto (V.point (0 :: Int))
+     let u = V.asDec l
+         r = V.range (lift l) V.downto (V.point (0 :: Int))
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
      V.variable (ident i) t Nothing
@@ -377,7 +378,9 @@ compileLoop (For l u step) =
      i    <- newSym (Base "l")
      l'   <- compE l
      u'   <- compE u
-     let r = V.range (lift l') V.to (lift u')
+     let rl = V.asDec l'
+         ru = V.asDec u'
+         r = V.range (lift rl) V.to (lift ru)
      loop <- V.inFor (ident i) r (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
