@@ -13,7 +13,8 @@ module Language.Embedded.VHDL.Monad.Expression
   , cast
   , resize
   , range, downto, to
-  , asDec
+  , asDec, litAsDec
+  , maybeLit
 
   -- *** temp
   , attribute
@@ -185,6 +186,10 @@ to     = To
 
 --------------------------------------------------------------------------------
 
+maybeLit :: Expression -> Maybe Primary
+maybeLit (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p@(PrimLit i) Nothing) []) []) Nothing) Nothing) Nothing) = Just p
+maybeLit _ = Nothing
+
 -- changes all literals in an expression to decimal form.
 asDec :: Expression -> Expression
 asDec (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim (PrimExp e) Nothing) []) []) Nothing) Nothing) Nothing) = asDec e
@@ -192,10 +197,10 @@ asDec e = expDec e
   where
     expDec :: Expression -> Expression
     expDec e = case e of
-      (EAnd  rs) -> EAnd  (map relDec rs)
-      (EOr   rs) -> EOr   (map relDec rs)
-      (EXor  rs) -> EXor  (map relDec rs)
-      (EXnor rs) -> EXnor (map relDec rs)
+      (EAnd  rs)   -> EAnd  (map relDec rs)
+      (EOr   rs)   -> EOr   (map relDec rs)
+      (EXor  rs)   -> EXor  (map relDec rs)
+      (EXnor rs)   -> EXnor (map relDec rs)
       (ENand r mr) -> ENand (relDec r) (fmap relDec mr)
       (ENor  r mr) -> ENor  (relDec r) (fmap relDec mr)
     

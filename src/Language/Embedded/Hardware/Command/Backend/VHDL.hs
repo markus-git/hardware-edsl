@@ -166,7 +166,15 @@ compileVariable (NewVariable base exp) =
   do v <- compEM exp
      t <- compTM (Proxy::Proxy ct) exp
      i <- newSym base
-     V.variable (ident i) t v
+     case v of
+       Just val -> case V.maybeLit val of
+         Just p  ->
+           do V.variable (ident i) t (Just $ lift p)
+         Nothing ->
+           do V.variable (ident i) t (Nothing)
+              V.assignVariable (V.NSimple $ ident i) val
+       Nothing ->
+         do V.variable (ident i) t (Nothing)
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "v")
@@ -307,13 +315,13 @@ compileVArray (GetVArray ix (VArrayC arr)) =
 compileVArray (SetVArray i e (VArrayC arr)) =
   do i' <- compE i
      e' <- compE e
-     V.assignArray (V.indexed (ident arr) i') e'
+     V.assignArray (V.indexed (ident arr) (V.asDec i')) e'
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
   do oa' <- compE oa
      ob' <- compE ob
      len <- compE l
-     let slice_a = (lift oa', lift len)
-         slice_b = (lift ob', lift len)
+     let slice_a = (lift (V.asDec oa'), lift len)
+         slice_b = (lift (V.asDec ob'), lift len)
          dest    = V.slice (ident a) slice_a
          src     = V.slice (ident b) slice_b
      V.assignArray src (lift $ V.PrimName dest)
@@ -422,7 +430,10 @@ compileConditional (If (a, b) cs em) =
          el       = maybe (return ()) id em
      ae  <- compE a
      ese <- mapM compE es
-     s   <- V.inConditional (ae, b) (zip ese ds) el
+     -- *** test! original was simply ae
+     let ae' = V.asDec ae
+     s   <- V.inConditional (ae', b) (zip ese ds) el
+     -- *** end.
      V.addSequential $ V.SIf s
 compileConditional (Case e cs d) =
   do let el = maybe (return ()) id d
