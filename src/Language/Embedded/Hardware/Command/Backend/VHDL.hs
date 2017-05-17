@@ -286,7 +286,7 @@ compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct) => VArrayCMD 
 compileVArray (NewVArray base len) =
   do l <- compE len
      let u = V.asDec l
-         r = V.range (lift l) V.downto (V.point (0 :: Int))
+         r = V.range (lift u) V.downto (V.point (0 :: Int))
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
      V.variable (ident i) t Nothing
