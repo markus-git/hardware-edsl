@@ -174,6 +174,7 @@ compHExp e = Hoist.lift <$> compSimple e
       where
         cast :: VHDL.Expression -> VHDL.Type -> VHDL.Type -> VHDL.Primary
         cast exp from to = case (VHDL.isInteger from) of
+          -- I'm an integer.
           Just True -> case (VHDL.isSigned to) of
             Just True  -> VHDL.toSigned   exp $ size to
             Just False -> VHDL.toUnsigned exp $ size to

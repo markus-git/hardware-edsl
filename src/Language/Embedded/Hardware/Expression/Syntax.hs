@@ -135,13 +135,12 @@ data Primary sig
     Name       :: (HType a) => V.Name      -> Primary (Full a)
     Literal    :: (HType a) => a           -> Primary (Full a)
     Aggregate  :: (HType a) => V.Aggregate -> Primary (Full a)
-    -- expanded aggregate
-    Others     :: Primary (Bit :-> Full (Bits n))
-    -- ...
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
     Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
     Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)
     Allocator  :: (HType a) => Primary (Full a)
+    -- *** todo: expanded aggregate
+    Others     :: Primary (Bit :-> Full (Bits n))
     
 --------------------------------------------------------------------------------
 -- ** Syntactic instances.
