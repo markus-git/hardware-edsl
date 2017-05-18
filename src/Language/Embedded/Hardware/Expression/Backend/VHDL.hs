@@ -170,38 +170,7 @@ compHExp e = Hoist.lift <$> compSimple e
           tt <- compHType    (undefined :: HExp (DenResult sig))
           tf <- compHTypeFun (f)
           x' <- Hoist.lift <$> compLoop x
-          return $ Hoist.P $ cast x' tf tt
-      where
-        cast :: VHDL.Expression -> VHDL.Type -> VHDL.Type -> VHDL.Primary
-        cast exp from to = case (VHDL.isInteger from) of
-          -- I'm an integer.
-          Just True -> case (VHDL.isSigned to) of
-            Just True  -> VHDL.toSigned   exp $ size to
-            Just False -> VHDL.toUnsigned exp $ size to
-            Nothing    -> Hoist.lift exp -- what if different sizes?
-          Nothing   -> case (VHDL.isSigned from) of
-            -- I'm signed.
-            Just True  -> case (VHDL.isSigned to) of
-              Just True  -> resize exp from to -- same sign.
-              Just False -> resize (Hoist.lift $ VHDL.asUnsigned exp) from to
-              Nothing    -> VHDL.toInteger exp
-            -- I'm unsigned.
-            Just False -> case (VHDL.isSigned to) of
-              Just False -> resize exp from to  -- same sign.
-              Just True  -> resize (Hoist.lift $ VHDL.asSigned exp) from to
-              Nothing    -> VHDL.toInteger exp
-            -- I'm what now?
-            Nothing -> error "hardware-edsl: missing sym for type casting."
-        -- this is a bit verbose, I'll fix that later.
-        
-        resize :: VHDL.Expression -> VHDL.Type -> VHDL.Type -> VHDL.Primary
-        resize exp from to
-          | VHDL.width from == VHDL.width to = Hoist.lift exp
-          | otherwise = VHDL.resize exp $ size to
-
-        size :: VHDL.Type -> VHDL.Expression
-        size = Hoist.lift . VHDL.lit . show . VHDL.width
-
+          return $ Hoist.E $ VHDL.uCast x' tf tt
     compDomain primary args
       | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
       | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i

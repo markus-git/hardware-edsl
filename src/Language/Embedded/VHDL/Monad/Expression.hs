@@ -14,15 +14,9 @@ module Language.Embedded.VHDL.Monad.Expression
   , resize, asSigned, asUnsigned, toSigned, toUnsigned, toInteger
   , range, downto, to
   
-  , asDec, litAsDec
-  , maybeLit
-
   -- *** temp
   , attribute
   ) where
-
-import Data.Char  (digitToInt)
-import Data.List  (foldl')
 
 import Language.VHDL
 
@@ -198,65 +192,5 @@ range  = RSimple
 downto, to :: Direction
 downto = DownTo
 to     = To
-
---------------------------------------------------------------------------------
-
--- hmm...
-maybeLit :: Expression -> Maybe Primary
-maybeLit (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p@(PrimLit i) Nothing) []) []) Nothing) Nothing) Nothing) = Just p
-maybeLit _ = Nothing
-
--- *** todo: this is a more general kind of traversal,
---     I could expose that later on.
-asDec :: Expression -> Expression
-asDec (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim (PrimExp e) Nothing) []) []) Nothing) Nothing) Nothing) = asDec e
-asDec e = expDec e
-  where
-    expDec :: Expression -> Expression
-    expDec e = case e of
-      (EAnd  rs)   -> EAnd  (map relDec rs)
-      (EOr   rs)   -> EOr   (map relDec rs)
-      (EXor  rs)   -> EXor  (map relDec rs)
-      (EXnor rs)   -> EXnor (map relDec rs)
-      (ENand r mr) -> ENand (relDec r) (fmap relDec mr)
-      (ENor  r mr) -> ENor  (relDec r) (fmap relDec mr)
-    
-    relDec :: Relation -> Relation
-    relDec (Relation sh m) = Relation (shiftDec sh) (fmap (fmap shiftDec) m)
-
-    shiftDec :: ShiftExpression -> ShiftExpression
-    shiftDec (ShiftExpression si m) = ShiftExpression (simpleDec si) (fmap (fmap simpleDec) m)
-
-    simpleDec :: SimpleExpression -> SimpleExpression
-    simpleDec (SimpleExpression m t ts) = SimpleExpression m (termDec t) (fmap (fmap termDec) ts)
-
-    termDec :: Term -> Term
-    termDec (Term f fs) = Term (facDec f) (fmap (fmap facDec) fs)
-
-    facDec :: Factor -> Factor
-    facDec f = case f of
-      (FacPrim p mp) -> FacPrim (primDec p) (fmap primDec mp)
-      (FacAbs  p)    -> FacAbs p
-      (FacNot  p)    -> FacNot p
-    
-    primDec :: Primary -> Primary
-    primDec p = case p of
-      (PrimExp e) -> PrimExp (expDec e)
-      (PrimLit l) -> litAsDec (PrimLit l)
-      (other)     -> other
-
-
-litAsDec :: Primary -> Primary
-litAsDec (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident j))))))
-  where
-    j :: String
-    j = show $ showDec (trim i)
-    
-    trim :: String -> String
-    trim ('\"':xs) = init xs
-    trim xs = xs
-
-    showDec :: String -> Int
-    showDec = foldl' (\acc x -> acc * 2 + digitToInt x) 0
 
 --------------------------------------------------------------------------------

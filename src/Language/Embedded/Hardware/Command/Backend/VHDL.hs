@@ -49,11 +49,16 @@ class CompileType ct
   where
     compileType :: ct a => proxy1 ct -> proxy2 a -> VHDL V.Type
     compileLit  :: ct a => proxy1 ct ->        a -> VHDL V.Expression
+    compileBits :: ct a => proxy1 ct ->        a -> VHDL V.Expression
 
 instance CompileType HType
   where
     compileType _ = compT
     compileLit  _ = literal
+    compileBits _ = literalBits
+
+proxyE :: exp a -> Proxy a
+proxyE _ = Proxy
 
 proxyM :: Maybe (exp a) -> Proxy a
 proxyM _ = Proxy
@@ -166,22 +171,19 @@ compileVariable (NewVariable base exp) =
   do v <- compEM exp
      t <- compTM (Proxy::Proxy ct) exp
      i <- newSym base
+     V.variable (ident i) t (Nothing)
      case v of
-       Just val -> case V.maybeLit val of
-         Just p  ->
-           do V.variable (ident i) t (Just $ lift p)
-         Nothing ->
-           do V.variable (ident i) t (Nothing)
-              V.assignVariable (V.NSimple $ ident i) val
-       Nothing ->
-         do V.variable (ident i) t (Nothing)
+       Nothing -> return ()
+       Just v' -> V.assignVariable (V.NSimple $ ident i) (V.uType v' t)
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "v")
      V.assignVariable (simpleName i) (lift $ V.PrimName $ V.NSimple $ ident var)
      return i
 compileVariable (SetVariable (VariableC var) exp) =
-  do V.assignVariable (V.NSimple $ ident var) =<< compE exp
+  do e' <- compE exp
+     t  <- compileType (Proxy::Proxy ct) (proxyE exp)
+     V.assignVariable (V.NSimple $ ident var) e'
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ ValC v
 
@@ -303,7 +305,7 @@ compileVArray (InitVArray base is) =
   do let r = V.range (V.point (length is - 1)) V.downto (V.point (0 :: Int))
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
-     x <- mapM (compileLit (Proxy::Proxy ct)) is
+     x <- mapM (compileBits (Proxy::Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
      V.variable (ident i) t (Just $ lift v)
      return (VArrayC i)
@@ -312,10 +314,11 @@ compileVArray (GetVArray ix (VArrayC arr)) =
      e <- compE ix
      V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident arr) e)
      return i
-compileVArray (SetVArray i e (VArrayC arr)) =
+compileVArray (SetVArray i e a@(VArrayC arr)) =
   do i' <- compE i
      e' <- compE e
-     V.assignVariable (V.indexed (ident arr) i') e'
+     t  <- compileType (Proxy::Proxy ct) (proxyE e)
+     V.assignVariable (V.indexed (ident arr) i') (V.uType e' t)
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
   do oa' <- compE oa
      ob' <- compE ob

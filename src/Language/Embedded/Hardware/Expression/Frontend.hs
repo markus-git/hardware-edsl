@@ -78,12 +78,12 @@ instance Rel HExp where
 --------------------------------------------------------------------------------
 -- | Shift operators.
 class Shift exp where
-  sll :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
-  srl :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
-  sla :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
-  sra :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
-  rol :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
-  ror :: (HType a, B.Bits a, HType b, Integral b) => exp a -> exp b -> exp a
+  sll :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
+  srl :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
+  sla :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
+  sra :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
+  rol :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
+  ror :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
 
 instance Shift HExp where
   sll = sugarT Sll

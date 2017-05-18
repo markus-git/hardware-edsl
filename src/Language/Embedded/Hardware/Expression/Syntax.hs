@@ -91,18 +91,12 @@ data Relational sig
 -- | Bit vector expressions.
 data ShiftExpression sig
   where
-    Sll :: (HType a, B.Bits a, HType b, Integral b)
-        => ShiftExpression (a :-> b :-> Full a)
-    Srl :: (HType a, B.Bits a, HType b, Integral b)
-        => ShiftExpression (a :-> b :-> Full a)
-    Sla :: (HType a, B.Bits a, HType b, Integral b)
-        => ShiftExpression (a :-> b :-> Full a)
-    Sra :: (HType a, B.Bits a, HType b, Integral b)
-        => ShiftExpression (a :-> b :-> Full a)
-    Rol :: (HType a, B.Bits a, HType b, Integral b)
-        => ShiftExpression (a :-> b :-> Full a)
-    Ror :: (HType a, B.Bits a, HType b, Integral b)
-        => ShiftExpression (a :-> b :-> Full a)
+    Sll :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Srl :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Sla :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Sra :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Rol :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Ror :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
 
 -- | Numerical expressions.
 data SimpleExpression sig
