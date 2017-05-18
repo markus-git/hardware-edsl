@@ -3,7 +3,7 @@
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Bits where
+module Types where
 
 import Language.VHDL (Mode(..))
 import Language.Embedded.Hardware
@@ -15,7 +15,7 @@ import Data.Int
 import Data.Word
 import Text.PrettyPrint
 
-import Prelude hiding (and, or, not)
+import Prelude hiding (and, or, not, toInteger)
 
 --------------------------------------------------------------------------------
 -- * Example of a program that performs type casting.
@@ -51,6 +51,9 @@ casting =
      setVariable b (toSigned av)
      setVariable c (toSigned av)
      setVariable a (toUnsigned cv)
+
+     let x = 2 :: HExp Word8
+     setVariable a (av `sll` (toInteger x))
 
 --------------------------------------------------------------------------------
 

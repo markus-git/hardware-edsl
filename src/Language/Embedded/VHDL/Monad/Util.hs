@@ -47,7 +47,7 @@ uCast exp from to = case (isInteger from) of
       -- IntX -> WordX
       Just False -> primary $ asUnsigned $ uResize exp from to
       -- IntX -> Integer
-      Nothing    -> primary $ toInteger exp
+      Nothing    -> primary $ uInteger exp
     -- I'm unsigned.
     Just False -> case (isSigned to) of
       -- WordX -> WordX
@@ -55,7 +55,7 @@ uCast exp from to = case (isInteger from) of
       -- WordX -> IntX
       Just True  -> primary $ asSigned $ uResize exp from to
       -- WordX -> Integer
-      Nothing    -> primary $ toInteger exp
+      Nothing    -> primary $ uInteger exp
     -- I'm what now?
     Nothing -> error "hardware-edsl: missing sym for type casting."
 
@@ -68,6 +68,11 @@ uResize exp from to
   | Just v <- maybeVar exp
   , width from == width to = exp
   | otherwise = primary $ resize exp $ primary $ uWidth to
+
+uInteger :: Expression -> Primary
+uInteger exp
+  | Just p <- maybeLit exp = p
+  | otherwise = toInteger exp
 
 --------------------------------------------------------------------------------
 

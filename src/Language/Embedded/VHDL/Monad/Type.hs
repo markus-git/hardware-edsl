@@ -106,6 +106,7 @@ isSigned _ = Nothing
 isInteger :: Type -> Maybe Bool
 isInteger (SubtypeIndication _ (TMType (NSimple (Ident typ))) _) = case typ of
   "integer" -> Just True
+  _         -> Nothing
 isInteger _ = Nothing
 
 width :: Type -> Int
