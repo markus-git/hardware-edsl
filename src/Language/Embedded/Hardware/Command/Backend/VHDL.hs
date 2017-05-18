@@ -183,7 +183,7 @@ compileVariable (GetVariable (VariableC var)) =
 compileVariable (SetVariable (VariableC var) exp) =
   do e' <- compE exp
      t  <- compileType (Proxy::Proxy ct) (proxyE exp)
-     V.assignVariable (V.NSimple $ ident var) e'
+     V.assignVariable (V.NSimple $ ident var) (V.uType e' t)
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ ValC v
 
