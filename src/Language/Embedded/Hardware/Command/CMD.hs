@@ -186,61 +186,47 @@ data Array a = ArrayC VarId | ArrayE (IOArray Integer a)
 -- | Commands for signal arrays.
 data ArrayCMD fs a
   where
-    -- *** For signals.
-    GetArray :: pred Bit => exp Integer -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) (Val Bit)
-    SetArray :: pred Bit => exp Integer -> exp Bit -> Signal (Bits n) -> ArrayCMD (Param3 prog exp pred) ()
-{-
-    GetRangeS :: (pred i, Integral i, Ix i, pred UBits)
-      => exp i          -- size
-      -> (exp i, exp i) -- range
-      -> Signal (Bits n)
-      -> ArrayCMD (Param3 prog exp pred) (Val UBits)
-    SetRangeS :: (pred i, Integral i, Ix i)
-      => (exp i, exp i) -- our
-      -> Signal (Bits n)
-      -> (exp i, exp i) -- other
-      -> Signal (Bits m)
-      -> ArrayCMD (Param3 prog exp pred) ()
-    AsSigned :: (KnownNat n)
-      => Signal (Bits n)
-      -> ArrayCMD (Param3 prog exp pred) (Val Integer)
--}
+    -- ^ Creates an array of given length.
+    NewArray :: pred a => Name -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Array a)
+    -- ^ Creates an array from the given list of elements.
+    InitArray :: pred a => Name -> [a] -> ArrayCMD (Param3 prog exp pred) (Array a)
+    -- ^ Fetches the array's value at the specified index.
+    GetArray :: pred a => Array a -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Val a)
+    -- ^ Writes a value to an array at some specified index.
+    SetArray :: pred a => Array a -> exp Integer -> exp a -> ArrayCMD (Param3 prog exp pred) ()
+    -- ^ ...
+    CopyArray :: pred a => (Array a, exp Integer) -> (Array a, exp Integer) -> exp Integer -> ArrayCMD (Param3 prog exp pred) ()
+
 instance HFunctor ArrayCMD 
   where
-    hfmap _ (GetArray i s)   = GetArray i s
-    hfmap _ (SetArray i e s) = SetArray i e s
-{-
-    hfmap _ (GetRangeS to   fr s) = GetRangeS to   fr s
-    hfmap _ (SetRangeS to a fr b) = SetRangeS to a fr b
-    hfmap _ (AsSigned s) = AsSigned s
--}
+    hfmap _ (NewArray n i) = NewArray n i
+    hfmap _ (InitArray n is) = InitArray n is
+    hfmap _ (GetArray a i) = GetArray a i
+    hfmap _ (SetArray a i e) = SetArray a i e
+    hfmap _ (CopyArray a b l) = CopyArray a b l
+
 instance HBifunctor ArrayCMD
   where
-    hbimap _ f (GetArray i s)   = GetArray (f i) s
-    hbimap _ f (SetArray i e s) = SetArray (f i) (f e) s
-{-
-    hbimap _ f (GetRangeS to         (f1, f2) s) = GetRangeS (f to)         (f f1, f f2) s
-    hbimap _ f (SetRangeS (t1, t2) a (f1, f2) b) = SetRangeS (f t1, f t2) a (f f1, f f2) b
-    hbimap _ f (AsSigned s) = AsSigned s
--}
+    hbimap _ f (NewArray n i) = NewArray n (f i)
+    hbimap _ _ (InitArray n is) = InitArray n is
+    hbimap _ f (GetArray a i) = GetArray a (f i)
+    hbimap _ f (SetArray a i e) = SetArray a (f i) (f e)
+    hbimap _ f (CopyArray (a, oa) (b, ob) l) = CopyArray (a, f oa) (b, f ob) (f l)
+
 instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
   where
-    reexpressInstrEnv reexp (GetArray i s)   = do i' <- reexp i; lift $ singleInj $ GetArray i' s
-    reexpressInstrEnv reexp (SetArray i e s) = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetArray i' e' s
-{-
-    reexpressInstrEnv reexp (GetRangeS to (f1, f2) s) =
-      do to' <- reexp to
-         f1' <- reexp f1
-         f2' <- reexp f2
-         lift $ singleInj $ GetRangeS to' (f1', f2') s
-    reexpressInstrEnv reexp (SetRangeS (t1, t2) a (f1, f2) b) =
-      do t1' <- reexp t1
-         t2' <- reexp t2
-         f1' <- reexp f1
-         f2' <- reexp f2
-         lift $ singleInj $ SetRangeS (t1', t2') a (f1', f2') b
-    reexpressInstrEnv reexp (AsSigned s) = lift $ singleInj $ AsSigned s
--}
+    reexpressInstrEnv reexp (NewArray n i)
+      = lift . singleInj . NewArray n =<< reexp i
+    reexpressInstrEnv reexp (InitArray n is)
+      = lift $ singleInj $ InitArray n is
+    reexpressInstrEnv reexp (GetArray a i)
+      = do i' <- reexp i; lift $ singleInj $ GetArray a i'
+    reexpressInstrEnv reexp (SetArray a i e)
+      = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetArray a i' e'
+    reexpressInstrEnv reexp (CopyArray (a, oa) (b, ob) l)
+      = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
+           lift $ singleInj $ CopyArray (a, oa') (b, ob') l'
+
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
 
@@ -260,9 +246,9 @@ data VArrayCMD fs a
     -- ^ Creates an array from the given list of elements.
     InitVArray :: pred a => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray a)
     -- ^ Fetches the array's value at a specified index.
-    GetVArray :: pred a => exp Integer -> VArray a -> VArrayCMD (Param3 prog exp pred) (Val a)
+    GetVArray :: pred a => VArray a -> exp Integer -> VArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetVArray :: pred a => exp Integer -> exp a -> VArray a -> VArrayCMD (Param3 prog exp pred) ()
+    SetVArray :: pred a => VArray a -> exp Integer -> exp a -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
     CopyVArray:: pred a => (VArray a, exp Integer) -> (VArray a, exp Integer) -> exp Integer -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
@@ -274,8 +260,8 @@ instance HFunctor VArrayCMD
   where
     hfmap _ (NewVArray n i) = NewVArray n i
     hfmap _ (InitVArray n is) = InitVArray n is
-    hfmap _ (GetVArray i a) = GetVArray i a
-    hfmap _ (SetVArray i e a) = SetVArray i e a
+    hfmap _ (GetVArray a i) = GetVArray a i
+    hfmap _ (SetVArray a i e) = SetVArray a i e
     hfmap _ (CopyVArray a b l) = CopyVArray a b l
     hfmap _ (UnsafeFreezeVArray a) = UnsafeFreezeVArray a
     hfmap _ (UnsafeThawVArray a) = UnsafeThawVArray a
@@ -284,8 +270,8 @@ instance HBifunctor VArrayCMD
   where
     hbimap _ f (NewVArray n i) = NewVArray n (f i)
     hbimap _ _ (InitVArray n is) = InitVArray n is
-    hbimap _ f (GetVArray i a) = GetVArray (f i) a
-    hbimap _ f (SetVArray i e a) = SetVArray (f i) (f e) a
+    hbimap _ f (GetVArray a i) = GetVArray a (f i)
+    hbimap _ f (SetVArray a i e) = SetVArray a (f i) (f e)
     hbimap _ f (CopyVArray (a, oa) (b, ob) l) = CopyVArray (a, f oa) (b, f ob) (f l)
     hbimap _ _ (UnsafeFreezeVArray a) = UnsafeFreezeVArray a
     hbimap _ _ (UnsafeThawVArray a) = UnsafeThawVArray a
@@ -296,10 +282,10 @@ instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
       = lift . singleInj . NewVArray n =<< reexp i
     reexpressInstrEnv reexp (InitVArray n is)
       = lift $ singleInj $ InitVArray n is
-    reexpressInstrEnv reexp (GetVArray i a)
-      = do i' <- reexp i; lift $ singleInj $ GetVArray i' a
-    reexpressInstrEnv reexp (SetVArray i e a)
-      = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetVArray i' e' a
+    reexpressInstrEnv reexp (GetVArray a i)
+      = do i' <- reexp i; lift $ singleInj $ GetVArray a i'
+    reexpressInstrEnv reexp (SetVArray a i e)
+      = do i' <- reexp i; e' <- reexp e; lift $ singleInj $ SetVArray a i' e'
     reexpressInstrEnv reexp (CopyVArray (a, oa) (b, ob) l)
       = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
            lift $ singleInj $ CopyVArray (a, oa') (b, ob') l'

@@ -178,30 +178,43 @@ constant = initNamedConstant
 --------------------------------------------------------------------------------
 -- ** Arrays.
 
-getArray :: (ArrayCMD :<: instr, pred Bit, pred Integer, PredicateExp exp Bit, FreeExp exp, Monad m)
-  => exp Integer -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Bit)
-getArray i = fmap valToExp . singleInj . GetArray i
+-- | Create an initialized named virtual array.
+initNamedArray :: (ArrayCMD :<: instr, pred a, pred Integer)
+  => String -> [a] -> ProgramT instr (Param2 exp pred) m (Array a)  
+initNamedArray name = singleInj . InitArray (Base name)
 
-setArray :: (ArrayCMD :<: instr, pred Bit, pred Integer, PredicateExp exp Bit, FreeExp exp, Monad m)
-  => exp Integer -> exp Bit -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m ()
-setArray i e = singleInj . SetArray i e
+-- | Create an initialized virtual array.
+initArray :: (ArrayCMD :<: instr, pred a, pred Integer)
+  => [a] -> ProgramT instr (Param2 exp pred) m (Array a)
+initArray = initNamedArray "a"
 
-{-
-getSignalRange 
-  :: (ArrayCMD :<: instr, pred i, pred UBits, Integral i, Ix i, FreeExp exp, PredicateExp exp UBits, Monad m)
-  => exp i -> (exp i, exp i) -> Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp UBits)
-getSignalRange size range = fmap valToExp . singleInj . GetRangeS size range
+-- | Create an uninitialized named virtual array.
+newNamedArray :: (ArrayCMD :<: instr, pred a, pred Integer)
+  => String -> exp Integer -> ProgramT instr (Param2 exp pred) m (Array a)
+newNamedArray name = singleInj . NewArray (Base name)
 
-setSignalRange 
-  :: (ArrayCMD :<: instr, pred i, Integral i, Ix i, FreeExp exp, Monad m)
-  => (exp i, exp i) -> Signal (Bits x) -> (exp i, exp i) -> Signal (Bits y) -> ProgramT instr (Param2 exp pred) m ()
-setSignalRange from a to = singleInj . SetRangeS from a to
+-- | Create an uninitialized virtual array.
+newArray :: (ArrayCMD :<: instr, pred a, pred Integer)
+  => exp Integer -> ProgramT instr (Param2 exp pred) m (Array a) 
+newArray = newNamedArray "a"
 
-asSigned
-  :: (ArrayCMD :<: instr, KnownNat n, FreeExp exp, PredicateExp exp Integer, Monad m)
-  => Signal (Bits n) -> ProgramT instr (Param2 exp pred) m (exp Integer)
-asSigned = fmap valToExp . singleInj . AsSigned
--}
+getArray :: (ArrayCMD :<: instr, pred a, pred Integer, PredicateExp exp a, FreeExp exp, Monad m)
+  => Array a -> exp Integer -> ProgramT instr (Param2 exp pred) m (exp a)
+getArray a = fmap valToExp . singleInj . GetArray a
+
+-- | Set an element of an array.
+setArray :: (ArrayCMD :<: instr, pred a, pred Integer, PredicateExp exp a, FreeExp exp, Monad m)
+  => Array a -> exp Integer -> exp a -> ProgramT instr (Param2 exp pred) m ()
+setArray a i = singleInj . SetArray a i
+
+-- | Copy a slice of one array to another.
+copyArray :: (ArrayCMD :<: instr, pred a, pred Integer)
+  => (Array a, exp Integer) -- ^ destination and its offset.
+  -> (Array a, exp Integer) -- ^ source and its offset.
+  -> exp Integer            -- ^ number of elements to copy.
+  -> ProgramT instr (Param2 exp pred) m ()
+copyArray dest src = singleInj . CopyArray dest src
+
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
 
@@ -227,13 +240,13 @@ newVArray = newNamedVArray "a"
 
 -- | Get an element of an array.
 getVArray :: (VArrayCMD :<: instr, pred a, pred Integer, PredicateExp exp a, FreeExp exp, Monad m)
-  => exp Integer -> VArray a -> ProgramT instr (Param2 exp pred) m (exp a)
-getVArray i = fmap valToExp . singleInj . GetVArray i
+  => VArray a -> exp Integer -> ProgramT instr (Param2 exp pred) m (exp a)
+getVArray a = fmap valToExp . singleInj . GetVArray a
 
 -- | Set an element of an array.
 setVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => exp Integer -> exp a -> VArray a -> ProgramT instr (Param2 exp pred) m ()
-setVArray i a = singleInj . SetVArray i a
+  => VArray a -> exp Integer -> exp a -> ProgramT instr (Param2 exp pred) m ()
+setVArray a i = singleInj . SetVArray a i
 
 -- | Copy a slice of one array to another.
 copyVArray :: (VArrayCMD :<: instr, pred a, pred Integer)

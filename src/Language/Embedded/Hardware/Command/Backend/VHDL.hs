@@ -231,54 +231,41 @@ instance InterpBi ArrayCMD IO (Param1 pred)
     interpBi = runArray
 
 compileArray :: forall ct exp a. (CompileExp exp, CompileType ct) => ArrayCMD (Param3 VHDL exp ct) a -> VHDL a
-compileArray (GetArray ix (SignalC s)) =
+compileVArray (NewVArray base len) =
+  do l <- compE len
+     let r = V.range (lift l) V.downto (V.point (0 :: Int))
+     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
+     i <- newSym base
+     V.variable (ident i) t Nothing
+     return (VArrayC i)
+compileVArray (InitVArray base is) =
+  do let r = V.range (V.point (length is - 1)) V.downto (V.point (0 :: Int))
+     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
+     i <- newSym base
+     x <- mapM (compileBits (Proxy::Proxy ct)) is
+     let v = V.aggregate $ V.aggregated x
+     V.variable (ident i) t (Just $ lift v)
+     return (VArrayC i)
+compileArray (GetArray (ArrayC s) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
-     V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident s) e)
+     V.assignSignal (simpleName i) (lift $ V.PrimName $ V.indexed (ident s) e)
      return i
-compileArray (SetArray ix e (SignalC v)) =
+compileArray (SetArray (ArrayC s) ix e) =
   do ix' <- compE ix
      e'  <- compE e
-     V.assignSignal (V.indexed (ident v) ix') e'
-{-
-compileArray (GetRangeS to (l, u) s) =
-  do i   <- newSym (Base "v")
-     to' <- compE to
-     l'  <- compE l
-     u'  <- compE u
-     V.variable (ident i) (vector $ lift to') Nothing
-     V.assignVariable (V.NSimple $ ident i) (lift $ V.name $ V.slice (fromIdent s) (lift l', lift u'))
-     return (ValC i)
-   where
-     vector exp = V.SubtypeIndication Nothing
-       (V.TMType (V.NSlice (V.SliceName
-         (V.PName (V.NSimple (V.Ident "std_logic_vector")))
-           (V.DRRange (V.RSimple (exp) (V.DownTo)
-             (V.SimpleExpression Nothing
-               (V.Term (V.FacPrim (V.lit "0") (Nothing)) []) []))))))
-       (Nothing)
-compileArray (SetRangeS (t1, t2) a (f1, f2) b) =
-  do t1' <- compE t1
-     t2' <- compE t2
-     f1' <- compE f1
-     f2' <- compE f2
-     let v1 = V.slice (fromIdent a) (lift t1', lift t2')
-         v2 = V.name $ V.slice (fromIdent b) (lift f1', lift f2')
-     V.assignSignal v1 (lift v2)
-compileArray (AsSigned sig@(SignalC s)) =
-  do i <- newSym (Base "v")
-     let x = bound sig
-         r = V.range (lift $ V.lit $ show $ negate x) V.to
-                     (lift $ V.lit $ show $ x - 1)
-     V.variable (ident i) (V.integer $ Just r) Nothing
-     V.assignVariable (V.NSimple $ ident i) $
-       lift $ V.function (ident "TO_INTEGER") [
-         lift $ V.cast V.signed2 $ lift $ V.name $ V.NSimple $ ident s]
-     return (ValC i)
-  where
-    bound :: forall n. KnownNat n => Signal (Bits n) -> Integer
-    bound _ = 2 ^ (ni (Proxy::Proxy n) - 1)
--}
+     t   <- compileType (Proxy::Proxy ct) (proxyE e)
+     V.assignSignal (V.indexed (ident s) ix') (V.uType e' t)
+compileArray (CopyArray (ArrayC a, oa) (ArrayC b, ob) l) =
+  do oa' <- compE oa
+     ob' <- compE ob
+     len <- compE l
+     let slice_a = (lift oa', lift len)
+         slice_b = (lift ob', lift len)
+         dest    = V.slice (ident a) slice_a
+         src     = V.slice (ident b) slice_b
+     V.assignSignal src (lift $ V.PrimName dest)
+
 runArray :: ArrayCMD (Param3 IO IO pred) a -> IO a
 runArray = error "vhdl-todo: evaluate Array"
 
@@ -309,12 +296,12 @@ compileVArray (InitVArray base is) =
      let v = V.aggregate $ V.aggregated x
      V.variable (ident i) t (Just $ lift v)
      return (VArrayC i)
-compileVArray (GetVArray ix (VArrayC arr)) =
+compileVArray (GetVArray (VArrayC arr) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
      V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident arr) e)
      return i
-compileVArray (SetVArray i e a@(VArrayC arr)) =
+compileVArray (SetVArray a@(VArrayC arr) i e) =
   do i' <- compE i
      e' <- compE e
      t  <- compileType (Proxy::Proxy ct) (proxyE e)
@@ -341,7 +328,7 @@ runVArray (InitVArray _ is) =
   do arr  <- IA.newListArray (0, fromIntegral $ length is - 1) is
      ref  <- IR.newIORef arr
      return (VArrayE ref)
-runVArray (GetVArray i (VArrayE ref)) =
+runVArray (GetVArray (VArrayE ref) i) =
   do arr    <- IR.readIORef ref
      (l, h) <- IA.getBounds arr
      ix  <- i
@@ -349,7 +336,7 @@ runVArray (GetVArray i (VArrayE ref)) =
         then error "getArr out of bounds"
         else do v <- IA.readArray arr ix
                 return (ValE v)
-runVArray (SetVArray i e (VArrayE ref)) =
+runVArray (SetVArray (VArrayE ref) i e) =
   do arr    <- IR.readIORef ref
      (l, h) <- IA.getBounds arr
      ix <- i

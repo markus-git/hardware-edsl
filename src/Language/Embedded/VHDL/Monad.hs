@@ -552,13 +552,15 @@ assignVariable n e = addSequential $ SVarAss $
     (e)
 
 assignArray :: MonadV m => Name -> Expression -> m ()
+assignArray = assignSignal
+{-
 assignArray i e = addSequential $ SSignalAss $
   SignalAssignmentStatement
     (Nothing)
     (TargetName i)
     (Nothing)
     (WaveElem [WaveEExp e Nothing])
-
+-}
 --------------------------------------------------------------------------------
 -- Portmap.
 
