@@ -231,21 +231,21 @@ instance InterpBi ArrayCMD IO (Param1 pred)
     interpBi = runArray
 
 compileArray :: forall ct exp a. (CompileExp exp, CompileType ct) => ArrayCMD (Param3 VHDL exp ct) a -> VHDL a
-compileVArray (NewVArray base len) =
+compileArray (NewArray base len) =
   do l <- compE len
      let r = V.range (lift l) V.downto (V.point (0 :: Int))
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
-     V.variable (ident i) t Nothing
-     return (VArrayC i)
-compileVArray (InitVArray base is) =
+     V.signal (ident i) V.InOut t Nothing
+     return (ArrayC i)
+compileArray (InitArray base is) =
   do let r = V.range (V.point (length is - 1)) V.downto (V.point (0 :: Int))
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
      x <- mapM (compileBits (Proxy::Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
-     V.variable (ident i) t (Just $ lift v)
-     return (VArrayC i)
+     V.signal (ident i) V.InOut t (Just $ lift v)
+     return (ArrayC i)
 compileArray (GetArray (ArrayC s) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
