@@ -404,37 +404,35 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 --------------------------------------------------------------------------------
 -- ** Components.
 
--- | Signature description.
-data Signature fs a
-  where
-    Ret :: prog () -> Signature (Param3 prog exp pred) ()
-    Lam :: pred a
-      => Name
-      -> Mode
-      -> (Signal a -> Signature (Param3 prog exp pred) b)
-      -> Signature (Param3 prog exp pred) (Signal a -> b)
-
 -- | Signature arguments.
 data Arg a
   where
-    Nill      :: Arg ()
-    ArgSignal :: Signal a -> Arg b -> Arg (Signal a -> b)
+    Nil  :: Arg ()
+    ASig :: Signal a -> Arg b -> Arg (Signal a -> b)
+    AArr :: Array a -> Arg b -> Arg (Array a -> b)
 
--- | ...
-(.>) :: Signal a -> Arg b -> Arg (Signal a -> b)
-(.>) = ArgSignal
-
-infixr .>
+-- | Signature description.
+data Signature fs a
+  where
+    Ret  :: prog () -> Signature (Param3 prog exp pred) ()
+    SSig :: pred a => Name -> Mode
+      -> (Signal a -> Signature (Param3 prog exp pred) b)
+      -> Signature (Param3 prog exp pred) (Signal a -> b)
+    SArr :: pred a => Name -> Mode
+      -> (Array a -> Signature (Param3 prog exp pred) b)
+      -> Signature (Param3 prog exp pred) (Array a -> b)
 
 instance HFunctor Signature
   where
-    hfmap f (Ret m)       = Ret (f m)
-    hfmap f (Lam n m sig) = Lam n m (hfmap f . sig)
+    hfmap f (Ret m)        = Ret (f m)
+    hfmap f (SSig n m sig) = SSig n m (hfmap f . sig)
+    hfmap f (SArr n m arr) = SArr n m (hfmap f . arr)
 
 instance HBifunctor Signature
   where
-    hbimap g f (Ret m)       = Ret (g m)
-    hbimap g f (Lam n m sig) = Lam n m (hbimap g f . sig)
+    hbimap g f (Ret m)        = Ret (g m)
+    hbimap g f (SSig n m sig) = SSig n m (hbimap g f . sig)
+    hbimap g f (SArr n m sig) = SArr n m (hbimap g f . sig)
 
 --------------------------------------------------------------------------------
 
@@ -444,11 +442,11 @@ data Component fs a = Component Name (Signature fs a)
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD fs a
   where
-    -- ^ ...
+    -- ^ Wraps the given signature in a named component.
     StructComponent
       :: Name -> Signature (Param3 prog exp pred) a
       -> ComponentCMD (Param3 prog exp pred) Name
-    -- ^ ...
+    -- ^ Call for interfacing with a component.
     PortMap
       :: Component (Param3 prog exp pred) a -> Arg a
       -> ComponentCMD (Param3 prog exp pred) ()
@@ -465,19 +463,17 @@ instance HBifunctor ComponentCMD
 
 instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
   where
-    reexpressInstrEnv reexp (StructComponent n sig) =
-      ReaderT $ \env ->
-        singleInj $ StructComponent n (reexpressSignature env sig)
-    reexpressInstrEnv reexp (PortMap (Component m sig) as) =
-      ReaderT $ \env ->
-        singleInj $ PortMap (Component m (reexpressSignature env sig)) as
+    reexpressInstrEnv reexp (StructComponent n sig) = ReaderT $ \env ->
+      singleInj $ StructComponent n (reexpressSignature env sig)
+    reexpressInstrEnv reexp (PortMap (Component m sig) as) = ReaderT $ \env ->
+      singleInj $ PortMap (Component m (reexpressSignature env sig)) as
 
-reexpressSignature
-  :: env
+reexpressSignature :: env
   -> Signature (Param3 (ReaderT env (ProgramT instr (Param2 exp2 pred) m)) exp1 pred) a
   -> Signature (Param3              (ProgramT instr (Param2 exp2 pred) m)  exp2 pred) a
-reexpressSignature env (Ret prog)   = Ret (runReaderT prog env)
-reexpressSignature env (Lam n m sf) = Lam n m (reexpressSignature env . sf)
+reexpressSignature env (Ret prog)    = Ret (runReaderT prog env)
+reexpressSignature env (SSig n m sf) = SSig n m (reexpressSignature env . sf)
+reexpressSignature env (SArr n m af) = SArr n m (reexpressSignature env . af)
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
@@ -532,39 +528,5 @@ instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr env
     reexpressInstrEnv reexp (StructProcess is p)       =
       ReaderT $ \env -> singleInj $ StructProcess is $ runReaderT p env
 
---------------------------------------------------------------------------------
--- ** VHDL.
-{-
-class Argument arg pred
-  where
-    mkArg   :: arg pred -> VHDL V.Expression
-    mkParam :: arg pred -> V.Identifier
-
-data FunArg exp pred
-  where
-    SignalArg :: pred a => Signal a -> FunArg exp pred
-
-data VHDL_CMD fs a
-  where
-    CallFun :: pred a => String -> [FunArg exp pred] -> VHDL_CMD (Param3 prog exp pred) (Val a)
-
-instance HFunctor VHDL_CMD
-  where
-    hfmap _ (CallFun n as) = CallFun n as
-
-instance HBifunctor VHDL_CMD
-  where
-    hbimap _ f (CallFun n as) = CallFun n (map (mapFunArg f) as)
-
-instance (VHDL_CMD :<: instr) => Reexpressible VHDL_CMD instr
-  where
-    reexpressInstrEnv reexp (CallFun n as) = lift . singleInj . CallFun n =<< mapM (mapFunArgM reexp) as
-
-mapFunArg :: (forall a. exp1 a -> exp2 a) -> FunArg exp1 pred -> FunArg exp2 pred
-mapFunArg f (SignalArg s) = SignalArg s
-
-mapFunArgM :: Monad m => (forall a. exp1 a -> m (exp2 a)) -> FunArg exp1 pred -> m (FunArg exp2 pred)
-mapFunArgM f (SignalArg s) = return $ SignalArg s
--}
 --------------------------------------------------------------------------------
 

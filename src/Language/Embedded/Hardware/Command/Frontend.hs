@@ -364,60 +364,62 @@ to l h = When (To l h)
 type Sig  instr exp pred m = Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred)
 type Comp instr exp pred m = Component (Param3 (ProgramT instr (Param2 exp pred) m) exp pred)
 
--- | Wrap a signed program in a new component.
-namedComponent
-  :: ( ComponentCMD  :<: instr
-     , StructuralCMD :<: instr
-     , Monad m)
+-- | Declare a named component.
+namedComponent :: (ComponentCMD :<: instr, Monad m)
   => String -> Sig instr exp pred m a
   -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
 namedComponent name sig =
   do n <- singleInj $ StructComponent (Base name) sig
      return $ Component n sig
 
-component
-  :: ( ComponentCMD  :<: instr
-     , StructuralCMD :<: instr
-     , Monad m)
+-- | Declare a component.
+component :: (ComponentCMD :<: instr, Monad m)
   => Sig instr exp pred m a
   -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
 component = namedComponent "comp"
 
-
--- | Wrap a signed program in a new component.
-namedComponent' :: (ComponentCMD :<: instr, Monad m) => String -> Sig instr exp pred m a
-  -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
-namedComponent' name sig =
-  do n <- singleInj $ StructComponent (Base name) sig
-     return $ Component n sig
-
-component' :: (ComponentCMD :<: instr, Monad m) => Sig instr exp pred m a
-  -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
-component' = namedComponent' "comp"
-
--- | Map signals to some component.
-portmap :: (ComponentCMD :<: instr) => Comp instr exp pred m a -> Arg a -> ProgramT instr (Param2 exp pred) m ()
+-- | Call a component.
+portmap :: (ComponentCMD :<: instr)
+  => Comp instr exp pred m a
+  -> Arg a
+  -> ProgramT instr (Param2 exp pred) m ()
 portmap pro arg = singleInj $ PortMap pro arg
 
 --------------------------------------------------------------------------------
 
 exactOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-exactOutput n = Lam (Exact n) Out
+exactOutput n = SSig (Exact n) Out
 
 namedOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-namedOutput n = Lam (Base n) Out
+namedOutput n = SSig (Base n) Out
+
+namedOutputArr :: pred a => String -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+namedOutputArr n = SArr (Base n) Out
 
 output :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 output = namedOutput "out"
 
+outputArr :: pred a => (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+outputArr = namedOutputArr "out"
+
+--------------------------------------------------------------------------------
+
 exactInput  :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-exactInput  n = Lam (Exact n) In
+exactInput  n = SSig (Exact n) In
 
 namedInput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-namedInput n = Lam (Base n) In
+namedInput n = SSig (Base n) In
+
+namedInputArr :: pred a => String -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+namedInputArr n = SArr (Base n) In
 
 input :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 input = namedInput "in"
+
+inputArr :: pred a => (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+inputArr = namedInputArr "in"
+
+--------------------------------------------------------------------------------
 
 ret :: (ProgramT instr (Param2 exp pred) m) () -> Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred) ()
 ret = Ret

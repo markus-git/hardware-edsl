@@ -486,11 +486,14 @@ compileComponent (StructComponent base sig) =
   where
     traverseS :: Signature (Param3 VHDL exp ct) b ->  VHDL (VHDL ())
     traverseS (Ret prog) = return prog
-    traverseS (Lam n m f) = 
+    traverseS (SSig n m f) = 
       do t <- compTF (Proxy::Proxy ct) f
          i <- newSym n
          V.signal (ident i) m t Nothing
          traverseS (f (SignalC i))
+    traverseS (SArr n m f) =
+      do
+         undefined
 
 compileComponent (PortMap (Component base sig) as) =
   do i  <- newSym base
@@ -500,16 +503,22 @@ compileComponent (PortMap (Component base sig) as) =
      V.portMap l (ident i) (assoc sig as)
   where
     apply :: Signature (Param3 VHDL exp ct) b -> Arg b -> VHDL [V.InterfaceDeclaration]
-    apply (Ret _)     (Nill)                      = return []
-    apply (Lam n m f) (ArgSignal s@(SignalC i) v) =
+    apply (Ret _)     (Nil)                  = return []
+    apply (SSig n m f) (ASig s@(SignalC i) v) =
       do t  <- compTF (Proxy::Proxy ct) f
          is <- apply (f s) v
          let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
          return (i : is)
+    apply (SArr n m f) (AArr a@(ArrayC i) v) =
+      do t  <- compTF (Proxy::Proxy ct) f
+         is <- apply (f a) v
+         let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
+         return (i : is)
 
     assoc :: Signature (Param3 VHDL exp ct) b -> Arg b -> [(V.Identifier, V.Identifier)]
-    assoc (Ret _)     (Nill)                      = []
-    assoc (Lam n _ f) (ArgSignal s@(SignalC i) v) = (ident' n, ident i) : assoc (f s) v
+    assoc (Ret _)      (Nil)                  = []
+    assoc (SSig n _ f) (ASig s@(SignalC i) v) = (ident' n, ident i) : assoc (f s) v
+    assoc (SArr n _ f) (AArr a@(ArrayC i) v)  = (ident' n, ident i) : assoc (f a) v
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
 runComponent (StructComponent _ _)            = return None
