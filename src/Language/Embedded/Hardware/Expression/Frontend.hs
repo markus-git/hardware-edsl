@@ -36,6 +36,7 @@ type Hardware exp =
   , Primary exp)
 
 --------------------------------------------------------------------------------
+
 -- | Logical operators.
 class Expr exp where
   true  :: exp Bool
@@ -58,6 +59,7 @@ instance Expr HExp where
   nor   = sugarT Nor
 
 --------------------------------------------------------------------------------
+
 -- | Relational operators.
 class Rel exp where
   eq  :: (HType a, Eq a) => exp a -> exp a -> exp Bool
@@ -76,6 +78,7 @@ instance Rel HExp where
   gte = sugarT Gte
 
 --------------------------------------------------------------------------------
+
 -- | Shift operators.
 class Shift exp where
   sll :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
@@ -94,6 +97,7 @@ instance Shift HExp where
   ror = sugarT Ror
 
 --------------------------------------------------------------------------------
+
 -- | Adding operators.
 class Simple exp where
   neg :: (HType a, Num a) => exp a -> exp a
@@ -109,6 +113,7 @@ instance Simple HExp where
   cat = sugarT Cat
 
 --------------------------------------------------------------------------------
+
 -- | Multiplying operators.
 class Term exp where
   mul :: (HType a, Num a)      => exp a -> exp a -> exp a
@@ -123,6 +128,7 @@ instance Term HExp where
   rem = sugarT Rem
 
 --------------------------------------------------------------------------------
+
 -- | Miscellaneous operators.
 class Factor exp where
   exp :: (HType a, Num a, HType b, Integral b) => exp a -> exp b -> exp a
@@ -135,38 +141,33 @@ instance Factor HExp where
   not = sugarT Not
 
 --------------------------------------------------------------------------------
--- | ...
+
+-- | Primary operations.
 class Primary exp where
   value :: HType a => a -> exp a
-  name  :: HType a => V.Name -> exp a
+  name  :: HType a => String -> exp a
   cast  :: (HType a, HType b) => (a -> b) -> exp a -> exp b
   
 instance Primary HExp where
   value  = sugarT . Literal
-  name n = sugarT (Name n)
+  name n = sugarT (Name (V.NSimple (V.Ident n)))
   cast f = sugarT (Conversion f)
 
 -- | Creates a variable from a string.
-var :: HType a => String -> HExp a
-var = name . V.NSimple . V.Ident
+var :: (Primary exp, HType a) => String -> exp a
+var = name
 
 -- | Converts an integral (signed/unsigned/integer) to an integer.
-toInteger :: (HType a, Integral a) => HExp a -> HExp Integer
+toInteger :: (Primary exp, HType a, Integral a) => exp a -> exp Integer
 toInteger = cast (fromIntegral)
 
 -- | Converts an integral to a signed value.
-toSigned :: (HType a, HType b, Integral a, Num b) => HExp a -> HExp b
+toSigned :: (Primary exp, HType a, HType b, Integral a, Num b) => exp a -> exp b
 toSigned = cast (fromIntegral)
 
 -- | Converts an integral to a unsigned value.
-toUnsigned :: (HType a, HType b, Integral a, Num b) => HExp a -> HExp b
+toUnsigned :: (Primary exp, HType a, HType b, Integral a, Num b) => exp a -> exp b
 toUnsigned = cast (fromIntegral)
-
---------------------------------------------------------------------------------
--- These are a bit strange. Wonder when they'll add Typeable for type literals.
-
-others :: (KnownNat n, Typeable n) => HExp Bit -> HExp (Bits n)
-others = sugarT Others
 
 --------------------------------------------------------------------------------
 -- I should probably not support most of these, as they can't implement the

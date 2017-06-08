@@ -26,7 +26,7 @@ import System.IO.Unsafe -- used for `veryUnsafeFreezeVariable`.
 import GHC.TypeLits (KnownNat)
 
 --------------------------------------------------------------------------------
--- *
+-- * Hardware frontend.
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
@@ -95,15 +95,22 @@ signal :: (SignalCMD :<: instr, pred a) => String -> ProgramT instr (Param2 exp 
 signal = newNamedSignal
 
 (<--) :: (SignalCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
-  => Signal a -> a -> ProgramT instr (Param2 exp pred) m ()
+  => Signal a
+  -> a
+  -> ProgramT instr (Param2 exp pred) m ()
 (<--) s e = s <== (litE e)
 
-(<=-) :: (SignalCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
-  => Signal a -> Signal a -> ProgramT instr (Param2 exp pred) m ()
-(<=-) s v = do v' <- unsafeFreezeSignal v; s <== v'
-
-(<==) :: (SignalCMD :<: instr, pred a) => Signal a -> exp a -> ProgramT instr (Param2 exp pred) m ()
+(<==) :: (SignalCMD :<: instr, pred a)
+  => Signal a
+  -> exp a
+  -> ProgramT instr (Param2 exp pred) m ()
 (<==) s e = setSignal s e
+
+(<=-) :: (SignalCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
+  => Signal a
+  -> Signal a
+  -> ProgramT instr (Param2 exp pred) m ()
+(<=-) s v = do v' <- unsafeFreezeSignal v; s <== v'
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -317,16 +324,14 @@ when :: (ConditionalCMD :<: instr, pred Bool)
 when e p = conditional (e, p) [] Nothing
 
 -- | Standard if-then-else statement.
-iff
-  :: (ConditionalCMD :<: instr, pred Bool)
+iff :: (ConditionalCMD :<: instr, pred Bool)
   => exp Bool
   -> ProgramT instr (Param2 exp pred) m ()
   -> ProgramT instr (Param2 exp pred) m ()
   -> ProgramT instr (Param2 exp pred) m ()
 iff b t e = conditional (b, t) [] (Just e)
 
-ifE
-  :: (ConditionalCMD :<: instr, pred Bool)
+ifE :: (ConditionalCMD :<: instr, pred Bool)
   => (exp Bool, ProgramT instr (Param2 exp pred) m ())
   -> (exp Bool, ProgramT instr (Param2 exp pred) m ())
   -> ProgramT instr (Param2 exp pred) m ()
@@ -335,7 +340,9 @@ ifE a b = conditional a [b] (Nothing)
 --------------------------------------------------------------------------------
 
 switch :: (ConditionalCMD :<: instr, pred a, Eq a, Ord a)
-  => exp a -> [When a (ProgramT instr (Param2 exp pred) m)] -> ProgramT instr (Param2 exp pred) m ()
+  => exp a
+  -> [When a (ProgramT instr (Param2 exp pred) m)]
+  -> ProgramT instr (Param2 exp pred) m ()
 switch e choices = singleInj (Case e choices Nothing)
 
 switched  :: (ConditionalCMD :<: instr, pred a, Eq a, Ord a)
@@ -349,12 +356,15 @@ null :: (ConditionalCMD :<: instr) => ProgramT instr (Param2 exp pred) m ()
 null = singleInj (Null)
 
 is :: (Eq a, pred a)
-  => a -> ProgramT instr (Param2 exp pred) m ()
+  => a
+  -> ProgramT instr (Param2 exp pred) m ()
   -> When a (ProgramT instr (Param2 exp pred) m)
 is a = When (Is a) 
 
 to :: (Ord a, pred a)
-  => a -> a -> ProgramT instr (Param2 exp pred) m ()
+  => a
+  -> a
+  -> ProgramT instr (Param2 exp pred) m ()
   -> When a (ProgramT instr (Param2 exp pred) m)
 to l h = When (To l h)
 
@@ -450,3 +460,48 @@ process is = singleInj . StructProcess is
 
 --------------------------------------------------------------------------------
 
+-- | Construct the untyped signal list for processes.
+(.:) :: ToIdent a => a -> [Ident] -> [Ident]
+(.:) x xs = toIdent x : xs
+
+infixr .:
+
+--------------------------------------------------------------------------------
+-- ** VHDL specific instructions.
+
+-- | Short-hand that catures the common pattern:
+--     "when (risingEdge clk) (if (not rst) then tru else fls)"
+--   assuming reset is triggered on low.
+whenRising :: (VHDLCMD :<: instr, pred Bit)
+  => Signal Bit                            -- ^ Clock.
+  -> Signal Bit                            -- ^ Reset.
+  -> ProgramT instr (Param2 exp pred) m () -- ^ Reset  program.
+  -> ProgramT instr (Param2 exp pred) m () -- ^ Normal program.
+  -> ProgramT instr (Param2 exp pred) m ()
+whenRising clk rst tru fls = singleInj (Rising clk rst tru fls)
+
+-- | Treats a signal of bits as an array and preforms a copy.
+copyBits :: (VHDLCMD :<: instr)
+  => (Signal (Bits u), exp Integer)
+  -> (Signal (Bits v), exp Integer)
+  -> exp Integer
+  -> ProgramT instr (Param2 exp pred) m ()
+copyBits a b l = singleInj (CopyBits a b l)
+
+-- | Indexes a bit-array.
+getBit :: (VHDLCMD :<: instr, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
+  => Signal (Bits u)
+  -> exp Integer
+  -> ProgramT instr (Param2 exp pred) m (exp Bit)
+getBit a i = fmap valToExp $ singleInj $ GetBit a i
+
+
+-- | Slices a bit-array.
+getBits :: (VHDLCMD :<: instr, pred Integer, PredicateExp exp Integer, FreeExp exp, Monad m)
+  => Signal (Bits u)
+  -> exp Integer
+  -> exp Integer
+  -> ProgramT instr (Param2 exp pred) m (exp Integer)
+getBits a l u = fmap valToExp $ singleInj $ GetBits a l u
+
+--------------------------------------------------------------------------------

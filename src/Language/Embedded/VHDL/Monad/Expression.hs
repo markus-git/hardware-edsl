@@ -13,6 +13,7 @@ module Language.Embedded.VHDL.Monad.Expression
   , cast
   , resize, asSigned, asUnsigned, toSigned, toUnsigned, toInteger
   , range, downto, to
+  , choices, is, between
   
   -- *** temp
   , attribute
@@ -192,5 +193,16 @@ range  = RSimple
 downto, to :: Direction
 downto = DownTo
 to     = To
+
+--------------------------------------------------------------------------------
+
+choices :: [Choice] -> Choices
+choices = Choices
+
+is :: SimpleExpression -> Choice
+is = ChoiceSimple
+
+between :: Range -> Choice
+between = ChoiceRange . DRRange
 
 --------------------------------------------------------------------------------

@@ -35,10 +35,7 @@ import qualified GHC.Exts as GHC (Constraint)
 -- * Hardware commands.
 --------------------------------------------------------------------------------
 
-data Name =
-    None
-  | Base  VarId
-  | Exact VarId 
+data Name = None | Base VarId | Exact VarId 
 
 -- | ...
 swapM :: Monad m => Maybe (m a) -> m (Maybe a)
@@ -347,8 +344,6 @@ data ConditionalCMD fs a
     Case :: pred a => exp a -> [When a prog] -> Maybe (prog ()) -> ConditionalCMD (Param3 prog exp pred) ()
     -- ^ ...
     Null :: ConditionalCMD (Param3 prog exp pred) ()
-    -- ***
-    WhenRising :: pred Bool => Signal Bool -> prog () -> ConditionalCMD (Param3 prog exp pred) ()
 
 instance HFunctor ConditionalCMD
   where
@@ -356,8 +351,6 @@ instance HFunctor ConditionalCMD
     hfmap f (Case e xs d) = Case e (fmap (wmap f) xs) (fmap f d)
       where wmap f (When a p) = When a (f p)
     hfmap _ (Null)        = Null
-    -- *** ...
-    hfmap f (WhenRising s p) = WhenRising s (f p)
 
 instance HBifunctor ConditionalCMD
   where
@@ -366,8 +359,6 @@ instance HBifunctor ConditionalCMD
     hbimap g f (Case e xs d) = Case (f e) (fmap wmap xs) (fmap g d)
       where wmap (When a p) = When a (g p)
     hbimap _ _ (Null) = Null
-    -- *** ...
-    hbimap g f (WhenRising s p) = WhenRising s (g p)
 
 instance (ConditionalCMD :<: instr) => Reexpressible ConditionalCMD instr env
   where
@@ -391,9 +382,6 @@ instance (ConditionalCMD :<: instr) => Reexpressible ConditionalCMD instr env
                (zipWhen xs ys')
                (fmap (flip runReaderT env) d)
     reexpressInstrEnv reexp (Null) = lift $ singleInj $ Null
-    -- ***
-    reexpressInstrEnv reexp (WhenRising n p) =
-      ReaderT $ \env -> singleInj $ WhenRising n $ runReaderT p env
 
 unzipWhen :: [When a p] -> ([Constraint a], [p ()])
 unzipWhen = unzip . fmap (\(When a p) -> (a, p))
@@ -488,12 +476,6 @@ instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
 instance ToIdent (Array    a) where toIdent (ArrayC    i) = Ident i
 instance ToIdent (VArray   a) where toIdent (VArrayC   i) = Ident i
 
--- | Construct the untyped signal list for processes.
-(.:) :: ToIdent a => a -> [Ident] -> [Ident]
-(.:) x xs = toIdent x : xs
-
-infixr .:
-
 -- | Commands for structural entities.
 data StructuralCMD fs (a :: *)
   where
@@ -515,9 +497,9 @@ instance HFunctor StructuralCMD
 
 instance HBifunctor StructuralCMD
   where
-    hbimap g f (StructEntity e p)         = StructEntity e (g p)
-    hbimap g f (StructArchitecture e a p) = StructArchitecture e a (g p)
-    hbimap g f (StructProcess xs p)       = StructProcess xs (g p)
+    hbimap g _ (StructEntity e p)         = StructEntity e (g p)
+    hbimap g _ (StructArchitecture e a p) = StructArchitecture e a (g p)
+    hbimap g _ (StructProcess xs p)       = StructProcess xs (g p)
 
 instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr env
   where
@@ -530,3 +512,61 @@ instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr env
 
 --------------------------------------------------------------------------------
 
+data VHDLCMD fs a
+  where
+    -- When we have external function calls we can replace this.
+    -- For now, its a handy short-hand for a common pattern in VHDL.
+    Rising :: pred Bit
+      => Signal Bit -- ^ clock.
+      -> Signal Bit -- ^ reset.
+      -> prog ()    -- ^ program for when clock & reset.
+      -> prog ()    -- ^ program for when clock & not reset.
+      -> VHDLCMD (Param3 prog exp pred) ()
+    -- We should allow for base types to be treated as arrays.
+    CopyBits ::
+         (Signal (Bits n), exp Integer)
+      -> (Signal (Bits m), exp Integer)
+      -> exp Integer
+      -> VHDLCMD (Param3 prog exp pred) ()
+    -- These should be an expression instead.
+    GetBit  :: pred Bit
+      => Signal (Bits n)
+      -> exp Integer
+      -> VHDLCMD (Param3 prog exp pred) (Val Bit)
+    GetBits :: pred Integer
+      => Signal (Bits n)
+      -> exp Integer
+      -> exp Integer
+      -> VHDLCMD (Param3 prog exp pred) (Val Integer)
+
+instance HFunctor VHDLCMD
+  where
+    hfmap f (Rising clk rst tru fls) = Rising clk rst (f tru) (f fls)
+    hfmap _ (CopyBits a b l)         = CopyBits a b l
+    hfmap _ (GetBit s i)             = GetBit s i
+    hfmap _ (GetBits s l u)          = GetBits s l u
+
+instance HBifunctor VHDLCMD
+  where
+    hbimap g _ (Rising clk rst tru fls)     = Rising clk rst (g tru) (g fls)
+    hbimap _ f (CopyBits (a, oa) (b, ob) l) = CopyBits (a, f oa) (b, f ob) (f l)
+    hbimap _ f (GetBit s i)                 = GetBit s (f i)
+    hbimap _ f (GetBits s l u)              = GetBits s (f l) (f u)
+
+instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
+  where
+    reexpressInstrEnv reexp (Rising clk rst tru fls) =
+      ReaderT $ \env -> singleInj $ Rising clk rst
+        (runReaderT tru env)
+        (runReaderT fls env)
+    reexpressInstrEnv reexp (CopyBits (a, oa) (b, ob) l)
+      = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
+           lift $ singleInj $ CopyBits (a, oa') (b, ob') l'
+    reexpressInstrEnv reexp (GetBit s i)
+      = do i' <- reexp i
+           lift $ singleInj $ GetBit s i'
+    reexpressInstrEnv reexp (GetBits s l u)
+      = do l' <- reexp l; u' <- reexp u
+           lift $ singleInj $ GetBits s l' u'
+
+--------------------------------------------------------------------------------

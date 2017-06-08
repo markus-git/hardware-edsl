@@ -115,6 +115,8 @@ range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
 name :: String -> V.Primary
 name = V.PrimName . V.NSimple . ident
 
+--------------------------------------------------------------------------------
+
 fromIdent :: ToIdent a => a -> V.Identifier
 fromIdent a = let (Ident i) = toIdent a in ident i
 
@@ -299,7 +301,7 @@ compileVArray (InitVArray base is) =
 compileVArray (GetVArray (VArrayC arr) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
-     V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident arr) e)
+     V.assignVariable (simpleName i) (lift $ V.name $ V.indexed (ident arr) e)
      return i
 compileVArray (SetVArray a@(VArrayC arr) i e) =
   do i' <- compE i
@@ -436,11 +438,6 @@ compileConditional (Case e cs d) =
       h' <- compileLit (Proxy::Proxy ct) h
       return $ (V.Choices [V.ChoiceRange (V.DRRange (V.range (lift l') V.to (lift h')))], p)
 compileConditional (Null) = V.null
--- *** ...
-compileConditional (WhenRising (SignalC s) p) =
-  do let c = V.function (V.Ident "rising_edge") [lift $ V.name $ V.NSimple $ V.Ident s]
-     s <- V.inConditional (lift c, p) [] (return ())
-     V.addSequential $ V.SIf s
 
 runConditional :: ConditionalCMD (Param3 IO IO pred) a -> IO a
 runConditional (If (a, b) cs em) =
@@ -459,9 +456,6 @@ runConditional (Case e cs d) =
     loop v ((When (Is u)   p):cs) = if v == u         then p else loop v cs
     loop v ((When (To l h) p):cs) = if v > l && v < h then p else loop v cs
 runConditional (Null) = return ()
--- *** ...
-runConditional (WhenRising s p) =
-  do error "vhdl: cannot evaluate 'rising_edge'"
 
 --------------------------------------------------------------------------------
 -- ** Components.
@@ -555,27 +549,49 @@ runStructural (StructProcess xs prog)       =
 
 --------------------------------------------------------------------------------
 -- ** VHDL.
-{-
-data SignalArg pred where
-  SigArg :: pred a => Signal a -> SignalArg pred
 
-instance Argument SignalArg pred where
-  mkArg   (SigArg (SignalC s)) = lift $ V.name $ V.NSimple $ V.Ident s
-  mkParam (SigArg (SignalC s)) = V.Ident s
--}
---------------------------------------------------------------------------------
-{-     
-instance (CompileExp exp, CompileType ct) => Interp VHDL_CMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct) => Interp VHDLCMD VHDL (Param2 exp ct)
   where
     interp = compileVHDL
 
-instance InterpBi VHDL_CMD IO (Param1 pred)
+instance InterpBi VHDLCMD IO (Param1 pred)
   where
     interpBi = runVHDL
 
-compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDL_CMD (Param3 VHDL exp ct) a -> VHDL a
-compileVHDL (CallFun n as) =
+compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDLCMD (Param3 VHDL exp ct) a -> VHDL a
+compileVHDL (Rising (SignalC clk) (SignalC rst) tru fls) =
+  do let condC = V.function (ident "rising_edge") [lift (name clk)]
+         condR = V.eq (lift $ name rst) (lift $ V.lit "'0'")
+     clock <- V.inConditional (lift condC,
+         do reset <- V.inConditional (lift condR, tru) [] (fls)
+            V.addSequential $ V.SIf $ reset
+       ) [] (return ())
+     V.addSequential $ V.SIf $ clock
+compileVHDL (CopyBits ((SignalC a), oa) ((SignalC b), ob) l) =
+  do oa' <- compE oa
+     ob' <- compE ob
+     len <- compE l
+     let slice_a = (lift oa', lift len)
+         slice_b = (lift ob', lift len)
+         dest    = V.slice (ident a) slice_a
+         src     = V.slice (ident b) slice_b
+     V.assignSignal src (lift $ V.PrimName dest)
+compileVHDL (GetBit (SignalC bits) ix) =
+  do i   <- freshVar (Proxy::Proxy ct) (Base "b")
+     ix' <- compE ix
+     let index = V.name $ V.indexed (ident bits) (lift ix')
+     V.assignVariable (simpleName i) (lift index)
+     return i
+compileVHDL (GetBits (SignalC bits) l u) =
+  do i  <- freshVar (Proxy::Proxy ct) (Base "b")
+     l' <- compE l
+     u' <- compE u
+     let slice = V.slice (ident bits) (lift l', lift u')
+         integ = V.toInteger $ lift $ V.asSigned $ lift $ V.name slice
+     V.assignVariable (simpleName i) (lift integ)
+     return i
 
-runVHDL :: VHDL_CMD (Param3 IO IO pred) a -> IO a
-runVHDL = 
--}
+runVHDL :: VHDLCMD (Param3 IO IO pred) a -> IO a
+runVHDL = error "hardware-edsl.runVHDL: todo."
+
+--------------------------------------------------------------------------------
