@@ -190,7 +190,7 @@ axi_light sig
        reg_rden  <- signal "slv_reg_rden" :: Prog instr exp pred (Signal (Bit))
        reg_wren  <- signal "slv_reg_wren" :: Prog instr exp pred (Signal (Bit))
        reg_out   <- signal "reg_data_out" :: Prog instr exp pred (Signal (Bits 32))
-       reg_index <- signal "byte_index"   :: Prog instr exp pred (Signal (Integer))       
+       reg_index <- signal "byte_index"   :: Prog instr exp pred (Signal (Integer))
        registers <- sequence [ reg i | i <- [0 .. width - 1]]
                       :: Prog instr exp pred [Signal (Bits 32)]
        
@@ -248,8 +248,9 @@ axi_light sig
        -- Slave register logic.
        --
        process (s_axi_aclk .: []) $ do
+         let inps = filterElem inputs registers
          whenRising s_axi_aclk s_axi_aresetn
-           (do sequence_ [ reg <== zeroes | reg <- registers ])
+           (do sequence_ [ reg <== zeroes | reg <- inps ])
            (do loc_addr <- getBits awaddr (value addr_lsb) (value addr_bits)
                rwren    <- getSignal reg_wren
                when (isHigh rwren) $ switched loc_addr
@@ -260,9 +261,9 @@ axi_light sig
                             (registers !! fromIntegral i, ix*8)
                             (s_axi_wdata, ix*8)
                             (ix*8 + 7)
-                 | i <- [0..width]
+                 | i <- inputs
                  ]
-                 (do sequence_ [ reg <=- reg | reg <- registers ]))
+                 (do sequence_ [ reg <=- reg | reg <- inps ]))
 
        ----------------------------------------
        -- Write response logic.
@@ -341,6 +342,10 @@ axi_light sig
   where
     width :: Integer
     width = widthOf sig
+
+    inputs, outputs :: [Integer]
+    inputs  = filterMode In  sig
+    outputs = filterMode Out sig
     
     -- Application-specific design signals.
     addr_lsb, addr_bits :: Integer
@@ -358,10 +363,25 @@ widthOf (Ret _)      = 0
 widthOf (SSig _ _ f) = 1 + widthOf (f dummy)
 widthOf (SArr _ _ g) = 1 + widthOf (g dummy)
 
-inputs :: Sig instr exp pred Identity sig -> [Ident]
-inputs (Ret _)        = []
-inputs (SSig n In sf) = undefined
-inputs (SSig _ _  sf) = inputs (sf dummy)
+filterMode :: Mode -> Sig instr exp pred Identity sig -> [Integer]
+filterMode p = go 0 
+  where
+    go :: Integer -> Sig instr exp pred Identity sig -> [Integer]
+    go ix (Ret _)       = []
+    go ix (SSig n m sf)
+      | p == m    = ix : next
+      | otherwise = next
+      where
+        next = go (ix+1) (sf dummy)
+
+filterElem :: [Integer] -> [a] -> [a]
+filterElem xs as = go xs (zip [1..] as)
+  where
+    go _ [] = error "filter, why?"
+    go [] _ = []
+    go (i:is) ((j,a):as)
+      | i == j    = a : go is as
+      | otherwise = go (i:is) as
 
 dummy :: a
 dummy = error "todo: evaluated dummy"
