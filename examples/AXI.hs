@@ -60,13 +60,15 @@ adder_comp = namedComponent "adder" adder_sig
 
 --------------------------------------------------------------------------------
 
+adder_axi :: HProg ()
 adder_axi =
   do comp <- adder_comp
      namedComponent "adder_axi" (axi_light_signature comp)
+     return ()
 
 --------------------------------------------------------------------------------
 
-test = icompile (adder_comp >> return ())
---test = icompile adder_axi
+--test = icompile adder_comp
+test = icompile adder_axi
 
 --------------------------------------------------------------------------------

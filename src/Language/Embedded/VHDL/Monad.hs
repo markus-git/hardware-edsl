@@ -481,11 +481,12 @@ prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
 
 -- | Pretty print a VHDL environment.
 prettyVEnv :: VHDLEnv -> Doc
-prettyVEnv env = Text.vcat $ pp main : (fmap pp $ _designs env)
+prettyVEnv env = Text.vcat (pp main : fmap pp files)
   where
     main  = DesignFile $ types ++ archi
-    archi = reverse $ _units env
     types = reverse $ designTypes (_types env)
+    archi = reverse $ _units env
+    files = reverse $ map reorderDesign $ _designs env
 
 -- todo: Scan type declarations for necessary imports instead.
 --   * aren't we doing this already?
@@ -503,6 +504,30 @@ designTypes set
       newImport  "IEEE.STD_LOGIC_1164"
       newImport  "IEEE.NUMERIC_STD"
       CMS.modify $ \e -> e { _types = set }
+
+--------------------------------------------------------------------------------
+
+reorderDesign :: DesignFile -> DesignFile
+reorderDesign (DesignFile units) = DesignFile (reverse units)
+
+reorderUnit :: DesignUnit -> DesignUnit
+reorderUnit (DesignUnit ctxt lib) = DesignUnit
+  (reorderContext ctxt)
+  (reorderLibrary lib)
+
+-- todo : reverse at the level of design file instead.
+reorderLibrary :: LibraryUnit -> LibraryUnit
+reorderLibrary (LibraryPrimary prim)     = LibraryPrimary prim
+reorderLibrary (LibrarySecondary second) = LibrarySecondary second
+
+-- todo : reverse instead?
+reorderContext :: ContextClause -> ContextClause
+reorderContext (ContextClause items) = ContextClause (reorder items [])
+  where
+    reorder :: [ContextItem] -> [ContextItem] -> [ContextItem]
+    reorder [] rs = rs
+    reorder (lib@(ContextLibrary _) : cs) rs = lib : (rs ++ cs)
+    reorder (use@(ContextUse _)     : cs) rs = reorder (use : rs) cs
 
 --------------------------------------------------------------------------------
 -- * Common things
