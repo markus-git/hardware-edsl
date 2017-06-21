@@ -40,8 +40,9 @@ module Language.Embedded.VHDL.Monad (
   , entity, architecture, package, component
 
     -- ^ common things
-  , constant, signal, variable, unconstrainedArray, constrainedArray
+  , constant, signal, variable, array, unconstrainedArray, constrainedArray
   , assignSignal, assignVariable, assignArray
+  , concurrentSignal, concurrentArray
   , portMap
   ) where
 
@@ -486,8 +487,9 @@ prettyVEnv env = Text.vcat $ pp main : (fmap pp $ _designs env)
     archi = reverse $ _units env
     types = reverse $ designTypes (_types env)
 
--- *** Scan type declarations for necessary imports instead.
--- *** Types are added in an ugly manner.
+-- todo: Scan type declarations for necessary imports instead.
+--   * aren't we doing this already?
+-- todo: Types are added in an ugly manner.
 designTypes :: Set TypeDeclaration -> [DesignUnit]
 designTypes set
   | Set.null set = []
@@ -512,11 +514,14 @@ designTypes set
 constant :: MonadV m => Identifier -> SubtypeIndication -> Expression -> m ()
 constant i t e = addConstant $ InterfaceConstantDeclaration [i] t (Just e)
 
-signal   :: MonadV m => Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> m ()
+signal :: MonadV m => Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> m ()
 signal i m t e = addSignal $ InterfaceSignalDeclaration [i] (Just m) t False e
 
 variable :: MonadV m => Identifier -> SubtypeIndication -> Maybe Expression -> m ()
 variable i t e = addVariable $ InterfaceVariableDeclaration [i] Nothing t e
+
+array :: MonadV m => Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> m ()
+array = signal
 
 --------------------------------------------------------------------------------
 -- ** Array Declarations.
@@ -553,14 +558,18 @@ assignVariable n e = addSequential $ SVarAss $
 
 assignArray :: MonadV m => Name -> Expression -> m ()
 assignArray = assignSignal
-{-
-assignArray i e = addSequential $ SSignalAss $
-  SignalAssignmentStatement
-    (Nothing)
-    (TargetName i)
-    (Nothing)
-    (WaveElem [WaveEExp e Nothing])
--}
+
+--------------------------------------------------------------------------------
+
+concurrentSignal :: MonadV m => Name -> Expression -> m ()
+concurrentSignal n e = addConcurrent $ ConSignalAss $
+  CSASCond Nothing False $
+  ConditionalSignalAssignment (TargetName n) (Options False Nothing) $
+  ConditionalWaveforms [] (WaveElem [WaveEExp e Nothing], Nothing)
+
+concurrentArray :: MonadV m => Name -> Expression -> m ()
+concurrentArray = concurrentSignal
+
 --------------------------------------------------------------------------------
 -- Portmap.
 

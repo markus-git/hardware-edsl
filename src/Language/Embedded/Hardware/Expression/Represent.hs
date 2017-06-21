@@ -3,6 +3,7 @@
 
 module Language.Embedded.Hardware.Expression.Represent
   ( HType(..)
+  , Inhabited(..)
   , Rep(..)
   , compT
   , literal
@@ -24,6 +25,7 @@ import Language.Embedded.VHDL (VHDL)
 import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport, constrainedArray)
 import Language.Embedded.VHDL.Monad.Expression (lit)
 import Language.Embedded.VHDL.Monad.Type hiding (literal)
+import Language.Embedded.VHDL.Monad.Util (printBits)
 
 import Language.Embedded.Hardware.Expression.Hoist (lift)
 
@@ -39,6 +41,8 @@ import Text.Printf
 -- | Collection of required classes for hardware expressions.
 class    (Typeable a, Rep a, Eq a) => HType a
 instance (Typeable a, Rep a, Eq a) => HType a
+
+--------------------------------------------------------------------------------
 
 -- | A 'rep'resentable value.
 class Rep a
@@ -142,9 +146,6 @@ instance Rep Integer where
 
 --------------------------------------------------------------------------------
 
-printBits :: (PrintfArg a, PrintfType b) => Int -> a -> b
-printBits zeroes = printf ("\"%0" ++ show zeroes ++ "b\"")
-
 declareBoolean :: VHDL ()
 declareBoolean =
   do newLibrary "IEEE"
@@ -170,5 +171,27 @@ instance Num Bool where
   fromInteger 0 = False
   fromInteger 1 = True
   fromInteger _ = error "bool-num: >1"
+
+--------------------------------------------------------------------------------
+-- todo : I should move this to its own module.
+
+-- | ...
+class HType a => Inhabited a
+  where
+    -- | Ground value.
+    reset :: a
+
+instance Inhabited Bool    where reset = False
+instance Inhabited Int8    where reset = 0
+instance Inhabited Int16   where reset = 0
+instance Inhabited Int32   where reset = 0
+instance Inhabited Int64   where reset = 0
+instance Inhabited Word8   where reset = 0
+instance Inhabited Word16  where reset = 0
+instance Inhabited Word32  where reset = 0
+instance Inhabited Word64  where reset = 0
+instance Inhabited Integer where reset = 0
+instance Inhabited Float   where reset = 0
+instance Inhabited Double  where reset = 0
 
 --------------------------------------------------------------------------------

@@ -8,7 +8,7 @@ module Language.Embedded.VHDL.Monad.Type
   , float, double
   , integer
 
-  , isSigned, isInteger, width
+  , typeName, typeWidth
   , literal, point
   ) where
 
@@ -97,20 +97,12 @@ integer r = SubtypeIndication Nothing
 --------------------------------------------------------------------------------
 -- ** Helpers.
 
-isSigned :: Type -> Maybe Bool
-isSigned (SubtypeIndication _ (TMType (NSlice (SliceName (PName (NSimple (Ident typ))) _))) _) = case typ of
-  "signed"   -> Just True
-  "unsigned" -> Just False
-isSigned _ = Nothing
+typeName :: Type -> String
+typeName (SubtypeIndication _ (TMType (NSimple (Ident n))) _) = n
+typeName (SubtypeIndication _ (TMType (NSlice (SliceName (PName (NSimple (Ident n))) _))) _) = n
 
-isInteger :: Type -> Maybe Bool
-isInteger (SubtypeIndication _ (TMType (NSimple (Ident typ))) _) = case typ of
-  "integer" -> Just True
-  _         -> Nothing
-isInteger _ = Nothing
-
-width :: Type -> Int
-width (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)
+typeWidth :: Type -> Int
+typeWidth (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)
   where
     unrange :: TypeMark -> Int
     unrange (TMType (NSlice (SliceName _ (DRRange (RSimple u DownTo l))))) =
@@ -118,16 +110,18 @@ width (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)
     unrange (TMType (NSlice (SliceName _ (DRRange (RSimple l To     u))))) =
       literal u - literal l
 
+--------------------------------------------------------------------------------
+
 range :: Constraint -> Int
 range (CRange (RangeConstraint (RSimple a DownTo b))) = literal a - literal b
-
---------------------------------------------------------------------------------
 
 literal :: SimpleExpression -> Int
 literal (SimpleExpression Nothing (Term (FacPrim i (Nothing)) []) []) = unlit i
   where
     unlit :: Primary -> Int
     unlit (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = read i
+
+--------------------------------------------------------------------------------
 
 point :: Show i => i -> SimpleExpression
 point i = SimpleExpression Nothing (Term (FacPrim (lit $ show i) (Nothing)) []) []

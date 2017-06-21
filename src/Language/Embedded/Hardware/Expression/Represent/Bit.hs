@@ -68,9 +68,32 @@ import GHC.TypeLits
 -- * ...
 --------------------------------------------------------------------------------
 
+--------------------------------------------------------------------------------
+-- ** Single bit.
+
 type Bit = Bool
 
+--------------------------------------------------------------------------------
+-- These aren't great to have..
+
+instance Real Bool
+  where
+    toRational = error "toRational not implemented for bit."
+
+instance Integral Bool
+  where
+    toInteger True  = 1
+    toInteger False = 0
+    quotRem         = error "quotRem not implemented for bit."
+
+--------------------------------------------------------------------------------
+-- ** Bit vectors of known lenght.
+
 newtype Bits (n :: Nat) = B Integer
+
+instance forall n. KnownNat n => Inhabited (Bits n)
+  where
+    reset = bitFromInteger 0
 
 instance forall n. KnownNat n => Rep (Bits n)
   where
@@ -85,7 +108,7 @@ declareBits _ = declareBoolean >> return (std_logic_vector size)
   where size = fromInteger (ni (undefined :: Bits n))
         
 --------------------------------------------------------------------------------
--- ** ...
+-- *** ...
 
 ni :: KnownNat n => proxy n -> Integer
 ni = fromIntegral . natVal
@@ -100,7 +123,7 @@ bitToInteger :: Bits n -> Integer
 bitToInteger (B i) = i
 
 --------------------------------------------------------------------------------
--- ** ...
+-- *** ...
 
 lift1 :: KnownNat n => (Integer -> Integer) -> Bits n -> Bits n
 lift1 f (B i) = norm (B (f i))
@@ -109,7 +132,7 @@ lift2 :: KnownNat n => (Integer -> Integer -> Integer) -> Bits n -> Bits n -> Bi
 lift2 f (B i) (B j) = norm (B (f i j))
 
 --------------------------------------------------------------------------------
--- ** ...
+-- *** ...
 
 bitAdd :: KnownNat n => Bits n -> Bits n -> Bits n
 bitAdd = lift2 (+)
@@ -276,8 +299,7 @@ instance KnownNat n => Ix (Bits n) where
   inRange = undefined
 
 --------------------------------------------------------------------------------
--- *
---------------------------------------------------------------------------------
+-- ** Bit vectors of unknown lenght.
 
 newtype UBits = UB Integer
   deriving (Eq, Enum, Ord, Num, Real, Integral)
@@ -294,7 +316,7 @@ instance Rep UBits
     
 
 declareUBits :: proxy UBits -> VHDL Type
-declareUBits _ = declareBoolean >> return (std_logic) -- error "vhdl-todo: declare ubits" --std_logic_vector
+declareUBits _ = declareBoolean >> return std_logic
 
 --------------------------------------------------------------------------------
 

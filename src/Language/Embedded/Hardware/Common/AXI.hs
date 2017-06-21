@@ -2,16 +2,22 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE PolyKinds           #-}
 {-# LANGUAGE GADTs               #-}
 
-module Language.Embedded.Hardware.Common.AXI where
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances     #-}
 
-import Language.Embedded.Hardware
+module Language.Embedded.Hardware.Common.AXI (axi_light_signature) where
+
+import Language.Embedded.Hardware hiding (Constraint)
+import Language.Embedded.Hardware.Expression.Represent (Inhabited(..))
 
 import Control.Monad.Identity (Identity)
 import Control.Monad.Operational.Higher hiding (when)
+import Data.Constraint (Constraint)
 import Data.Typeable
 import Data.Int
 import Data.Word
@@ -42,8 +48,8 @@ type Prog instr exp pred = Program instr (Param2 exp pred)
 axi_light_signature
   :: forall instr exp pred sig. (
        SignalCMD      :<: instr
-     , ConstantCMD    :<: instr
      , ArrayCMD       :<: instr
+     , VariableCMD    :<: instr
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
      , LoopCMD        :<: instr
@@ -55,12 +61,13 @@ axi_light_signature
      , pred (Bits 3),  PredicateExp exp (Bits 3)
      , pred (Bits 4),  PredicateExp exp (Bits 4)
      , pred (Bits 32), PredicateExp exp (Bits 32)
---   , pred (UBits),   PredicateExp exp (UBits)
      , pred (Integer), PredicateExp exp (Integer)
      , Num (exp Integer)
+     -- ...
+     , PredicateExp exp ~ pred
      )
-  => Sig instr exp pred Identity (sig)
-  -> Sig instr exp pred Identity (
+  => Comp instr exp pred Identity sig
+  -> Sig  instr exp pred Identity (
           Signal Bit       -- ^ Global clock signal.
        -> Signal Bit       -- ^ Global reset signal.
        -> Signal (Bits 32) -- ^ Write address.
@@ -84,7 +91,7 @@ axi_light_signature
        -> Signal Bit       -- ^ Read ready.    
        -> ()
      )
-axi_light_signature sig =
+axi_light_signature comp =
   exactInput  "S_AXI_ACLK"    $ \s_axi_aclk    ->       
   exactInput  "S_AXI_ARESETN" $ \s_axi_aresetn -> 
   exactInput  "S_AXI_AWADDR"  $ \s_axi_awaddr  ->
@@ -106,7 +113,7 @@ axi_light_signature sig =
   exactOutput "S_AXI_RRESP"   $ \s_axi_rresp   ->     
   exactOutput "S_AXI_RVALID"  $ \s_axi_rvalid  ->
   exactInput  "S_AXI_RREADY"  $ \s_axi_rready  ->   
-  ret $ axi_light sig
+  ret $ axi_light comp
     s_axi_aclk s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
@@ -120,8 +127,8 @@ axi_light_signature sig =
 axi_light
   :: forall instr exp pred sig. (
        SignalCMD      :<: instr
-     , ConstantCMD    :<: instr
      , ArrayCMD       :<: instr
+     , VariableCMD    :<: instr
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
      , LoopCMD        :<: instr
@@ -133,11 +140,12 @@ axi_light
      , pred (Bits 3),  PredicateExp exp (Bits 3)
      , pred (Bits 4),  PredicateExp exp (Bits 4)
      , pred (Bits 32), PredicateExp exp (Bits 32)
---   , pred (UBits),   PredicateExp exp (UBits)
      , pred (Integer), PredicateExp exp (Integer)
      , Num (exp Integer)
+     -- ...
+     , PredicateExp exp ~ pred
      )
-  => Sig instr exp pred Identity sig
+  => Comp instr exp pred Identity sig
   -- AXI.
   -> Signal Bit       -- ^ Global clock signal.
   -> Signal Bit       -- ^ Global reset signal.
@@ -161,16 +169,14 @@ axi_light
   -> Signal Bit       -- ^ Read valid.
   -> Signal Bit       -- ^ Read ready.    
   -> Program instr (Param2 exp pred) ()
-axi_light sig
+axi_light comp
     s_axi_aclk   s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
     s_axi_bresp  s_axi_bvalid s_axi_bready
     s_axi_araddr s_axi_arprot s_axi_arvalid s_axi_arready s_axi_rdata
     s_axi_rresp  s_axi_rvalid s_axi_rready
-  = do
-
-       ----------------------------------------
+  = do ----------------------------------------
        -- AXI Light signals.
        --
        awaddr  <- signal "axi_awaddr"  :: Prog instr exp pred (Signal (Bits 32))
@@ -191,8 +197,21 @@ axi_light sig
        reg_wren  <- signal "slv_reg_wren" :: Prog instr exp pred (Signal (Bit))
        reg_out   <- signal "reg_data_out" :: Prog instr exp pred (Signal (Bits 32))
        reg_index <- signal "byte_index"   :: Prog instr exp pred (Signal (Integer))
-       registers <- sequence [ reg i | i <- [0 .. width - 1]]
-                      :: Prog instr exp pred [Signal (Bits 32)]
+       registers <- declareRegisters comp
+
+       ----------------------------------------
+       -- Short-hands for ...
+       --
+       -- > reset all input registers.
+       let mReset  = resetInputs  (signatureOf comp) registers
+       -- > reload all input registers.
+       let mReload = reloadInputs (signatureOf comp) registers
+       -- > fetch the names of all input registers.
+       let mInputs = identInputs  (signatureOf comp) registers
+       -- > write to output.
+       let mWrite = loadOutputs reg_out 0 (signatureOf comp) registers
+       -- > read from input.
+       let mRead v = loadInputs s_axi_wdata s_axi_wstrb v 0 (signatureOf comp) registers
        
        ----------------------------------------
        -- I/O Connections.
@@ -207,9 +226,30 @@ axi_light sig
        s_axi_rvalid  <=- rvalid
 
        ----------------------------------------
+       -- Mem. mapped register select and write
+       -- logic generation.
+       --
+       u_wr  <- unsafeFreezeSignal wready
+       u_wv  <- unsafeFreezeSignal s_axi_wvalid
+       u_awr <- unsafeFreezeSignal awready
+       u_awv <- unsafeFreezeSignal s_axi_awvalid
+       concurrentSetSignal reg_wren
+         (u_wr `and` u_wv `and` u_awr `and` u_awv)
+
+       ----------------------------------------
+       -- Mem. mapped register select and read
+       -- logic generation.
+       --
+       u_arr <- unsafeFreezeSignal arready
+       u_arv <- unsafeFreezeSignal s_axi_arvalid
+       u_rv  <- unsafeFreezeSignal rvalid
+       concurrentSetSignal reg_rden
+         (u_arr `and` u_arv `and` not u_rv)
+
+       ----------------------------------------
        -- AXI_AWREADY generation.
        --
-       process (s_axi_aclk .: []) $ do
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
            (do awready <== low)
            (do rdy <- getSignal awready
@@ -217,24 +257,24 @@ axi_light sig
                wv  <- getSignal s_axi_wvalid
                iff (isLow rdy `and` isHigh awv `and` isHigh wv)
                  (do awready <== high)
-                 (do awready <== low))
+                 (do awready <== low)))
            
        ----------------------------------------
        -- AXI_AWADDR latching.
        --
-       process (s_axi_aclk .: []) $ do
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
            (do awaddr <== zeroes)
            (do rdy <- getSignal awready
                awv <- getSignal s_axi_awvalid
                wv  <- getSignal s_axi_wvalid
                when (isLow  rdy `and` isHigh awv `and` isHigh wv)
-                 (awaddr <=- s_axi_awaddr))
+                 (awaddr <=- s_axi_awaddr)))
 
        ----------------------------------------
        -- AXI_WREADY generation.
        --
-       process (s_axi_aclk .: []) $ do
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
            (do wready <== low)
            (do rdy <- getSignal awready
@@ -242,33 +282,25 @@ axi_light sig
                wv  <- getSignal s_axi_wvalid
                iff (isLow  rdy `and` isHigh awv `and` isHigh wv)
                  (wready <== high)
-                 (wready <== low))
+                 (wready <== low)))
 
        ----------------------------------------
        -- Slave register logic.
        --
-       process (s_axi_aclk .: []) $ do
-         let inps = filterElem inputs registers
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
-           (do sequence_ [ reg <== zeroes | reg <- inps ])
+           (do mReset)
            (do loc_addr <- getBits awaddr (value addr_lsb) (value addr_bits)
                rwren    <- getSignal reg_wren
+               temp     <- newVariable
                when (isHigh rwren) $ switched loc_addr
-                 [ is i $ for 0 3 $ \ix ->
-                     do wb <- getBit s_axi_wstrb ix
-                        when (isHigh wb) $ 
-                          copyBits
-                            (registers !! fromIntegral i, ix*8)
-                            (s_axi_wdata, ix*8)
-                            (ix*8 + 7)
-                 | i <- inputs
-                 ]
-                 (do sequence_ [ reg <=- reg | reg <- inps ]))
+                 (mRead temp)
+                 (mReload)))
 
        ----------------------------------------
        -- Write response logic.
        --
-       process (s_axi_aclk .: []) $ do
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
            (do bvalid <== low
                bresp  <== zeroes)
@@ -285,12 +317,12 @@ axi_light sig
                      do bvalid <== high
                         bresp  <== zeroes)
                    ((isHigh br  `and` isHigh bv),
-                     do bvalid <== low))
+                     do bvalid <== low)))
 
        ----------------------------------------
        -- AXI_AWREADY generation.
        --
-       process (s_axi_aclk .: []) $ do
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
            (do arready <== low
                araddr  <== ones)
@@ -299,12 +331,12 @@ axi_light sig
                iff (isLow arr `and` isHigh arv)
                  (do arready <== high
                      araddr  <=- s_axi_araddr)
-                 (do arready <== low))
+                 (do arready <== low)))
 
        ----------------------------------------
        -- AXI_ARVALID generation.
        --
-       process (s_axi_aclk .: []) $ do
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
            (do rvalid <== low
                rresp  <== zeroes)
@@ -316,72 +348,219 @@ axi_light sig
                      do rvalid <== high
                         rresp  <== zeroes)
                    ((isHigh rv  `and` isHigh rr),
-                     do rvalid <== low))
+                     do rvalid <== low)))
 
        ----------------------------------------
        -- Memory mapped rigister select and
        -- read logic generaiton.
        --
-       process (araddr .: s_axi_aresetn .: reg_rden .: map toIdent registers) $ do
+       process (araddr .: s_axi_aresetn .: reg_rden .: mInputs) (do
          loc_addr <- getBits araddr (value addr_lsb) (value addr_bits)
          switched loc_addr
-           [ is i $ reg_out <=- (registers !! fromInteger i)
-           | i <- [0..width]
-           ]
-           (sequence_ [ reg <=- reg | reg <- registers ])
+           (mWrite)
+           (mReload))
 
        ----------------------------------------
        -- Output register of memory read data.
        --
-       process (s_axi_aclk .: []) $ do
+       process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
            (do rdata <== zeroes)
            (do rden <- getSignal reg_rden
                when (isHigh rden)
-                 (do rdata <=- reg_out))
-  where
-    width :: Integer
-    width = widthOf sig
+                 (do rdata <=- reg_out)))
 
-    inputs, outputs :: [Integer]
-    inputs  = filterMode In  sig
-    outputs = filterMode Out sig
-    
+       ----------------------------------------
+       -- User logic.
+       --
+       -- portmap ...
+  where
     -- Application-specific design signals.
     addr_lsb, addr_bits :: Integer
     addr_lsb  = 2
-    addr_bits = addr_lsb + width
-
-    reg :: Integer -> Prog instr exp pred (Signal (Bits 32))
-    reg i = signal ("slv_reg" ++ show i)
+    addr_bits = addr_lsb + (widthOf comp)
 
 --------------------------------------------------------------------------------
--- ** ...
+-- ** Helpers.
 
-widthOf :: Signature fs a -> Integer
-widthOf (Ret _)      = 0
-widthOf (SSig _ _ f) = 1 + widthOf (f dummy)
-widthOf (SArr _ _ g) = 1 + widthOf (g dummy)
-
-filterMode :: Mode -> Sig instr exp pred Identity sig -> [Integer]
-filterMode p = go 0 
+-- | Declare the registers which will be used by our AXI-lite slave to store
+--   values received from the master and, once filled, as input for the comp.
+declareRegisters :: forall instr (exp :: * -> *) pred m a .
+     ( SignalCMD :<: instr
+     , ArrayCMD  :<: instr
+     , Monad m
+     , Primary exp
+     , pred Integer
+     )
+  => Comp instr exp pred m a
+  -> ProgramT instr (Param2 exp pred) m (Argument pred a)
+declareRegisters = go . signatureOf
   where
-    go :: Integer -> Sig instr exp pred Identity sig -> [Integer]
-    go ix (Ret _)       = []
-    go ix (SSig n m sf)
-      | p == m    = ix : next
-      | otherwise = next
-      where
-        next = go (ix+1) (sf dummy)
+    go :: Sig instr exp pred m b
+       -> ProgramT instr (Param2 exp pred) m
+            (Argument pred b)
+    go (Ret _) =
+      do return Nil
+    go (SSig _ _ sf) =
+      do s <- newSignal
+         a <- go (sf s)
+         return (ASig s a)
+    go (SArr _ _ l af) =
+      do s <- newArray (value l)
+         a <- go (af s)
+         return (AArr s a)
 
-filterElem :: [Integer] -> [a] -> [a]
-filterElem xs as = go xs (zip [1..] as)
+--------------------------------------------------------------------------------
+
+resetInputs :: forall instr (exp :: * -> *) pred m a .
+     ( SignalCMD :<: instr
+     , ArrayCMD  :<: instr
+     , Monad m
+     , Primary exp
+     )
+  => Sig instr exp pred m a
+  -> Argument pred a
+  -> ProgramT instr (Param2 exp pred) m ()
+resetInputs (Ret _) (Nil) =
+  do return ()
+resetInputs (SSig _ In sf) (ASig s arg) =
+  do setSignal s (value reset)
+     resetInputs (sf s) arg
+resetInputs (SSig _ _ sf) (ASig s arg) =
+  do resetInputs (sf s) arg
+resetInputs (SArr _ In _ af) (AArr a arg) =
+  do resetArray a (value reset)
+     resetInputs (af a) arg
+resetInputs (SArr _ _ _ af) (AArr a arg) =
+  do resetInputs (af a) arg
+
+--------------------------------------------------------------------------------
+
+reloadInputs :: forall instr (exp :: * -> *) pred m a .
+     ( SignalCMD :<: instr
+     , ArrayCMD  :<: instr
+     , Monad m
+     , Primary exp
+     , pred Integer
+     , FreeExp exp
+     , PredicateExp exp ~ pred
+     )
+  => Sig instr exp pred m a
+  -> Argument pred a
+  -> ProgramT instr (Param2 exp pred) m ()
+reloadInputs (Ret _) (Nil) =
+  do return ()
+reloadInputs (SSig _ In sf) (ASig s arg) =
+  do sv <- unsafeFreezeSignal s
+     setSignal s sv
+     reloadInputs (sf s) arg
+reloadInputs (SSig _ _ sf) (ASig s arg) =
+  do reloadInputs (sf s) arg
+reloadInputs (SArr _ In l af) (AArr a arg) =
+  do copyArray (a, litE 0) (a, litE 0) (litE l)
+     reloadInputs (af a) arg
+reloadInputs (SArr _ _ _ af) (AArr a arg) =
+  do reloadInputs (af a) arg
+
+--------------------------------------------------------------------------------
+
+loadInputs :: forall instr (exp :: * -> *) pred m a .
+     ( SignalCMD      :<: instr
+     , ArrayCMD       :<: instr
+     , VariableCMD    :<: instr
+     , VHDLCMD        :<: instr
+     , ConditionalCMD :<: instr
+     , LoopCMD        :<: instr
+     , Monad m
+     , Expr exp
+     , Rel exp
+     , Primary exp
+     , pred Integer
+     , pred Bit
+     , pred (Bits 32)
+     , pred (Bits 4)
+     , Num (exp Integer)
+     , FreeExp exp
+     , PredicateExp exp ~ pred
+     )
+  => Signal   (Bits 32) -- ^ Input.
+  -> Signal   (Bits 4)  -- ^ Protected bits.
+  -> Variable (Bits 32) -- ^ Temp.
+  -> Integer            -- ^ Index.
+  -> Sig instr exp pred m a
+  -> Argument pred a
+  -> [When Integer (ProgramT instr (Param2 exp pred) m)]
+loadInputs o w v i (Ret _) (Nil) = []
+loadInputs o w v i (SSig _ In sf) (ASig s arg) =
+  let p = for (value 0) (value 3) (\ix ->
+            do wb <- getBit w ix
+               when (isHigh wb)
+                 (do copyBits (s, ix*8) (o, ix*8) 7))
+   in When (Is i) p : loadInputs o w v (i+1) (sf s) arg
+loadInputs o w v i (SSig _ _ sf) (ASig s arg) =
+  loadInputs o w v (i+1) (sf s) arg
+loadInputs o w v i (SArr _ In l af) (AArr a arg) =
+  let f ix = When (Is ix) (do
+               va <- getArray a (value ix)
+               setVariable v (toBits va)
+               for (value 0) (value 3) (\jx ->
+                 do wb <- getBit w jx
+                    when (isHigh wb)
+                      (do copyVBits (v, jx*8) (o, jx*8) 7
+                          vv <- getVariable v
+                          setArray a (value ix) (fromBits vv))))
+   in map f [i..i+l-1]
+loadInputs o w v i (SArr _ _ l af) (AArr a arg) =
+  loadInputs o w v (i+l) (af a) arg
+
+loadOutputs :: forall instr (exp :: * -> *) pred m a .
+     ( SignalCMD :<: instr
+     , ArrayCMD  :<: instr
+     , Monad m
+     , Primary exp
+     , pred Integer
+     , pred (Bits 32)
+     , FreeExp exp
+     , PredicateExp exp ~ pred
+     )
+  => Signal (Bits 32) -- ^ Output.
+  -> Integer          -- ^ Index.
+  -> Sig instr exp pred m a
+  -> Argument pred a
+  -> [When Integer (ProgramT instr (Param2 exp pred) m)]
+loadOutputs o i (Ret _) (Nil) = []
+loadOutputs o i (SSig _ Out sf) (ASig s arg) =
+  let p = setSignal o . toBits =<< unsafeFreezeSignal s
+   in When (Is i) p : loadOutputs o (i+1) (sf s) arg
+loadOutputs o i (SSig _ _ sf) (ASig s arg) =
+  loadOutputs o (i+1) (sf s) arg
+loadOutputs o i (SArr _ Out l af) (AArr a arg) =
+  let f ix = When (Is ix) (setSignal o . toBits =<< getArray a (value ix))
+   in map f [i..i+l-1] ++ loadOutputs o (i+l) (af a) arg
+loadOutputs o i (SArr _ _ l af) (AArr a arg) =
+  loadOutputs o (i+l) (af a) arg
+
+--------------------------------------------------------------------------------
+
+identInputs :: forall instr (exp :: * -> *) pred m a . Sig instr exp pred m a -> Argument pred a -> [Ident]
+identInputs (Ret _) (Nil) = []
+identInputs (SSig _ In sf)   (ASig s arg) = toIdent s : identInputs (sf s) arg
+identInputs (SSig _ _  sf)   (ASig s arg) = identInputs (sf s) arg
+identInputs (SArr _ In _ af) (AArr a arg) = toIdent a : identInputs (af a) arg
+identInputs (SArr _ _  _ af) (AArr a arg) = identInputs (af a) arg
+
+--------------------------------------------------------------------------------
+
+signatureOf :: Comp instr exp pred m a -> Sig instr exp pred m a
+signatureOf (Component _ sig) = sig
+
+widthOf :: Comp instr exp pred m a -> Integer
+widthOf = go . signatureOf
   where
-    go _ [] = error "filter, why?"
-    go [] _ = []
-    go (i:is) ((j,a):as)
-      | i == j    = a : go is as
-      | otherwise = go (i:is) as
+    go :: Sig instr exp pred m b -> Integer
+    go (Ret _)        = 0
+    go (SSig _ _ f)   = 1 + go (f dummy)
+    go (SArr _ _ l g) = l + go (g dummy)
 
 dummy :: a
 dummy = error "todo: evaluated dummy"

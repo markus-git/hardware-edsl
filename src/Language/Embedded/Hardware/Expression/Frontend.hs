@@ -169,6 +169,15 @@ toSigned = cast (fromIntegral)
 toUnsigned :: (Primary exp, HType a, HType b, Integral a, Num b) => exp a -> exp b
 toUnsigned = cast (fromIntegral)
 
+-- | Converts an integral to its bit representation.
+toBits :: (Primary exp, HType a, HType (Bits b), Integral a, KnownNat b) => exp a -> exp (Bits b)
+toBits = cast (bitFromInteger . fromIntegral)
+
+--------------------------------------------------------------------------------
+
+fromBits :: (Primary exp, HType (Bits a), HType b, Num b, KnownNat a) => exp (Bits a) -> exp b
+fromBits = cast (fromIntegral . bitToInteger)
+
 --------------------------------------------------------------------------------
 -- I should probably not support most of these, as they can't implement the
 -- interfaces fully. Would perhaps be better to implement my own versions

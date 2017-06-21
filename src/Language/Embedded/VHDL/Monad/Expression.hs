@@ -11,7 +11,8 @@ module Language.Embedded.VHDL.Monad.Expression
   , function
   , qualified
   , cast
-  , resize, asSigned, asUnsigned, toSigned, toUnsigned, toInteger
+  , resize
+  , asBits, asSigned, asUnsigned, toSigned, toUnsigned, toInteger
   , range, downto, to
   , choices, is, between
   
@@ -169,6 +170,9 @@ cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion (unrange t)
 
 resize :: Expression -> Expression -> Primary
 resize exp size = function (Ident "resize") [exp, size]
+
+asBits :: Expression -> Primary
+asBits exp = function (Ident "std_logic_vector") [exp]
 
 asSigned :: Expression -> Primary
 asSigned exp = function (Ident "signed") [exp]

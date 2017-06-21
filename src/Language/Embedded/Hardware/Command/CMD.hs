@@ -15,7 +15,8 @@ module Language.Embedded.Hardware.Command.CMD where
 
 import Language.Embedded.VHDL (Mode)
 import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Represent.Bit
+import Language.Embedded.Hardware.Expression.Represent (Inhabited)
+import Language.Embedded.Hardware.Expression.Represent.Bit (Bit, Bits)
 
 import Control.Monad.Reader (ReaderT(..), runReaderT, lift)
 import Control.Monad.Operational.Higher
@@ -69,8 +70,10 @@ data SignalCMD fs a
     SetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching a signal.
     UnsafeFreezeSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
-    -- *** ...
+    -- *** todo: maybe this should be part of a set for concurrent instructions?
     ConcurrentSetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
+    -- *** todo: is this dangerous?
+    ToArray :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Array Bit)
 
 instance HFunctor SignalCMD
   where
@@ -78,8 +81,9 @@ instance HFunctor SignalCMD
     hfmap _ (GetSignal s) = GetSignal s
     hfmap _ (SetSignal s e) = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
-    --
+    -- ...
     hfmap _ (ConcurrentSetSignal s e) = ConcurrentSetSignal s e
+    hfmap _ (ToArray s) = ToArray s
 
 instance HBifunctor SignalCMD
   where
@@ -87,8 +91,9 @@ instance HBifunctor SignalCMD
     hbimap _ _ (GetSignal s) = GetSignal s
     hbimap _ f (SetSignal s e) = SetSignal s (f e)
     hbimap _ _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
-    --
+    -- ...
     hbimap _ f (ConcurrentSetSignal s e) = ConcurrentSetSignal s (f e)
+    hbimap _ _ (ToArray s) = ToArray s
 
 instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
   where
@@ -96,8 +101,9 @@ instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
     reexpressInstrEnv reexp (GetSignal s) = lift $ singleInj $ GetSignal s
     reexpressInstrEnv reexp (SetSignal s e) = lift . singleInj . SetSignal s =<< reexp e
     reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s
-    --
+    -- ...
     reexpressInstrEnv reexp (ConcurrentSetSignal s e) = lift . singleInj . ConcurrentSetSignal s =<< reexp e
+    reexpressInstrEnv reexp (ToArray s) = lift $ singleInj $ ToArray s
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -191,16 +197,20 @@ data ArrayCMD fs a
     GetArray :: pred a => Array a -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
     SetArray :: pred a => Array a -> exp Integer -> exp a -> ArrayCMD (Param3 prog exp pred) ()
-    -- ^ ...
+    -- ^ Copies a slice from the second array into the first.
     CopyArray :: pred a => (Array a, exp Integer) -> (Array a, exp Integer) -> exp Integer -> ArrayCMD (Param3 prog exp pred) ()
+    -- ^ Writes a value to all indicies of the array.
+    ResetArray :: pred a => Array a -> exp a -> ArrayCMD (Param3 prog exp pred) ()
 
-instance HFunctor ArrayCMD 
+instance HFunctor ArrayCMD
   where
     hfmap _ (NewArray n i) = NewArray n i
     hfmap _ (InitArray n is) = InitArray n is
     hfmap _ (GetArray a i) = GetArray a i
     hfmap _ (SetArray a i e) = SetArray a i e
     hfmap _ (CopyArray a b l) = CopyArray a b l
+    -- ...
+    hfmap _ (ResetArray a r) = ResetArray a r
 
 instance HBifunctor ArrayCMD
   where
@@ -209,6 +219,8 @@ instance HBifunctor ArrayCMD
     hbimap _ f (GetArray a i) = GetArray a (f i)
     hbimap _ f (SetArray a i e) = SetArray a (f i) (f e)
     hbimap _ f (CopyArray (a, oa) (b, ob) l) = CopyArray (a, f oa) (b, f ob) (f l)
+    -- ...
+    hbimap _ f (ResetArray a r) = ResetArray a (f r)
 
 instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
   where
@@ -223,6 +235,9 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
     reexpressInstrEnv reexp (CopyArray (a, oa) (b, ob) l)
       = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
            lift $ singleInj $ CopyArray (a, oa') (b, ob') l'
+    -- ...
+    reexpressInstrEnv reexp (ResetArray a r)
+      = do r' <- reexp r; lift $ singleInj $ ResetArray a r'
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -392,35 +407,52 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 --------------------------------------------------------------------------------
 -- ** Components.
 
--- | Signature arguments.
-data Arg a
-  where
-    Nil  :: Arg ()
-    ASig :: Signal a -> Arg b -> Arg (Signal a -> b)
-    AArr :: Array a -> Arg b -> Arg (Array a -> b)
-
 -- | Signature description.
 data Signature fs a
   where
     Ret  :: prog () -> Signature (Param3 prog exp pred) ()
-    SSig :: pred a => Name -> Mode
+    SSig :: (pred a, Integral a, Inhabited a)
+      => Name -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
-    SArr :: pred a => Name -> Mode
+    SArr :: (pred a, Integral a, Inhabited a)
+      => Name -> Mode -> Integer
       -> (Array a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Array a -> b)
 
 instance HFunctor Signature
   where
-    hfmap f (Ret m)        = Ret (f m)
-    hfmap f (SSig n m sig) = SSig n m (hfmap f . sig)
-    hfmap f (SArr n m arr) = SArr n m (hfmap f . arr)
+    hfmap f (Ret m)          = Ret (f m)
+    hfmap f (SSig n m sig)   = SSig n m (hfmap f . sig)
+    hfmap f (SArr n m l arr) = SArr n m l (hfmap f . arr)
 
 instance HBifunctor Signature
   where
-    hbimap g f (Ret m)        = Ret (g m)
-    hbimap g f (SSig n m sig) = SSig n m (hbimap g f . sig)
-    hbimap g f (SArr n m sig) = SArr n m (hbimap g f . sig)
+    hbimap g f (Ret m)          = Ret (g m)
+    hbimap g f (SSig n m sig)   = SSig n m (hbimap g f . sig)
+    hbimap g f (SArr n m l sig) = SArr n m l (hbimap g f . sig)
+
+reexpressSignature :: env
+  -> Signature (Param3 (ReaderT env (ProgramT instr (Param2 exp2 pred) m)) exp1 pred) a
+  -> Signature (Param3              (ProgramT instr (Param2 exp2 pred) m)  exp2 pred) a
+reexpressSignature env (Ret prog)      = Ret (runReaderT prog env)
+reexpressSignature env (SSig n m sf)   = SSig n m (reexpressSignature env . sf)
+reexpressSignature env (SArr n m l af) = SArr n m l (reexpressSignature env . af)
+
+--------------------------------------------------------------------------------
+
+-- | Signature arguments.
+data Argument pred a
+  where
+    Nil  :: Argument pred ()
+    ASig :: (pred a, Inhabited a)
+      => Signal a
+      -> Argument pred b
+      -> Argument pred (Signal a -> b)
+    AArr :: (pred a, Inhabited a)
+      => Array a
+      -> Argument pred b
+      -> Argument pred (Array a -> b)
 
 --------------------------------------------------------------------------------
 
@@ -432,11 +464,13 @@ data ComponentCMD fs a
   where
     -- ^ Wraps the given signature in a named component.
     StructComponent
-      :: Name -> Signature (Param3 prog exp pred) a
+      :: Name
+      -> Signature (Param3 prog exp pred) a
       -> ComponentCMD (Param3 prog exp pred) Name
     -- ^ Call for interfacing with a component.
     PortMap
-      :: Component (Param3 prog exp pred) a -> Arg a
+      :: Component (Param3 prog exp pred) a
+      -> Argument pred a
       -> ComponentCMD (Param3 prog exp pred) ()
 
 instance HFunctor ComponentCMD
@@ -455,13 +489,6 @@ instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
       singleInj $ StructComponent n (reexpressSignature env sig)
     reexpressInstrEnv reexp (PortMap (Component m sig) as) = ReaderT $ \env ->
       singleInj $ PortMap (Component m (reexpressSignature env sig)) as
-
-reexpressSignature :: env
-  -> Signature (Param3 (ReaderT env (ProgramT instr (Param2 exp2 pred) m)) exp1 pred) a
-  -> Signature (Param3              (ProgramT instr (Param2 exp2 pred) m)  exp2 pred) a
-reexpressSignature env (Ret prog)    = Ret (runReaderT prog env)
-reexpressSignature env (SSig n m sf) = SSig n m (reexpressSignature env . sf)
-reexpressSignature env (SArr n m af) = SArr n m (reexpressSignature env . af)
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
@@ -522,13 +549,19 @@ data VHDLCMD fs a
       -> prog ()    -- ^ program for when clock & reset.
       -> prog ()    -- ^ program for when clock & not reset.
       -> VHDLCMD (Param3 prog exp pred) ()
-    -- We should allow for base types to be treated as arrays.
-    CopyBits ::
-         (Signal (Bits n), exp Integer)
-      -> (Signal (Bits m), exp Integer)
+    -- todo: We should allow for base types to be treated as arrays of bits instead.
+    -- todo: The second argument should be over a variable.
+    CopyBits :: (pred a, pred b, pred Integer)
+      => (Signal a, exp Integer)
+      -> (Signal b, exp Integer)
       -> exp Integer
       -> VHDLCMD (Param3 prog exp pred) ()
-    -- These should be an expression instead.
+    CopyVBits :: (pred a, pred b, pred Integer)
+      => (Variable a, exp Integer)
+      -> (Signal   b, exp Integer)
+      -> exp Integer
+      -> VHDLCMD (Param3 prog exp pred) ()
+    -- todo: These two should be expressions instead.
     GetBit  :: pred Bit
       => Signal (Bits n)
       -> exp Integer
@@ -543,15 +576,17 @@ instance HFunctor VHDLCMD
   where
     hfmap f (Rising clk rst tru fls) = Rising clk rst (f tru) (f fls)
     hfmap _ (CopyBits a b l)         = CopyBits a b l
+    hfmap _ (CopyVBits a b l)        = CopyVBits a b l
     hfmap _ (GetBit s i)             = GetBit s i
     hfmap _ (GetBits s l u)          = GetBits s l u
 
 instance HBifunctor VHDLCMD
   where
-    hbimap g _ (Rising clk rst tru fls)     = Rising clk rst (g tru) (g fls)
-    hbimap _ f (CopyBits (a, oa) (b, ob) l) = CopyBits (a, f oa) (b, f ob) (f l)
-    hbimap _ f (GetBit s i)                 = GetBit s (f i)
-    hbimap _ f (GetBits s l u)              = GetBits s (f l) (f u)
+    hbimap g _ (Rising clk rst tru fls)      = Rising clk rst (g tru) (g fls)
+    hbimap _ f (CopyBits (a, oa) (b, ob) l)  = CopyBits (a, f oa) (b, f ob) (f l)
+    hbimap _ f (CopyVBits (a, oa) (b, ob) l) = CopyVBits (a, f oa) (b, f ob) (f l)
+    hbimap _ f (GetBit s i)                  = GetBit s (f i)
+    hbimap _ f (GetBits s l u)               = GetBits s (f l) (f u)
 
 instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
   where
@@ -562,6 +597,9 @@ instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
     reexpressInstrEnv reexp (CopyBits (a, oa) (b, ob) l)
       = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
            lift $ singleInj $ CopyBits (a, oa') (b, ob') l'
+    reexpressInstrEnv reexp (CopyVBits (a, oa) (b, ob) l)
+      = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
+           lift $ singleInj $ CopyVBits (a, oa') (b, ob') l'
     reexpressInstrEnv reexp (GetBit s i)
       = do i' <- reexp i
            lift $ singleInj $ GetBit s i'

@@ -1,7 +1,7 @@
 module Language.Embedded.VHDL.Monad.Util
   ( maybeLit, maybeVar
   , uType, uCast, uResize
-  , printPrimary
+  , printPrimary, printBits
   ) where
 
 import Language.VHDL
@@ -16,6 +16,67 @@ import Prelude hiding (toInteger)
 -- * Temp (still working on these).
 --------------------------------------------------------------------------------
 
+uType :: Expression -> SubtypeIndication -> Expression
+uType exp to = uCast exp to to
+
+-- todo: handle bit.
+-- todo: add naturals for unsigned integers.
+uCast :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
+uCast exp from to | isInteger from = go
+  where
+    go | isInteger  to = exp
+       | isUnsigned to = primary $ toUnsigned exp $ primary $ uWidth to
+       | isSigned   to = primary $ toSigned   exp $ primary $ uWidth to
+       | isBits     to = primary $ asBits
+                       $ primary $ toSigned exp
+                       $ primary $ uWidth to
+       | otherwise     = exp
+uCast exp from to | isUnsigned from = go
+  where
+    go | isInteger  to, Just lit <- maybeLit exp = exp
+       | isInteger  to = primary $ toInteger exp
+       | isUnsigned to = uResize exp from to
+       | isSigned   to = primary $ asSigned $ uResize exp from to
+       | isBits     to = primary $ asBits   $ uResize exp from to
+       | otherwise     = exp
+uCast exp from to | isSigned from = go
+  where
+    go | isInteger  to , Just lit <- maybeLit exp = exp
+       | isInteger  to = primary $ toInteger exp
+       | isUnsigned to = primary $ asUnsigned $ uResize exp from to
+       | isSigned   to = uResize exp from to
+       | isBits     to = primary $ asBits     $ uResize exp from to
+       | otherwise     = exp
+uCast exp from to | isBits from = go
+  where
+    go | isInteger  to, Just lit <- maybeLit exp = exp
+       | isInteger  to = primary $ toInteger  $ primary $ asSigned exp
+       | isUnsigned to = primary $ asUnsigned $ uResize exp from to
+       | isSigned   to = primary $ asSigned   $ uResize exp from to
+       | isBits     to = uResize exp from to
+       | otherwise     = exp
+uCast exp from to | isBit from, isBit to = exp
+uCast exp from to =
+  error $ "hardware-edsl.todo: missing cast from ("
+            ++ show from ++ ") to ("
+            ++ show to   ++ ")."
+
+uWidth :: SubtypeIndication -> Primary
+uWidth = lit . show . typeWidth
+
+uResize :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
+uResize exp from to
+  | Just p <- maybeLit exp = primary $ lit $ printPrimary p to
+  | Just v <- maybeVar exp, typeWidth from == typeWidth to = exp
+  | otherwise = primary $ resize exp $ primary $ uWidth to
+
+uLiteral :: Expression -> Primary
+uLiteral exp
+  | Just p <- maybeLit exp = p
+  | otherwise = toInteger exp
+
+--------------------------------------------------------------------------------
+
 maybeLit :: Expression -> Maybe Primary
 maybeLit (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p@(PrimLit _) Nothing) []) []) Nothing) Nothing) Nothing) = Just p
 maybeLit _ = Nothing
@@ -26,60 +87,27 @@ maybeVar _ = Nothing
 
 --------------------------------------------------------------------------------
 
-uType :: Expression -> SubtypeIndication -> Expression
-uType exp to = uCast exp to to
+isBit :: Type -> Bool
+isBit t = "std_logic" == typeName t
 
-uCast :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
-uCast exp from to = case (isInteger from) of
-  -- I'm an integer.
-  Just True -> case (isSigned to) of
-    -- Integer -> IntX
-    Just True  -> primary $ toSigned exp $ primary $ uWidth to
-    -- Integer -> WordX
-    Just False -> primary $ toUnsigned exp $ primary $ uWidth to
-    -- Integer -> Integer
-    Nothing    -> exp
-  Nothing   -> case (isSigned from) of
-    -- I'm signed.
-    Just True  -> case (isSigned to) of
-      -- IntX -> IntX
-      Just True  -> uResize exp from to
-      -- IntX -> WordX
-      Just False -> primary $ asUnsigned $ uResize exp from to
-      -- IntX -> Integer
-      Nothing    -> primary $ uInteger exp
-    -- I'm unsigned.
-    Just False -> case (isSigned to) of
-      -- WordX -> WordX
-      Just False -> uResize exp from to
-      -- WordX -> IntX
-      Just True  -> primary $ asSigned $ uResize exp from to
-      -- WordX -> Integer
-      Nothing    -> primary $ uInteger exp
-    -- I'm what now?
-    Nothing -> error "hardware-edsl: missing sym for type casting."
+isBits :: Type -> Bool
+isBits t = "std_logic_vector" == typeName t
 
-uWidth :: SubtypeIndication -> Primary
-uWidth = lit . show . width
+isSigned :: Type -> Bool
+isSigned t = "signed" == typeName t
 
-uResize :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
-uResize exp from to
-  | Just p <- maybeLit exp = primary $ lit $ printPrimary p to
-  | Just v <- maybeVar exp
-  , width from == width to = exp
-  | otherwise = primary $ resize exp $ primary $ uWidth to
+isUnsigned :: Type -> Bool
+isUnsigned t = "unsigned" == typeName t
 
-uInteger :: Expression -> Primary
-uInteger exp
-  | Just p <- maybeLit exp = p
-  | otherwise = toInteger exp
+isInteger :: Type -> Bool
+isInteger t = "integer" == typeName t
 
 --------------------------------------------------------------------------------
 
 -- todo: this assumes i>0? and i<2^(width t)?
 printPrimary :: Primary -> SubtypeIndication -> String
 printPrimary p t = case (unlit p) of
-  Just i  -> printBits (width t) i
+  Just i  -> printBits (typeWidth t) i
   Nothing -> error "hardware-edsl.printPrimary: not a literal."
 
 -- todo: copy of the one in 'Represent.hs', should move one of them.

@@ -37,7 +37,7 @@ initNamedSignal :: (SignalCMD :<: instr, pred a) => String -> exp a -> ProgramT 
 initNamedSignal name = singleInj . NewSignal (Base name) InOut . Just
 
 -- | Declare a signal.
-initSignal  :: (SignalCMD :<: instr, pred a) => exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
+initSignal :: (SignalCMD :<: instr, pred a) => exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
 initSignal  = initNamedSignal "s"
 
 -- | Declare an uninitialized named signal.
@@ -45,7 +45,7 @@ newNamedSignal :: (SignalCMD :<: instr, pred a) => String -> ProgramT instr (Par
 newNamedSignal name = singleInj $ NewSignal (Base name) InOut Nothing
 
 -- | Declare an uninitialized signal.
-newSignal   :: (SignalCMD :<: instr, pred a) => ProgramT instr (Param2 exp pred) m (Signal a)
+newSignal :: (SignalCMD :<: instr, pred a) => ProgramT instr (Param2 exp pred) m (Signal a)
 newSignal = newNamedSignal "s"
 
 -- | Fetches the current value of a signal.
@@ -61,6 +61,12 @@ setSignal s = singleInj . SetSignal s
 unsafeFreezeSignal :: (SignalCMD :<: instr, pred a, FreeExp exp, PredicateExp exp a, Monad m)
   => Signal a -> ProgramT instr (Param2 exp pred) m (exp a)
 unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
+
+--------------------------------------------------------------------------------
+
+-- | Concurrent update of a signals value.
+concurrentSetSignal :: (SignalCMD :<: instr, pred a) => Signal a -> exp a -> ProgramT instr (Param2 exp pred) m ()
+concurrentSetSignal s = singleInj . ConcurrentSetSignal s
 
 --------------------------------------------------------------------------------
 -- *** Signal attributes.
@@ -221,6 +227,11 @@ copyArray :: (ArrayCMD :<: instr, pred a, pred Integer)
   -> exp Integer            -- ^ number of elements to copy.
   -> ProgramT instr (Param2 exp pred) m ()
 copyArray dest src = singleInj . CopyArray dest src
+
+-- | ...
+resetArray :: (ArrayCMD :<: instr, pred a)
+  => Array a -> exp a -> ProgramT instr (Param2 exp pred) m ()
+resetArray a rst = singleInj $ ResetArray a rst
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
@@ -391,42 +402,48 @@ component = namedComponent "comp"
 -- | Call a component.
 portmap :: (ComponentCMD :<: instr)
   => Comp instr exp pred m a
-  -> Arg a
+  -> Argument pred a
   -> ProgramT instr (Param2 exp pred) m ()
 portmap pro arg = singleInj $ PortMap pro arg
 
 --------------------------------------------------------------------------------
 
-exactOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 exactOutput n = SSig (Exact n) Out
 
-namedOutput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 namedOutput n = SSig (Base n) Out
 
-namedOutputArr :: pred a => String -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
-namedOutputArr n = SArr (Base n) Out
-
-output :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+output :: (pred a, Integral a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 output = namedOutput "out"
 
-outputArr :: pred a => (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+exactOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+exactOutputArr n l = SArr (Exact n) Out l
+
+namedOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+namedOutputArr n l = SArr (Base n) Out l
+
+outputArr :: (pred a, Integral a, Inhabited a) => Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
 outputArr = namedOutputArr "out"
 
 --------------------------------------------------------------------------------
 
-exactInput  :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactInput  :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 exactInput  n = SSig (Exact n) In
 
-namedInput :: pred a => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedInput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 namedInput n = SSig (Base n) In
 
-namedInputArr :: pred a => String -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
-namedInputArr n = SArr (Base n) In
-
-input :: pred a => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+input :: (pred a, Integral a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 input = namedInput "in"
 
-inputArr :: pred a => (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+exactInputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+exactInputArr n l = SArr (Exact n) In l
+
+namedInputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+namedInputArr n l = SArr (Base n) In l
+
+inputArr :: (pred a, Integral a, Inhabited a) => Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
 inputArr = namedInputArr "in"
 
 --------------------------------------------------------------------------------
@@ -468,6 +485,9 @@ infixr .:
 
 --------------------------------------------------------------------------------
 -- ** VHDL specific instructions.
+--
+-- todo: these bit operations really do not have to be over just `Bits`, since
+--       VHDL treats all of our types as bit vectors anyway.
 
 -- | Short-hand that catures the common pattern:
 --     "when (risingEdge clk) (if (not rst) then tru else fls)"
@@ -480,23 +500,30 @@ whenRising :: (VHDLCMD :<: instr, pred Bit)
   -> ProgramT instr (Param2 exp pred) m ()
 whenRising clk rst tru fls = singleInj (Rising clk rst tru fls)
 
--- | Treats a signal of bits as an array and preforms a copy.
-copyBits :: (VHDLCMD :<: instr)
-  => (Signal (Bits u), exp Integer)
-  -> (Signal (Bits v), exp Integer)
+-- | ...
+copyBits :: (VHDLCMD :<: instr, pred a, pred b, pred Integer)
+  => (Signal a, exp Integer)
+  -> (Signal b, exp Integer)
   -> exp Integer
   -> ProgramT instr (Param2 exp pred) m ()
 copyBits a b l = singleInj (CopyBits a b l)
 
--- | Indexes a bit-array.
+-- | ...
+copyVBits :: (VHDLCMD :<: instr, pred a, pred b, pred Integer)
+  => (Variable a, exp Integer)
+  -> (Signal   b, exp Integer)
+  -> exp Integer
+  -> ProgramT instr (Param2 exp pred) m ()
+copyVBits a b l = singleInj (CopyVBits a b l)
+
+-- | ...
 getBit :: (VHDLCMD :<: instr, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
   => Signal (Bits u)
   -> exp Integer
   -> ProgramT instr (Param2 exp pred) m (exp Bit)
 getBit a i = fmap valToExp $ singleInj $ GetBit a i
 
-
--- | Slices a bit-array.
+-- | ...
 getBits :: (VHDLCMD :<: instr, pred Integer, PredicateExp exp Integer, FreeExp exp, Monad m)
   => Signal (Bits u)
   -> exp Integer
