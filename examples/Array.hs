@@ -38,8 +38,8 @@ type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 
-arrays :: HProg ()
-arrays =
+arrays :: Signal Bit -> Signal Bit -> HProg ()
+arrays clk rst =
   do a :: Array  Word8 <- newArray  20
      b :: VArray Word8 <- newVArray 10
 
@@ -55,10 +55,7 @@ arrays =
      setVArray b 1 (vb + 2 - va)
 
      copyArray (a, 0) (a, 2) 4
-     
-     return ()
-
 
 --------------------------------------------------------------------------------
 
-test = icompile arrays
+test = icompileWrap arrays

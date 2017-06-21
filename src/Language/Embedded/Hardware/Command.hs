@@ -9,6 +9,10 @@ module Language.Embedded.Hardware.Command
   , icompile
   , runIO
 
+  , compileWrap
+  , icompileWrap
+  , runIOWrap
+
   , VHDL.Mode(..)
 
   , module CMD
@@ -37,52 +41,86 @@ import qualified GHC.Exts as GHC (Constraint)
 --------------------------------------------------------------------------------
 
 -- | Compile a program to VHDL code represented as a string.
-compile
-  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
+compile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , pred Bool
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr)
+     )
   => Program instr (Param2 exp pred) a
   -> String
-compile = show . prettyVHDL . interpret . wrap
+compile = show . prettyVHDL . interpret
 
 -- | Compile a program to VHDL code and print it on the screen.
-icompile
-  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
+icompile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , pred Bool
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr)
+     )
   => Program instr (Param2 exp pred) a
   -> IO ()
 icompile = putStrLn . compile
 
 -- | Run a program in 'IO'.
-runIO
-  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
-   . (InterpBi instr IO (Param1 pred), HBifunctor instr, EvaluateExp exp)
+runIO :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
+   . ( InterpBi instr IO (Param1 pred)
+     , HBifunctor instr
+     , EvaluateExp exp
+     )
   => Program instr (Param2 exp pred) a
   -> IO a
 runIO = interpretBi (return . evalE)
 
 --------------------------------------------------------------------------------
 
+compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
+     ( Interp instr VHDL (Param2 exp pred)
+     , HFunctor instr
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr
+     , pred Bool
+     )
+  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
+  -> String
+compileWrap = compile . wrap
+
+icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
+     ( Interp instr VHDL (Param2 exp pred)
+     , HFunctor instr
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr
+     , pred Bool
+     )
+  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
+  -> IO ()
+icompileWrap = icompile . wrap
+
+runIOWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
+   . ( InterpBi instr IO (Param1 pred)
+     , HBifunctor instr
+     , EvaluateExp exp
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr
+     , pred Bool
+     )
+  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
+  -> IO ()
+runIOWrap = runIO . wrap
+
+--------------------------------------------------------------------------------
+
 -- | Wrap a hardware program in an empty architecture/entity.
-wrap
-  :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
+wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      ( StructuralCMD :<: instr
      , SignalCMD     :<: instr
-     , pred Bool)
-  => Program instr (Param2 exp pred) a
+     , pred Bool
+     )
+  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
   -> Program instr (Param2 exp pred) ()
 wrap body = do
-  clk <- entity "main" $
-    newExactPort "clk" VHDL.In :: Program instr (Param2 exp pred) (Signal Bool)
+  (clk, rst) <- entity "main" $ do
+    c :: Signal Bool <- newExactPort "clk" VHDL.In
+    r :: Signal Bool <- newExactPort "rst" VHDL.In
+    return (c, r)
   architecture "main" "behavioural" $
-    process (clk .: []) $
-      body >> return ()
+    process (clk .: rst .: []) $
+      body clk rst
 
 --------------------------------------------------------------------------------

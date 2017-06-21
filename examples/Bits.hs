@@ -37,8 +37,8 @@ type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 
-bits :: HProg ()
-bits =
+bits :: Signal Bit -> Signal Bit -> HProg ()
+bits clk rst =
   do let zero = litE (bitFromInteger 0) :: HExp (Bits 2)
          one  = litE (bitFromInteger 1) :: HExp (Bits 2)
          two  = litE (bitFromInteger 2) :: HExp (Bits 4)
@@ -60,6 +60,6 @@ bits =
 
 --------------------------------------------------------------------------------
 
-test = icompile bits
+test = icompileWrap bits
 
 --------------------------------------------------------------------------------

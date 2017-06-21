@@ -38,29 +38,29 @@ type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 
-integers :: HProg ()
-integers =
+integers :: Signal Bit -> Signal Bit -> HProg ()
+integers clk rst =
   do arr :: VArray Word8   <- initVArray [0..10]
      ref :: Variable Word8 <- initVariable 10
 
-     setVArray 0 20 arr
+     setVArray arr 0 20
      for (0) (10) $ \i ->
-       do v <- getVArray (10 - i) arr
-          setVArray i v arr
+       do v <- getVArray arr (10 - i)
+          setVArray arr i v
 
-     v0 <- getVArray 0 arr
-     v1 <- getVArray 1 arr
+     v0 <- getVArray arr 0
+     v1 <- getVArray arr 1
 
      iff (v0 `lte` 5)
-       (setVArray 0 5 arr)
+       (setVArray arr 0 5)
        (iff (v1 `lte` 5)
-         (setVArray 1 5  arr)
-         (setVArray 1 10 arr))
+         (setVArray arr 1 5)
+         (setVArray arr 1 10))
      
      return ()
 
 --------------------------------------------------------------------------------
 
-test = icompile integers
+test = icompileWrap integers
 
 --------------------------------------------------------------------------------

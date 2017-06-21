@@ -178,7 +178,8 @@ axi_light comp
     s_axi_bresp  s_axi_bvalid s_axi_bready
     s_axi_araddr s_axi_arprot s_axi_arvalid s_axi_arready s_axi_rdata
     s_axi_rresp  s_axi_rvalid s_axi_rready
-  = do ----------------------------------------
+  = do
+       ----------------------------------------
        -- AXI Light signals.
        --
        awaddr  <- signal "axi_awaddr"  :: Prog instr exp pred (Signal (Bits 32))
