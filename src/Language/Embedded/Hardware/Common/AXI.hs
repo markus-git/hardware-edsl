@@ -53,6 +53,7 @@ axi_light_signature
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
      , LoopCMD        :<: instr
+     , ComponentCMD   :<: instr
      , VHDLCMD        :<: instr
      , Hardware exp
      , FreeExp exp
@@ -132,6 +133,7 @@ axi_light
      , ConditionalCMD :<: instr
      , StructuralCMD  :<: instr
      , LoopCMD        :<: instr
+     , ComponentCMD   :<: instr
      , VHDLCMD        :<: instr
      , Hardware exp
      , FreeExp exp     
@@ -373,7 +375,7 @@ axi_light comp
        ----------------------------------------
        -- User logic.
        --
-       -- portmap ...
+       portmap comp registers
   where
     -- Application-specific design signals.
     addr_lsb, addr_bits :: Integer
