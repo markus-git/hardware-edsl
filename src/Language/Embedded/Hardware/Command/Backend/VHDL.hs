@@ -96,12 +96,14 @@ proxyF :: (exp a -> b) -> Proxy a
 proxyF _ = Proxy
 
 --------------------------------------------------------------------------------
+-- ** ...
 
 newSym :: Name -> VHDL String
 newSym (Base  n) = V.newSym n
 newSym (Exact n) = return   n
 
-freshVar :: forall proxy ct exp a. (CompileType ct, ct a) => proxy ct -> Name -> VHDL (Val a)
+freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
+  => proxy ct -> Name -> VHDL (Val a)
 freshVar _ prefix =
   do i <- newSym prefix
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
@@ -127,7 +129,7 @@ compileSignal (NewSignal base mode exp) =
      V.signal (ident i) mode t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
-  do i <- freshVar (Proxy::Proxy ct) (Base "s")
+  do i <- freshVar (Proxy::Proxy ct) (Base "v")
      V.assignVariable (simpleName i) (lift $ name s)
      return i
 compileSignal (SetSignal (SignalC s) exp) =
@@ -505,7 +507,7 @@ applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
   => Signature (Param3 VHDL exp ct) a
   -> Argument ct a
   -> VHDL [V.InterfaceDeclaration]
-applySig (Ret _)      (Nil)                  = return []
+applySig (Ret _)       (Nil)                  = return []
 applySig (SSig n m sf) (ASig s@(SignalC i) v) =
   do t  <- compTF (Proxy::Proxy ct) sf
      is <- applySig (sf s) v

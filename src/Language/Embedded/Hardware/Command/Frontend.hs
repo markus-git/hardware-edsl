@@ -408,26 +408,6 @@ portmap pro arg = singleInj $ PortMap pro arg
 
 --------------------------------------------------------------------------------
 
-exactOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-exactOutput n = SSig (Exact n) Out
-
-namedOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-namedOutput n = SSig (Base n) Out
-
-output :: (pred a, Integral a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
-output = namedOutput "out"
-
-exactOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
-exactOutputArr n l = SArr (Exact n) Out l
-
-namedOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
-namedOutputArr n l = SArr (Base n) Out l
-
-outputArr :: (pred a, Integral a, Inhabited a) => Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
-outputArr = namedOutputArr "out"
-
---------------------------------------------------------------------------------
-
 exactInput  :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 exactInput  n = SSig (Exact n) In
 
@@ -445,6 +425,26 @@ namedInputArr n l = SArr (Base n) In l
 
 inputArr :: (pred a, Integral a, Inhabited a) => Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
 inputArr = namedInputArr "in"
+
+--------------------------------------------------------------------------------
+
+exactOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactOutput n = SSig (Exact n) Out
+
+namedOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedOutput n = SSig (Base n) Out
+
+output :: (pred a, Integral a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+output = namedOutput "out"
+
+exactOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+exactOutputArr n l = SArr (Exact n) Out l
+
+namedOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+namedOutputArr n l = SArr (Base n) Out l
+
+outputArr :: (pred a, Integral a, Inhabited a) => Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+outputArr = namedOutputArr "out"
 
 --------------------------------------------------------------------------------
 

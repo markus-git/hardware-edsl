@@ -44,21 +44,42 @@ type HSig  = Sig CMD HExp HType Identity
 --------------------------------------------------------------------------------
 
 -- Adder program.
-adder :: Signal Word8 -> Signal Word8 -> Signal Word8 -> HProg ()
-adder a b c = 
-  do va <- getSignal a
-     vb <- getSignal b
-     setSignal c (va + vb)
+adder :: Signal Bit -> Signal Word8 -> Signal Word8 -> Signal Word8 -> HProg ()
+adder clk a b c =
+  process (clk .: []) $
+    do va <- getSignal a
+       vb <- getSignal b
+       setSignal c (va + vb)
 
 -- An encoding of the adder's signature.
-adder_sig :: HSig (Signal Word8 -> Signal Word8 -> Signal Word8 -> ())
-adder_sig = input (\a -> input (\b -> output (\c -> ret $ adder a b c)))
+adder_sig :: HSig (
+     Signal Bit
+  -> Signal Word8
+  -> Signal Word8
+  -> Signal Word8
+  -> ())
+adder_sig =
+  namedInput  "clk" $ \clk ->
+  namedInput  "a"   $ \a ->
+  namedInput  "b"   $ \b ->
+  namedOutput "c"   $ \c ->
+  ret (adder clk a b c)
 
 -- An adder component given by its signature.
-adder_comp :: HProg (HComp (Signal Word8 -> Signal Word8 -> Signal Word8 -> ()))
+adder_comp :: HProg (HComp (
+     Signal Bit
+  -> Signal Word8
+  -> Signal Word8
+  -> Signal Word8
+  -> ()))
 adder_comp = namedComponent "adder" adder_sig
 
 --------------------------------------------------------------------------------
+
+test_adder = icompile adder_comp
+
+--------------------------------------------------------------------------------
+-- ** ...
 
 adder_axi :: HProg ()
 adder_axi =
@@ -68,7 +89,6 @@ adder_axi =
 
 --------------------------------------------------------------------------------
 
-test = icompile adder_comp
 --test = icompile adder_axi
 
 --------------------------------------------------------------------------------
