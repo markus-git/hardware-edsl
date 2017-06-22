@@ -37,6 +37,18 @@ import GHC.TypeLits (KnownNat)
 -- * Translation of hardware commands into VHDL.
 --------------------------------------------------------------------------------
 
+--------------------------------------------------------------------------------
+-- ** ...
+
+evalEM :: forall exp a. EvaluateExp exp => Maybe (exp a) -> a
+evalEM e = maybe (error "empty value") (id) $ fmap evalE e
+
+compEM :: forall exp a. CompileExp exp => Maybe (exp a) -> VHDL (Maybe V.Expression)
+compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
+
+--------------------------------------------------------------------------------
+-- ** ...
+
 class CompileType ct
   where
     compileType :: ct a => proxy1 ct -> proxy2 a -> VHDL V.Type
@@ -71,14 +83,6 @@ compTA _ range _ =
 
     named :: V.Identifier -> V.SubtypeIndication
     named i = V.SubtypeIndication Nothing (V.TMType (V.NSimple i)) Nothing
-
---------------------------------------------------------------------------------
-
-evalEM :: forall exp a. EvaluateExp exp => Maybe (exp a) -> a
-evalEM e = maybe (error "empty value") (id) $ fmap evalE e
-
-compEM :: forall exp a. CompileExp exp => Maybe (exp a) -> VHDL (Maybe V.Expression)
-compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
 
 --------------------------------------------------------------------------------
 
@@ -464,52 +468,65 @@ compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct) => Compone
 compileComponent (StructComponent base sig) =
   do comp <- newSym base
      V.component $
-       do p <- V.entity (ident comp) (traverseS sig)
+       do p <- V.entity  (ident comp) (traverseSig sig)
           V.architecture (ident comp) (V.Ident "imp") p
-     return $ case base of
-       Base  _ -> Base comp
-       Exact _ -> Exact comp
+     return $ repack comp base
   where
-    traverseS :: Signature (Param3 VHDL exp ct) b ->  VHDL (VHDL ())
-    traverseS (Ret prog) = return prog
-    traverseS (SSig n m f) = 
-      do t <- compTF (Proxy::Proxy ct) f
-         i <- newSym n
-         V.signal (ident i) m t Nothing
-         traverseS (f (SignalC i))
-    traverseS (SArr n m l f) =
-      do
-         undefined
-
+    repack :: String -> Name -> Name
+    repack s (Base  _) = Base  s
+    repack s (Exact _) = Exact s    
 compileComponent (PortMap (Component base sig) as) =
   do i  <- newSym base
      l  <- V.newLabel
-     vs <- apply sig as
+     vs <- applySig sig as
      V.declareComponent  (ident i) vs
-     V.portMap l (ident i) (assoc sig as)
-  where
-    apply :: Signature (Param3 VHDL exp ct) b -> Argument ct b -> VHDL [V.InterfaceDeclaration]
-    apply (Ret _)     (Nil)                  = return []
-    apply (SSig n m f) (ASig s@(SignalC i) v) =
-      do t  <- compTF (Proxy::Proxy ct) f
-         is <- apply (f s) v
-         let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
-         return (i : is)
-    apply (SArr n m l f) (AArr a@(ArrayC i) v) =
-      do t  <- compTF (Proxy::Proxy ct) f
-         is <- apply (f a) v
-         let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
-         return (i : is)
-
-    assoc :: Signature (Param3 VHDL exp ct) b -> Argument ct b -> [(V.Identifier, V.Identifier)]
-    assoc (Ret _)        (Nil)                  = []
-    assoc (SSig n _ f)   (ASig s@(SignalC i) v) = (ident' n, ident i) : assoc (f s) v
-    assoc (SArr n _ _ f) (AArr a@(ArrayC i) v)  = (ident' n, ident i) : assoc (f a) v
+     V.portMap l (ident i) (assocSig sig as)
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
-runComponent (StructComponent _ _)            = return None
-runComponent (PortMap (Component _ sig) args) =
-  error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
+runComponent = error "hardware-edsl-todo: run components."
+
+--------------------------------------------------------------------------------
+
+traverseSig :: forall ct exp a . (CompileExp exp, CompileType ct) => Signature (Param3 VHDL exp ct) a -> VHDL (VHDL ())
+traverseSig (Ret  prog)   = return prog
+traverseSig (SSig n m sf) = 
+  do i <- newSym n
+     t <- compTF (Proxy::Proxy ct) sf
+     V.signal (ident i) m t Nothing
+     traverseSig (sf (SignalC i))
+traverseSig (SArr n m l af) =
+  do let r = range l V.downto 0
+     i <- newSym n
+     t <- compTA (Proxy::Proxy ct) r (proxyF af)
+     V.array (ident i) m t Nothing
+     traverseSig (af (ArrayC i))
+
+applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
+  => Signature (Param3 VHDL exp ct) a
+  -> Argument ct a
+  -> VHDL [V.InterfaceDeclaration]
+applySig (Ret _)      (Nil)                  = return []
+applySig (SSig n m sf) (ASig s@(SignalC i) v) =
+  do t  <- compTF (Proxy::Proxy ct) sf
+     is <- applySig (sf s) v
+     let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
+     return (i : is)
+applySig (SArr n m l af) (AArr a@(ArrayC i) v) =
+  do let r = range l V.downto 0
+     t  <- compTA (Proxy::Proxy ct) r (proxyF af)
+     is <- applySig (af a) v
+     let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
+     return (i : is)
+
+assocSig :: forall ct exp a . (CompileExp exp, CompileType ct)
+  => Signature (Param3 VHDL exp ct) a
+  -> Argument ct a
+  -> [(V.Identifier, V.Identifier)]
+assocSig (Ret _)         (Nil)                  = []
+assocSig (SSig n _ sf)   (ASig s@(SignalC i) v) =
+  (ident' n, ident i) : assocSig (sf s) v
+assocSig (SArr n _ _ af) (AArr a@(ArrayC i) v)  =
+  (ident' n, ident i) : assocSig (af a) v
 
 --------------------------------------------------------------------------------
 -- ** Structural.

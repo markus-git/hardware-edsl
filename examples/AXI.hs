@@ -68,7 +68,7 @@ adder_axi =
 
 --------------------------------------------------------------------------------
 
---test = icompile adder_comp
-test = icompile adder_axi
+test = icompile adder_comp
+--test = icompile adder_axi
 
 --------------------------------------------------------------------------------
