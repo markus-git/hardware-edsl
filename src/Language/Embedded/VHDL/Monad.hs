@@ -61,7 +61,7 @@ import Data.Either   (partitionEithers)
 import Data.Maybe    (catMaybes)
 import Data.Foldable (toList)
 import Data.Functor  (fmap)
-import Data.List     (groupBy)
+import Data.List     (groupBy, isPrefixOf)
 import Data.Set      (Set)
 import Data.Map      (Map)
 import qualified Data.Set as Set
@@ -215,9 +215,32 @@ findType t =
        False -> Just $ typeName $ Set.findMin set
        True  -> Nothing
 
+findPackage :: MonadV m => Identifier -> m (Maybe Identifier)
+findPackage i =
+  do units <- CMS.gets (_units)
+     files <- CMS.gets (concatMap getUnits . _designs)
+     return $ case (catMaybes $ map (pkgPrefix i) $ units ++ files) of
+       [p] -> Just p
+       [ ] -> Nothing
+  where
+    getUnits :: DesignFile -> [DesignUnit]
+    getUnits (DesignFile units) = units
+
+    pkgPrefix :: Identifier -> DesignUnit -> Maybe Identifier
+    pkgPrefix i u | Just p <- packageName u, i `isPrefix` p = Just p
+                  | otherwise = Nothing
+      where
+        isPrefix (Ident a) (Ident b) = a `isPrefixOf` b
+      
+--------------------------------------------------------------------------------
+
 typeName :: TypeDeclaration -> Identifier
 typeName (TDFull    (FullTypeDeclaration       i _)) = i
 typeName (TDPartial (IncompleteTypeDeclaration i))   = i
+
+packageName :: DesignUnit -> Maybe Identifier
+packageName (DesignUnit _ (LibraryPrimary (PrimaryPackage (PackageDeclaration i _)))) = Just i
+packageName _ = Nothing
 
 --------------------------------------------------------------------------------
 -- * Concurrent and sequential statements
@@ -440,8 +463,11 @@ entity name@(Ident n) m =
      newPorts    <- reverse <$> CMS.gets _signals
      newGenerics <- reverse <$> CMS.gets _variables
      CMS.when (P.not $ Set.null types) $
-       let packageName = n ++ "_types"
-        in addUnit $ packageTypes packageName types
+       do let packageName = n ++ "_types"
+          ctxt <- CMS.gets _context
+          addUnit    $ packageTypes packageName types
+          CMS.modify $ \s -> s { _context = ctxt }
+          newImport  $ packageName
      addUnit $ LibraryPrimary $ PrimaryEntity $
            EntityDeclaration name
              (EntityHeader
