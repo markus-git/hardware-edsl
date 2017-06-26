@@ -466,8 +466,8 @@ entity name@(Ident n) m =
        do let packageName = n ++ "_types"
           ctxt <- CMS.gets _context
           addUnit    $ packageTypes packageName types
-          CMS.modify $ \s -> s { _context = ctxt }
           newImport  $ packageName
+          CMS.modify $ \s -> s { _context = ctxt }
      addUnit $ LibraryPrimary $ PrimaryEntity $
            EntityDeclaration name
              (EntityHeader

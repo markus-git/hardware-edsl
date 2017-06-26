@@ -475,17 +475,12 @@ compileComponent (StructComponent base sig) =
      V.component $
        do p <- V.entity  (ident comp) (traverseSig sig)
           V.architecture (ident comp) (V.Ident "imp") p
-     return $ repack comp base
-  where
-    repack :: String -> Name -> Name
-    repack s (Base  _) = Base  s
-    repack s (Exact _) = Exact s    
-compileComponent (PortMap (Component base sig) as) =
-  do i  <- newSym base
-     l  <- V.newLabel
+     return comp
+compileComponent (PortMap (Component name sig) as) =
+  do l  <- V.newLabel
      vs <- applySig sig as
-     V.declareComponent  (ident i) vs
-     V.portMap l (ident i) (assocSig sig as)
+     V.declareComponent (ident name) vs
+     V.portMap l (ident name) (assocSig sig as)
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
 runComponent = error "hardware-edsl-todo: run components."

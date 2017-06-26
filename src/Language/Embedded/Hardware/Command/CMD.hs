@@ -457,7 +457,7 @@ data Argument pred a
 --------------------------------------------------------------------------------
 
 -- | Named components.
-data Component fs a = Component Name (Signature fs a)
+data Component fs a = Component String (Signature fs a)
 
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD fs a
@@ -466,7 +466,7 @@ data ComponentCMD fs a
     StructComponent
       :: Name
       -> Signature (Param3 prog exp pred) a
-      -> ComponentCMD (Param3 prog exp pred) Name
+      -> ComponentCMD (Param3 prog exp pred) String
     -- ^ Call for interfacing with a component.
     PortMap
       :: Component (Param3 prog exp pred) a
