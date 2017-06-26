@@ -7,6 +7,7 @@ module Language.Embedded.VHDL.Monad.Type
   , usigned2, usigned4, usigned8, usigned16, usigned32, usigned64
   , float, double
   , integer
+  , unconstrainedArray, constrainedArray
 
   , typeName, typeWidth
   , literal, point
@@ -93,6 +94,21 @@ integer :: Maybe Range -> Type
 integer r = SubtypeIndication Nothing
   (TMType (NSimple (Ident "integer")))
   (fmap (CRange . RangeConstraint) r)
+
+--------------------------------------------------------------------------------
+-- ** Array Declarations.
+
+compositeTypeDeclaration :: Identifier -> CompositeTypeDefinition -> TypeDeclaration
+compositeTypeDeclaration name t = TDFull (FullTypeDeclaration name (TDComposite t))
+
+unconstrainedArray :: Identifier -> SubtypeIndication -> TypeDeclaration
+unconstrainedArray name typ = compositeTypeDeclaration name $
+  CTDArray (ArrU (UnconstrainedArrayDefinition [] typ))
+
+constrainedArray :: Identifier -> SubtypeIndication -> Range -> TypeDeclaration
+constrainedArray name typ range = compositeTypeDeclaration name $
+  CTDArray (ArrC (ConstrainedArrayDefinition
+    (IndexConstraint [DRRange range]) typ))
 
 --------------------------------------------------------------------------------
 -- ** Helpers.

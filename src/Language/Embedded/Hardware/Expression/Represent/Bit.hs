@@ -48,7 +48,7 @@ module Language.Embedded.Hardware.Expression.Represent.Bit
 import Language.Embedded.Hardware.Expression.Represent
 
 import Language.Embedded.VHDL            (VHDL)
-import Language.Embedded.VHDL.Monad      (newSym, newLibrary, newImport, constrainedArray)
+import Language.Embedded.VHDL.Monad      (newSym, newLibrary, newImport)
 import Language.Embedded.VHDL.Monad.Type
 
 import Data.Ix

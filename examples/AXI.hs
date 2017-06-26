@@ -42,6 +42,7 @@ type HComp = Comp CMD HExp HType Identity
 type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
+-- ** Addition of two 8-bit words.
 
 -- Adder program.
 adder :: Signal Bit -> Signal Word8 -> Signal Word8 -> Signal Word8 -> HProg ()
@@ -77,6 +78,45 @@ adder_comp = namedComponent "adder" adder_sig
 --------------------------------------------------------------------------------
 
 test_adder = icompile adder_comp
+
+--------------------------------------------------------------------------------
+-- ** Point-wise multiplication of arrays over 8-bit words.
+
+-- Multiplier program.
+mult :: Integer -> Signal Bit -> Array Word8 -> Array Word8 -> Array Word8 -> HProg ()
+mult size clk a b c =
+  process (clk .: []) $
+    for 0 (value size) $ \ix ->
+      do va <- getArray a ix
+         vb <- getArray b ix
+         setArray c ix (va * vb)
+
+-- An encoding of the multiplier's signature.
+mult_sig :: Integer -> HSig (
+     Signal Bit
+  -> Array Word8
+  -> Array Word8
+  -> Array Word8
+  -> ())
+mult_sig size =
+  namedInput     "clk"    $ \clk ->
+  namedInputArr  "a" size $ \a ->
+  namedInputArr  "b" size $ \b ->
+  namedOutputArr "c" size $ \c ->
+  ret (mult size clk a b c)
+
+-- A multiplier component given by its signature.
+mult_comp :: Integer -> HProg (HComp (
+     Signal Bit
+  -> Array Word8
+  -> Array Word8
+  -> Array Word8
+  -> ()))
+mult_comp size = namedComponent "multiplier" (mult_sig size)
+
+--------------------------------------------------------------------------------
+
+test_mult = icompile (mult_comp 10)
 
 --------------------------------------------------------------------------------
 -- ** ...

@@ -22,7 +22,7 @@ import qualified Language.VHDL as V
 import Language.VHDL (Expression)
 
 import Language.Embedded.VHDL (VHDL)
-import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport, constrainedArray)
+import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport)
 import Language.Embedded.VHDL.Monad.Expression (lit)
 import Language.Embedded.VHDL.Monad.Type hiding (literal)
 import Language.Embedded.VHDL.Monad.Util (printBits)

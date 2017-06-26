@@ -29,6 +29,9 @@ module Language.Embedded.VHDL.Monad (
   , addConcurrent, addSequential
   , addType,       addComponent
 
+    -- ^ ...
+  , findType
+
     -- ^ declarations
   , declareComponent
                    
@@ -40,7 +43,7 @@ module Language.Embedded.VHDL.Monad (
   , entity, architecture, package, component
 
     -- ^ common things
-  , constant, signal, variable, array, unconstrainedArray, constrainedArray
+  , constant, signal, variable, array
   , assignSignal, assignVariable, assignArray
   , concurrentSignal, concurrentArray
   , portMap
@@ -201,6 +204,20 @@ addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
 -- | Adds a sequential statement.
 addSequential :: MonadV m => SequentialStatement -> m ()
 addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
+
+--------------------------------------------------------------------------------
+-- ** ...
+
+findType :: MonadV m => TypeDeclaration -> m (Maybe Identifier)
+findType t =
+  do set <- CMS.gets $ \s -> Set.filter (\t' -> compare t t' == EQ) (_types s)
+     return $ case Set.null set of
+       False -> Just $ typeName $ Set.findMin set
+       True  -> Nothing
+
+typeName :: TypeDeclaration -> Identifier
+typeName (TDFull    (FullTypeDeclaration       i _)) = i
+typeName (TDPartial (IncompleteTypeDeclaration i))   = i
 
 --------------------------------------------------------------------------------
 -- * Concurrent and sequential statements
@@ -412,27 +429,38 @@ architecture entity@(Ident n) name@(Ident e) m =
 --   declaraions and context items produced by running the monadic action.
 entity :: MonadV m => Identifier -> m a -> m a
 entity name@(Ident n) m =
-  do oldPorts    <- CMS.gets _signals
+  do oldTypes    <- CMS.gets _types
+     oldPorts    <- CMS.gets _signals
      oldGenerics <- CMS.gets _variables
-     CMS.modify $ \e -> e { _signals   = []
+     CMS.modify $ \e -> e { _types     = Set.empty
+                          , _signals   = []
                           , _variables = [] }
      result      <- m
+     types       <- CMS.gets _types
      newPorts    <- reverse <$> CMS.gets _signals
      newGenerics <- reverse <$> CMS.gets _variables
-     addUnit  $ LibraryPrimary $ PrimaryEntity $
+     CMS.when (P.not $ Set.null types) $
+       let packageName = n ++ "_types"
+        in addUnit $ packageTypes packageName types
+     addUnit $ LibraryPrimary $ PrimaryEntity $
            EntityDeclaration name
              (EntityHeader
                (GenericClause <$> maybeNull newGenerics)
                (PortClause    <$> maybeNull newPorts))
              ([])
              (Nothing)
-     CMS.modify $ \e -> e { _signals   = oldPorts
+     CMS.modify $ \e -> e { _types     = oldTypes
+                          , _signals   = oldPorts
                           , _variables = oldGenerics }
      return result
   
 maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
 maybeNull [] = Nothing
 maybeNull xs = Just $ InterfaceList $ xs --merge ...
+
+packageTypes :: String -> Set TypeDeclaration -> LibraryUnit
+packageTypes name types = LibraryPrimary $ PrimaryPackage $ PackageDeclaration
+  (Ident name) (fmap PHDIType (reverse $ Set.toList types))
 
 --------------------------------------------------------------------------------
 -- ** Packages
@@ -445,10 +473,7 @@ package name m =
      CMS.modify $ \e -> e { _types = Set.empty }
      result   <- m
      newTypes <- CMS.gets _types
-     addUnit  $ LibraryPrimary $ PrimaryPackage $
-           PackageDeclaration
-             (Ident name)
-             (fmap PHDIType $ Set.toList newTypes)
+     addUnit $ packageTypes name newTypes
      CMS.modify $ \e -> e { _types = oldTypes }
      return result
 
@@ -483,27 +508,9 @@ prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
 prettyVEnv :: VHDLEnv -> Doc
 prettyVEnv env = Text.vcat (pp main : fmap pp files)
   where
-    main  = DesignFile $ types ++ archi
-    types = reverse $ designTypes (_types env)
-    archi = reverse $ _units env
+    main  = DesignFile units
+    units = reverse $ _units env
     files = reverse $ map reorderDesign $ _designs env
-
--- todo: Scan type declarations for necessary imports instead.
---   * aren't we doing this already?
--- todo: Types are added in an ugly manner.
-designTypes :: Set TypeDeclaration -> [DesignUnit]
-designTypes set
-  | Set.null set = []
-  | otherwise    = _units . snd $ runVHDL pack emptyVHDLEnv
-  where
-    pack :: MonadV m => m ()
-    pack = package "types" $ do
-      -- *** Instead of importing every library possible the correct ones
-      --     should be declared when adding a type through 'addType'.
-      newLibrary "IEEE"
-      newImport  "IEEE.STD_LOGIC_1164"
-      newImport  "IEEE.NUMERIC_STD"
-      CMS.modify $ \e -> e { _types = set }
 
 --------------------------------------------------------------------------------
 
@@ -547,21 +554,6 @@ variable i t e = addVariable $ InterfaceVariableDeclaration [i] Nothing t e
 
 array :: MonadV m => Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> m ()
 array = signal
-
---------------------------------------------------------------------------------
--- ** Array Declarations.
-
-compositeTypeDeclaration :: Identifier -> CompositeTypeDefinition -> TypeDeclaration
-compositeTypeDeclaration name t = TDFull (FullTypeDeclaration name (TDComposite t))
-
-unconstrainedArray :: Identifier -> SubtypeIndication -> TypeDeclaration
-unconstrainedArray name typ = compositeTypeDeclaration name $
-  CTDArray (ArrU (UnconstrainedArrayDefinition [] typ))
-
-constrainedArray :: Identifier -> SubtypeIndication -> Range -> TypeDeclaration
-constrainedArray name typ range = compositeTypeDeclaration name $
-  CTDArray (ArrC (ConstrainedArrayDefinition
-    (IndexConstraint [DRRange range]) typ))
 
 --------------------------------------------------------------------------------
 -- ** Assign Signal/Variable.
@@ -681,7 +673,7 @@ getBlockIds (BDIFile     f) = fd_identifier_list f
 -- Ord instance for use in sets
 --------------------------------------------------------------------------------
 --
--- *** These break the Ord rules but seems to be needed for Set.
+-- todo: don't rely on these too much.
 
 deriving instance Ord ContextItem
 deriving instance Ord LibraryClause
@@ -690,24 +682,48 @@ deriving instance Ord UseClause
 
 instance Ord TypeDeclaration 
   where
-    compare (TDFull l)    (TDFull r)    = compare (ftd_identifier l) (ftd_identifier r)
-    compare (TDPartial l) (TDPartial r) = compare l r
-    compare (TDFull l)    _               = GT
-    compare (TDPartial l) _               = LT
+    compare (TDFull (FullTypeDeclaration a (TDComposite b)))
+            (TDFull (FullTypeDeclaration x (TDComposite y)))
+      = compare b y
+    compare _ _ = error "Ord not supported for incomplete type declarations."
+
+instance Ord CompositeTypeDefinition
+  where
+    compare (CTDArray a) (CTDArray x) = compare a x
+    compare _ _ = error "Ord not supported for record type definitions."
+
+instance Ord ArrayTypeDefinition
+  where
+    compare (ArrU (UnconstrainedArrayDefinition a b))
+            (ArrU (UnconstrainedArrayDefinition x y)) =
+      case compare b y of
+        GT -> GT
+        LT -> LT
+        EQ -> compare a x
+    compare (ArrC (ConstrainedArrayDefinition a b))
+            (ArrC (ConstrainedArrayDefinition x y)) =
+      case compare b y of
+        GT -> GT
+        LT -> LT
+        EQ -> compare a x
+
+deriving instance Ord IndexSubtypeDefinition
+
+deriving instance Ord IndexConstraint
 
 deriving instance Ord IncompleteTypeDeclaration
 
 instance Ord ComponentDeclaration
   where
-    compare l r = compare (comp_identifier l) (comp_identifier r)
+    compare a x = compare (comp_identifier a) (comp_identifier x)
 
 deriving instance Ord SubtypeIndication
 deriving instance Ord TypeMark
 
 instance Ord Constraint
   where
-    compare (CRange a) (CRange b) = compare a b
-    compare _ _ = error "Ord not supported for index constraints"
+    compare (CRange a) (CRange x) = compare a x
+    compare _ _ = error "Ord not supported for index constraints."
 
 deriving instance Ord RangeConstraint
 
@@ -737,6 +753,7 @@ deriving instance Ord Factor
 instance Ord Primary
   where
     compare (PrimName a) (PrimName x) = compare a x
+    compare (PrimLit  a) (PrimLit  x) = compare a x
 
 deriving instance Ord LogicalOperator
 deriving instance Ord RelationalOperator
@@ -777,5 +794,16 @@ instance Ord Prefix
 
 deriving instance Ord AttributeName
 deriving instance Ord Signature
+
+deriving instance Ord Literal
+deriving instance Ord NumericLiteral
+deriving instance Ord AbstractLiteral
+deriving instance Ord PhysicalLiteral
+deriving instance Ord DecimalLiteral
+deriving instance Ord EnumerationLiteral
+deriving instance Ord BitStringLiteral
+
+deriving instance Ord Exponent
+deriving instance Ord BasedLiteral
 
 --------------------------------------------------------------------------------

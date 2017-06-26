@@ -74,8 +74,11 @@ compTA _ range _ =
   do i <- newSym (Base "array")
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
      let array = V.constrainedArray (ident i) t range
-     V.addType array
-     return (typed array)
+     s <- V.findType array
+     case s of
+       Just n  -> do return (named n)
+       Nothing -> do V.addType array
+                     return (typed array)
   where
     typed :: V.TypeDeclaration -> V.SubtypeIndication
     typed (V.TDFull    (V.FullTypeDeclaration i _))     = named i

@@ -73,8 +73,8 @@ runIO = interpretBi (return . evalE)
 compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr
+     , ComponentCMD :<: instr
+     , SignalCMD    :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
@@ -84,8 +84,8 @@ compileWrap = compile . wrap
 icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr
+     , ComponentCMD :<: instr
+     , SignalCMD    :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
@@ -96,8 +96,8 @@ runIOWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
    . ( InterpBi instr IO (Param1 pred)
      , HBifunctor instr
      , EvaluateExp exp
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr
+     , ComponentCMD :<: instr
+     , SignalCMD    :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
@@ -106,21 +106,17 @@ runIOWrap = runIO . wrap
 
 --------------------------------------------------------------------------------
 
--- | Wrap a hardware program in an empty architecture/entity.
+-- | Wrap a hardware program in a architecture/entity pair.
 wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
-     ( StructuralCMD :<: instr
-     , SignalCMD     :<: instr
+     ( ComponentCMD :<: instr
+     , SignalCMD    :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
   -> Program instr (Param2 exp pred) ()
-wrap body = do
-  (clk, rst) <- entity "main" $ do
-    c :: Signal Bool <- newExactPort "clk" VHDL.In
-    r :: Signal Bool <- newExactPort "rst" VHDL.In
-    return (c, r)
-  architecture "main" "behavioural" $
-    process (clk .: rst .: []) $
-      body clk rst
+wrap sf = void $ component $
+  namedInput "clk" $ \c ->
+  namedInput "rst" $ \r ->
+  ret $ sf c r
 
 --------------------------------------------------------------------------------
