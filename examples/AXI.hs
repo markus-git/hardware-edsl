@@ -121,14 +121,16 @@ test_mult = icompile (mult_comp 10)
 --------------------------------------------------------------------------------
 -- ** ...
 
-adder_axi :: HProg ()
-adder_axi =
-  do comp <- adder_comp
-     namedComponent "adder_axi" (axi_light_signature comp)
+axi_comp comp = namedComponent "adder_axi" (axi_light_signature comp)
+
+axi :: HProg ()
+axi =
+  do add <- adder_comp
+     axi <- axi_comp add
      return ()
 
 --------------------------------------------------------------------------------
 
-test = icompile adder_axi
+test = icompile axi
 
 --------------------------------------------------------------------------------

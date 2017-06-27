@@ -477,10 +477,12 @@ compileComponent (StructComponent base sig) =
           V.architecture (ident comp) (V.Ident "imp") p
      return comp
 compileComponent (PortMap (Component name sig) as) =
-  do l  <- V.newLabel
+  do let i = ident name
+     l  <- V.newLabel
      vs <- applySig sig as
-     V.declareComponent (ident name) vs
-     V.portMap l (ident name) (assocSig sig as)
+     V.inheritContext i
+     V.declareComponent i vs
+     V.portMap l i (assocSig sig as)
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
 runComponent = error "hardware-edsl-todo: run components."

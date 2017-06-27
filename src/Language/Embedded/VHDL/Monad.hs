@@ -31,6 +31,7 @@ module Language.Embedded.VHDL.Monad (
 
     -- ^ ...
   , findType
+  , inheritContext
 
     -- ^ declarations
   , declareComponent
@@ -61,7 +62,7 @@ import Data.Either   (partitionEithers)
 import Data.Maybe    (catMaybes)
 import Data.Foldable (toList)
 import Data.Functor  (fmap)
-import Data.List     (groupBy, isPrefixOf)
+import Data.List     (groupBy, isPrefixOf, stripPrefix, find)
 import Data.Set      (Set)
 import Data.Map      (Map)
 import qualified Data.Set as Set
@@ -72,6 +73,8 @@ import qualified Text.PrettyPrint as Text
 
 import Prelude hiding (null, not, abs, exp, rem, mod, div, and, or)
 import qualified Prelude as P
+
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- * VHDL monad and environment.
@@ -207,6 +210,65 @@ addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
 
 --------------------------------------------------------------------------------
 -- ** ...
+--
+-- having units be indexed by their names would help.
+
+inheritContext :: MonadV m => Identifier -> m ()
+inheritContext e =
+  do u <- findEntity e
+     case u of
+       Nothing     -> return ()
+       Just entity -> inherit $ getContext entity
+  where
+    inherit :: MonadV m => ContextClause -> m ()
+    inherit (ContextClause cs) = go cs
+      where
+        go :: MonadV m => [ContextItem] -> m ()
+        go []                        = return ()
+        go (l@(ContextLibrary _):cs) = go cs
+        go (c@(ContextUse _)    :cs) = add c >> go cs
+
+        add :: MonadV m => ContextItem -> m ()
+        add c = CMS.modify $ \s -> s { _context = Set.insert c (_context s) }
+
+extendContext :: MonadV m => Identifier -> m ()
+extendContext e =
+  do u <- findEntity e
+     case u of
+       Nothing     -> return ()
+       Just entity ->
+         do n <- extendUnit entity
+            updateUnit n
+  where
+    updateUnit :: MonadV m => DesignUnit -> m ()
+    updateUnit u =
+      do units <- CMS.gets _units
+         let new = update u units
+         CMS.modify $ \s -> s { _units = new }
+
+    update :: DesignUnit -> [DesignUnit] -> [DesignUnit]
+    update u []     = []
+    update u (x:xs)
+      | Just a <- name u
+      , Just b <- name x
+      , a == b    = u : xs
+      | otherwise = x : update u xs
+      where
+        name :: DesignUnit -> Maybe Identifier
+        name (DesignUnit _ (LibraryPrimary (PrimaryEntity (EntityDeclaration i _ _ _)))) = Just i
+        name _ = Nothing
+    
+    extendUnit :: MonadV m => DesignUnit -> m (DesignUnit)
+    extendUnit (DesignUnit (ContextClause cs) lib) =
+      do ctxt <- CMS.gets _context
+         let new = foldr extend cs ctxt
+         return (DesignUnit (ContextClause new) lib)
+
+    extend :: ContextItem -> [ContextItem] -> [ContextItem]
+    extend c cs = if (elem c cs) then (cs) else (cs ++ [c])
+
+--------------------------------------------------------------------------------
+-- ** ...
 
 findType :: MonadV m => TypeDeclaration -> m (Maybe Identifier)
 findType t =
@@ -215,24 +277,27 @@ findType t =
        False -> Just $ typeName $ Set.findMin set
        True  -> Nothing
 
-findPackage :: MonadV m => Identifier -> m (Maybe Identifier)
-findPackage i =
-  do units <- CMS.gets (_units)
-     files <- CMS.gets (concatMap getUnits . _designs)
-     return $ case (catMaybes $ map (pkgPrefix i) $ units ++ files) of
-       [p] -> Just p
-       [ ] -> Nothing
+findEntity :: MonadV m => Identifier -> m (Maybe DesignUnit)
+findEntity e =
+  do curr <- CMS.gets _units
+     prev <- CMS.gets _designs
+     return $ safeHead $ filter select $ curr ++ concatMap getUnits prev
   where
-    getUnits :: DesignFile -> [DesignUnit]
-    getUnits (DesignFile units) = units
+    select :: DesignUnit -> Bool
+    select (DesignUnit _ (LibraryPrimary (PrimaryEntity (EntityDeclaration i _ _ _)))) | e == i = True
+    select _ = False
 
-    pkgPrefix :: Identifier -> DesignUnit -> Maybe Identifier
-    pkgPrefix i u | Just p <- packageName u, i `isPrefix` p = Just p
-                  | otherwise = Nothing
-      where
-        isPrefix (Ident a) (Ident b) = a `isPrefixOf` b
-      
+    safeHead :: [a] -> Maybe a
+    safeHead []    = Nothing
+    safeHead (x:_) = Just x
+                     
 --------------------------------------------------------------------------------
+
+getUnits :: DesignFile -> [DesignUnit]
+getUnits (DesignFile units) = units
+
+getContext :: DesignUnit -> ContextClause
+getContext (DesignUnit ctxt _) = ctxt
 
 typeName :: TypeDeclaration -> Identifier
 typeName (TDFull    (FullTypeDeclaration       i _)) = i
@@ -439,6 +504,7 @@ architecture entity@(Ident n) name@(Ident e) m =
                           , _sequential = oldSequential
                           , _types      = oldTypes
                           , _components = oldComponents }
+     extendContext entity
      return result
   where
     isSignal :: SequentialStatement -> Bool
@@ -466,8 +532,8 @@ entity name@(Ident n) m =
        do let packageName = n ++ "_types"
           ctxt <- CMS.gets _context
           addUnit    $ packageTypes packageName types
-          newImport  $ packageName
           CMS.modify $ \s -> s { _context = ctxt }
+          newImport  $ "WORK." ++ packageName
      addUnit $ LibraryPrimary $ PrimaryEntity $
            EntityDeclaration name
              (EntityHeader
@@ -479,7 +545,7 @@ entity name@(Ident n) m =
                           , _signals   = oldPorts
                           , _variables = oldGenerics }
      return result
-  
+
 maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
 maybeNull [] = Nothing
 maybeNull xs = Just $ InterfaceList $ xs --merge ...
@@ -509,12 +575,14 @@ package name m =
 -- | Declares an entire component, with entity declaration and a body.
 component :: MonadV m => m () -> m ()
 component m =
-  do oldEnv <- CMS.get
-     CMS.put emptyVHDLEnv
+  do oldEnv   <- CMS.get
+     oldFiles <- CMS.gets _designs
+     CMS.put (emptyVHDLEnv { _designs = oldFiles })
      m
-     units <- CMS.gets _units
-     CMS.put oldEnv
-     addDesign $ DesignFile units
+     newUnits <- CMS.gets _units
+     newFiles <- CMS.gets _designs
+     CMS.put (oldEnv { _designs = newFiles })
+     addDesign $ DesignFile newUnits
 
 --------------------------------------------------------------------------------
 -- * Pretty printing VHDL programs
