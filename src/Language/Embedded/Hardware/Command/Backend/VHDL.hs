@@ -58,10 +58,13 @@ class CompileType ct
 instance CompileType HType
   where
     compileType _ = compT
-    compileLit  _ = literal
-    compileBits _ = literalBits
+    compileLit  _ = return . lift . V.lit . format
+    compileBits _ = return . lift . V.lit . bits
 
 --------------------------------------------------------------------------------
+
+compT :: HType a => proxy a -> VHDL V.Type
+compT = declare
 
 compTM :: forall proxy ct exp a. (CompileType ct, ct a) => proxy ct -> Maybe (exp a) -> VHDL V.Type
 compTM _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)

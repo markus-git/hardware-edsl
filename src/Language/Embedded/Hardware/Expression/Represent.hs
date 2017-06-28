@@ -5,9 +5,6 @@ module Language.Embedded.Hardware.Expression.Represent
   ( HType(..)
   , Inhabited(..)
   , Rep(..)
-  , compT
-  , literal
-  , literalBits
   
   , declareBoolean
   , declareNumeric
@@ -29,6 +26,7 @@ import Language.Embedded.VHDL.Monad.Util (printBits)
 
 import Language.Embedded.Hardware.Expression.Hoist (lift)
 
+import Data.Char (isDigit)
 import Data.Int
 import Data.Word
 import Data.Typeable
@@ -42,8 +40,6 @@ import Text.Printf
 class    (Typeable a, Rep a, Eq a) => HType a
 instance (Typeable a, Rep a, Eq a) => HType a
 
---------------------------------------------------------------------------------
-
 -- | A 'rep'resentable value.
 class Rep a
   where
@@ -51,17 +47,9 @@ class Rep a
     format  :: a -> String
     bits    :: a -> String
 
--- | ...
-compT :: HType a => proxy a -> VHDL Type
-compT = declare
-
--- | ...
-literal :: HType a => a -> VHDL Expression
-literal = return . lift . lit . format
-
--- | ...
-literalBits :: HType a => a -> VHDL Expression
-literalBits = return . lift . lit . bits
+-- | Bit-length of a representable type.
+bitSize :: Rep a => a -> Int
+bitSize = length . filter isDigit . bits
 
 --------------------------------------------------------------------------------
 -- ** Boolean
