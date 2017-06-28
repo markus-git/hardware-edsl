@@ -1,6 +1,8 @@
 module Language.Embedded.VHDL.Monad.Util
   ( maybeLit, maybeVar
   , uType, uCast, uResize
+  , fromPrimary
+  , stripPrimary, stripExpression
   , printPrimary, printBits
   ) where
 
@@ -25,34 +27,34 @@ uCast :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
 uCast exp from to | isInteger from = go
   where
     go | isInteger  to = exp
-       | isUnsigned to = primary $ toUnsigned exp $ primary $ uWidth to
-       | isSigned   to = primary $ toSigned   exp $ primary $ uWidth to
-       | isBits     to = primary $ asBits
-                       $ primary $ toSigned exp
-                       $ primary $ uWidth to
+       | isUnsigned to = fromPrimary $ toUnsigned exp $ fromPrimary $ uWidth to
+       | isSigned   to = fromPrimary $ toSigned   exp $ fromPrimary $ uWidth to
+       | isBits     to = fromPrimary $ asBits
+                       $ fromPrimary $ toSigned exp
+                       $ fromPrimary $ uWidth to
        | otherwise     = exp
 uCast exp from to | isUnsigned from = go
   where
     go | isInteger  to, Just lit <- maybeLit exp = exp
-       | isInteger  to = primary $ toInteger exp
+       | isInteger  to = fromPrimary $ toInteger exp
        | isUnsigned to = uResize exp from to
-       | isSigned   to = primary $ asSigned $ uResize exp from to
-       | isBits     to = primary $ asBits   $ uResize exp from to
+       | isSigned   to = fromPrimary $ asSigned $ uResize exp from to
+       | isBits     to = fromPrimary $ asBits   $ uResize exp from to
        | otherwise     = exp
 uCast exp from to | isSigned from = go
   where
     go | isInteger  to , Just lit <- maybeLit exp = exp
-       | isInteger  to = primary $ toInteger exp
-       | isUnsigned to = primary $ asUnsigned $ uResize exp from to
+       | isInteger  to = fromPrimary $ toInteger exp
+       | isUnsigned to = fromPrimary $ asUnsigned $ uResize exp from to
        | isSigned   to = uResize exp from to
-       | isBits     to = primary $ asBits     $ uResize exp from to
+       | isBits     to = fromPrimary $ asBits     $ uResize exp from to
        | otherwise     = exp
 uCast exp from to | isBits from = go
   where
     go | isInteger  to, Just lit <- maybeLit exp = exp
-       | isInteger  to = primary $ toInteger  $ primary $ asSigned exp
-       | isUnsigned to = primary $ asUnsigned $ uResize exp from to
-       | isSigned   to = primary $ asSigned   $ uResize exp from to
+       | isInteger  to = fromPrimary $ toInteger  $ fromPrimary $ asSigned exp
+       | isUnsigned to = fromPrimary $ asUnsigned $ uResize exp from to
+       | isSigned   to = fromPrimary $ asSigned   $ uResize exp from to
        | isBits     to = uResize exp from to
        | otherwise     = exp
 uCast exp from to | isBit from, isBit to = exp
@@ -66,9 +68,9 @@ uWidth = lit . show . typeWidth
 
 uResize :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
 uResize exp from to
-  | Just p <- maybeLit exp = primary $ lit $ printPrimary p to
+  | Just p <- maybeLit exp = fromPrimary $ lit $ printPrimary p to
   | Just v <- maybeVar exp, typeWidth from == typeWidth to = exp
-  | otherwise = primary $ resize exp $ primary $ uWidth to
+  | otherwise = fromPrimary $ resize exp $ fromPrimary $ uWidth to
 
 uLiteral :: Expression -> Primary
 uLiteral exp
@@ -84,6 +86,21 @@ maybeLit _ = Nothing
 maybeVar :: Expression -> Maybe Primary
 maybeVar (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p@(PrimName _) Nothing) []) []) Nothing) Nothing) Nothing) = Just p
 maybeVar _ = Nothing
+
+--------------------------------------------------------------------------------
+
+fromPrimary :: Primary -> Expression
+fromPrimary p = stripExpression $ ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing
+
+--------------------------------------------------------------------------------
+
+stripPrimary :: Primary -> Primary
+stripPrimary (PrimExp (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing)) = p
+stripPrimary p = p
+
+stripExpression :: Expression -> Expression
+stripExpression (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim (PrimExp e) Nothing) []) []) Nothing) Nothing) Nothing) = e
+stripExpression e = e
 
 --------------------------------------------------------------------------------
 
@@ -115,9 +132,6 @@ printBits :: (PrintfArg a, PrintfType b) => Int -> a -> b
 printBits zeroes = printf ("\"%0" ++ show zeroes ++ "b\"")
 
 --------------------------------------------------------------------------------
-
-primary :: Primary -> Expression
-primary p = ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing
 
 unlit :: Primary -> Maybe Integer
 unlit (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = Just (read i)

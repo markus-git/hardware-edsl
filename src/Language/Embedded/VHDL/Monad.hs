@@ -52,6 +52,8 @@ module Language.Embedded.VHDL.Monad (
 
 import Language.VHDL
 
+import Language.Embedded.VHDL.Monad.Util (stripPrimary)
+
 import Control.Applicative    ((<$>))
 import Control.Monad.Identity (Identity)
 import Control.Monad.State    (StateT, MonadState, MonadIO)
@@ -846,8 +848,38 @@ deriving instance Ord Factor
 
 instance Ord Primary
   where
-    compare (PrimName a) (PrimName x) = compare a x
-    compare (PrimLit  a) (PrimLit  x) = compare a x
+    compare (PrimName  a) (PrimName  x) = compare a x
+    compare (PrimLit   a) (PrimLit   x) = compare a x
+    compare (PrimAgg   a) (PrimAgg   x) = compare a x
+    compare (PrimFun   a) (PrimFun   x) = compare a x
+    compare (PrimQual  a) (PrimQual  x) = compare a x
+    compare (PrimTCon  a) (PrimTCon  x) = compare a x
+    compare (PrimAlloc a) (PrimAlloc x) = compare a x
+    compare (PrimExp   a) (PrimExp   x) = compare a x
+
+    compare a@(PrimExp _) x = compare (stripPrimary a) x
+    compare a x@(PrimExp _) = compare a (stripPrimary x)
+    
+    compare a x = error ("\na: " ++ show a ++ "\nx: " ++ show x)
+
+deriving instance Ord Aggregate
+deriving instance Ord ElementAssociation
+deriving instance Ord Choices
+deriving instance Ord Choice
+
+deriving instance Ord FunctionCall
+deriving instance Ord AssociationList
+deriving instance Ord AssociationElement
+deriving instance Ord FormalPart
+deriving instance Ord FormalDesignator
+deriving instance Ord ActualPart
+deriving instance Ord ActualDesignator
+
+deriving instance Ord QualifiedExpression
+
+deriving instance Ord TypeConversion
+
+deriving instance Ord Allocator
 
 deriving instance Ord LogicalOperator
 deriving instance Ord RelationalOperator

@@ -176,7 +176,7 @@ compileVariable (NewVariable base exp) =
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "v")
-     V.assignVariable (simpleName i) (lift $ V.PrimName $ V.NSimple $ ident var)
+     V.assignVariable (simpleName i) (lift $ name var)
      return i
 compileVariable (SetVariable (VariableC var) exp) =
   do e' <- compE exp
