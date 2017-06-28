@@ -73,8 +73,9 @@ runIO = interpretBi (return . evalE)
 compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , ComponentCMD :<: instr
-     , SignalCMD    :<: instr
+     , ComponentCMD  :<: instr
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
@@ -84,8 +85,9 @@ compileWrap = compile . wrap
 icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , ComponentCMD :<: instr
-     , SignalCMD    :<: instr
+     , ComponentCMD  :<: instr
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
@@ -96,8 +98,9 @@ runIOWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
    . ( InterpBi instr IO (Param1 pred)
      , HBifunctor instr
      , EvaluateExp exp
-     , ComponentCMD :<: instr
-     , SignalCMD    :<: instr
+     , ComponentCMD  :<: instr
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
@@ -108,8 +111,9 @@ runIOWrap = runIO . wrap
 
 -- | Wrap a hardware program in a architecture/entity pair.
 wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
-     ( ComponentCMD :<: instr
-     , SignalCMD    :<: instr
+     ( ComponentCMD  :<: instr
+     , StructuralCMD :<: instr
+     , SignalCMD     :<: instr
      , pred Bool
      )
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
@@ -117,6 +121,6 @@ wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
 wrap sf = void $ component $
   namedInput "clk" $ \c ->
   namedInput "rst" $ \r ->
-  ret $ sf c r
+  ret $ process (c .: r .: []) $ sf c r
 
 --------------------------------------------------------------------------------
