@@ -586,7 +586,7 @@ compileVHDL (CopyBits ((SignalC a), oa) ((SignalC b), ob) l) =
          slice_b = (lift ob', lift (V.add [lift len, lift ob']))
          dest    = V.slice (ident a) slice_a
          src     = V.slice (ident b) slice_b
-     V.assignSignal src (lift $ V.PrimName dest)
+     V.assignSignal dest (lift $ V.PrimName src)
 compileVHDL (CopyVBits ((VariableC a), oa) ((SignalC b), ob) l) =
   do oa' <- compE oa
      ob' <- compE ob
@@ -595,7 +595,7 @@ compileVHDL (CopyVBits ((VariableC a), oa) ((SignalC b), ob) l) =
          slice_b = (lift ob', lift (V.add [lift len, lift ob']))
          dest    = V.slice (ident a) slice_a
          src     = V.slice (ident b) slice_b
-     V.assignVariable src (lift $ V.PrimName dest)
+     V.assignVariable dest (lift $ V.PrimName src)
 compileVHDL (GetBit (SignalC bits) ix) =
   do i   <- freshVar (Proxy::Proxy ct) (Base "b")
      ix' <- compE ix
