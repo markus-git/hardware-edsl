@@ -173,7 +173,7 @@ compHExp e = Hoist.lift <$> compSimple e
           return $ Hoist.E $ VHDL.uCast x' tf tt
     compDomain primary args
       | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
-      | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ format i
+      | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ printVal i
       | Just (Aggregate a)  <- prj primary = return $ Hoist.P $ VHDL.aggregate a
       | Just (Function f _) <- prj primary = do
           as <- sequence $ listArgs compLoop args

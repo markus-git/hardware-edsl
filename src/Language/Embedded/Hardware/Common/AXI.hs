@@ -13,7 +13,7 @@
 module Language.Embedded.Hardware.Common.AXI (axi_light_signature) where
 
 import Language.Embedded.Hardware hiding (Constraint)
-import Language.Embedded.Hardware.Expression.Represent (Inhabited(..))
+import Language.Embedded.Hardware.Expression.Represent
 
 import Control.Monad.Identity (Identity)
 import Control.Monad.Operational.Higher hiding (when)
@@ -444,26 +444,55 @@ loadInputs :: forall instr (exp :: * -> *) pred m a .
   -> Argument pred a
   -> [When Integer (Prog instr exp pred)]
 loadInputs wdata wren tmp i (Ret _) (Nil) = []
-loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
-    When (Is i) load : loadInputs wdata wren tmp (i+1) (sf s) arg
-  where load :: Prog instr exp pred ()
-        load = for (value 0) (value 3) $ \ix ->
-          do wb <- getBit wren ix
-             when (isHigh wb) $
-               do copyBits (s, ix*8) (wdata, ix*8) 7
-loadInputs wdata wren tmp i (SSig _ _ sf) (ASig s arg) =
+loadInputs wdata wren tmp i (SSig _ Out sf) (ASig s arg) =
     loadInputs wdata wren tmp (i+1) (sf s) arg
-loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
-    map (\ix -> When (Is ix) (load ix)) [i..i+l-1]
-  where load :: Integer -> Prog instr exp pred ()
-        load i = for (value 0) (value 3) $ \ix ->
-          do wb <- getBit wren ix
-             when (isHigh wb) $
-               do copyVBits (tmp, ix*8) (wdata, ix*8) 7
-                  val <- unsafeFreezeVariable tmp
-                  setArray a (value i) (fromBits val)
-loadInputs wdata wren tmp i (SArr _ _ l af) (AArr a arg) =
+loadInputs wdata wren tmp i (SArr _ Out l af) (AArr a arg) =
     loadInputs wdata wren tmp (i+l) (af a) arg
+loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
+    When (Is i) cases : loadInputs wdata wren tmp (i+1) (sf s) arg
+  where
+    size :: Integer
+    size = bits s
+
+    loadBit :: Prog instr exp pred ()
+    loadBit = do
+      wb <- getBit wren 0
+      when (isHigh wb) $
+        do bit <- getBit wdata 0
+           setBit s 0 bit
+
+    loadBits :: Integer -> Integer -> Prog instr exp pred ()
+    loadBits ix len = do
+      wb <- getBit wren (value ix)
+      when (isHigh wb) $
+        copyBits (s, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
+
+    cases :: Prog instr exp pred ()
+    cases | size == 1 = loadBit
+          | otherwise = sequence_ $ map (uncurry loadBits) $ zip [0..] $ chunk size
+
+loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
+    let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l-1]
+     in cs ++ loadInputs wdata wren tmp (i+l) (af a) arg
+  where
+    size :: Integer
+    size = bits a
+
+    loadBit :: Integer -> Prog instr exp pred ()
+    loadBit ax = error "axi-todo: loadBit for array."
+
+    loadBits :: Integer -> Integer -> Integer -> Prog instr exp pred ()
+    loadBits ax ix len = do
+      wb <- getBit wren (value ix)
+      when (isHigh wb) $
+        copyVBits (tmp, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
+
+    cases :: Integer -> Prog instr exp pred ()
+    cases ax | size == 1 = loadBit ax
+             | otherwise = do
+      sequence_ $ map (uncurry $ loadBits ax) $ zip [0..] $ chunk size
+      val <- unsafeFreezeVariable tmp
+      setArray a (value ax) (fromBits val)
 
 -- | ...
 loadOutputs :: forall instr (exp :: * -> *) pred m a .
@@ -484,6 +513,10 @@ loadOutputs o i (SArr _ Out l af) (AArr a arg) =
    in map f [i..i+l-1] ++ loadOutputs o (i+l) (af a) arg
 loadOutputs o i (SArr _ _ l af) (AArr a arg) =
   loadOutputs o (i+l) (af a) arg
+
+chunk :: Integer -> [Integer]
+chunk i | i >  8 = 8 : chunk (i - 8)
+        | i <= 8 = [i]
 
 --------------------------------------------------------------------------------
 

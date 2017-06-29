@@ -58,8 +58,8 @@ class CompileType ct
 instance CompileType HType
   where
     compileType _ = compT
-    compileLit  _ = return . lift . V.lit . format
-    compileBits _ = return . lift . V.lit . bits
+    compileLit  _ = return . lift . V.lit . printVal
+    compileBits _ = return . lift . V.lit . printBits
 
 --------------------------------------------------------------------------------
 
@@ -605,6 +605,13 @@ compileVHDL (GetBit (SignalC bits) ix) =
      let index = V.name $ V.indexed (ident bits) (lift ix')
      V.assignVariable (simpleName i) (lift index)
      return i
+compileVHDL (SetBit s@(SignalC bits) ix bit) =
+  do ix'  <- compE ix
+     bit' <- compE bit
+     t    <- compileType (Proxy::Proxy ct) (proxyE s)
+     case V.isBit t of
+       True  -> V.assignSignal (V.NSimple $ ident bits) (bit')
+       False -> V.assignArray (V.indexed (ident bits) ix') (bit')
 compileVHDL (GetBits (SignalC bits) l u) =
   do i  <- freshVar (Proxy::Proxy ct) (Base "b")
      l' <- compE l

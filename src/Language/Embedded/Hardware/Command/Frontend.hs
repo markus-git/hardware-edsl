@@ -517,11 +517,14 @@ copyVBits :: (VHDLCMD :<: instr, pred a, pred b, pred Integer)
 copyVBits a b l = singleInj (CopyVBits a b l)
 
 -- | ...
-getBit :: (VHDLCMD :<: instr, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
-  => Signal (Bits u)
-  -> exp Integer
-  -> ProgramT instr (Param2 exp pred) m (exp Bit)
-getBit a i = fmap valToExp $ singleInj $ GetBit a i
+getBit :: (VHDLCMD :<: instr, pred a, pred Integer, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
+  => Signal a -> exp Integer -> ProgramT instr (Param2 exp pred) m (exp Bit)
+getBit bits ix = fmap valToExp $ singleInj $ GetBit bits ix
+
+-- | ...
+setBit :: (VHDLCMD :<: instr, pred a, pred Integer, pred Bit)
+  => Signal a -> exp Integer -> exp Bit -> ProgramT instr (Param2 exp pred) m ()
+setBit bits ix bit = singleInj $ SetBit bits ix bit
 
 -- | ...
 getBits :: (VHDLCMD :<: instr, pred Integer, PredicateExp exp Integer, FreeExp exp, Monad m)

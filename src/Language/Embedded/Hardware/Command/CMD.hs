@@ -562,10 +562,16 @@ data VHDLCMD fs a
       -> exp Integer
       -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: These two should be expressions instead.
-    GetBit  :: pred Bit
-      => Signal (Bits n)
+    GetBit :: (pred a, pred Bit, pred Integer)
+      => Signal a
       -> exp Integer
       -> VHDLCMD (Param3 prog exp pred) (Val Bit)
+    SetBit :: (pred a, pred Bit, pred Integer)
+      => Signal a
+      -> exp Integer
+      -> exp Bit
+      -> VHDLCMD (Param3 prog exp pred) ()
+    -- todo: same as above two?...
     GetBits :: pred Integer
       => Signal (Bits n)
       -> exp Integer
@@ -578,6 +584,7 @@ instance HFunctor VHDLCMD
     hfmap _ (CopyBits a b l)         = CopyBits a b l
     hfmap _ (CopyVBits a b l)        = CopyVBits a b l
     hfmap _ (GetBit s i)             = GetBit s i
+    hfmap _ (SetBit s i b)           = SetBit s i b
     hfmap _ (GetBits s l u)          = GetBits s l u
 
 instance HBifunctor VHDLCMD
@@ -586,6 +593,7 @@ instance HBifunctor VHDLCMD
     hbimap _ f (CopyBits (a, oa) (b, ob) l)  = CopyBits (a, f oa) (b, f ob) (f l)
     hbimap _ f (CopyVBits (a, oa) (b, ob) l) = CopyVBits (a, f oa) (b, f ob) (f l)
     hbimap _ f (GetBit s i)                  = GetBit s (f i)
+    hbimap _ f (SetBit s i b)                = SetBit s (f i) (f b)
     hbimap _ f (GetBits s l u)               = GetBits s (f l) (f u)
 
 instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
@@ -603,6 +611,9 @@ instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
     reexpressInstrEnv reexp (GetBit s i)
       = do i' <- reexp i
            lift $ singleInj $ GetBit s i'
+    reexpressInstrEnv reexp (SetBit s i b)
+      = do i' <- reexp i; b' <- reexp b
+           lift $ singleInj $ SetBit s i' b'
     reexpressInstrEnv reexp (GetBits s l u)
       = do l' <- reexp l; u' <- reexp u
            lift $ singleInj $ GetBits s l' u'

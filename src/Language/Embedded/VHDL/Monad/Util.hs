@@ -1,6 +1,7 @@
 module Language.Embedded.VHDL.Monad.Util
   ( maybeLit, maybeVar
   , uType, uCast, uResize
+  , isBit, isBits, isSigned, isUnsigned, isInteger
   , fromPrimary
   , stripPrimary, stripExpression
   , printPrimary, printBits

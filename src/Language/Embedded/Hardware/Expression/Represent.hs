@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
 
 module Language.Embedded.Hardware.Expression.Represent
   ( HType(..)
@@ -22,7 +23,7 @@ import Language.Embedded.VHDL (VHDL)
 import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport)
 import Language.Embedded.VHDL.Monad.Expression (lit)
 import Language.Embedded.VHDL.Monad.Type hiding (literal)
-import Language.Embedded.VHDL.Monad.Util (printBits)
+import qualified Language.Embedded.VHDL.Monad.Util as Util (printBits)
 
 import Language.Embedded.Hardware.Expression.Hoist (lift)
 
@@ -43,94 +44,104 @@ instance (Typeable a, Rep a, Eq a) => HType a
 -- | A 'rep'resentable value.
 class Rep a
   where
-    declare :: proxy a -> VHDL Type
-    format  :: a -> String
-    bits    :: a -> String
-
--- | Bit-length of a representable type.
-bitSize :: Rep a => a -> Int
-bitSize = length . filter isDigit . bits
-
+    declare   :: proxy a -> VHDL Type
+    bits      :: proxy a -> Integer
+    printVal  :: a -> String
+    printBits :: a -> String
+    
 --------------------------------------------------------------------------------
 -- ** Boolean
 
 instance Rep Bool where
-  declare _    = declareBoolean >> return std_logic
-  format True  = "\'1\'"
-  format False = "\'0\'"
-  bits         = format
+  declare  _     = declareBoolean >> return std_logic
+  bits     _     = 1
+  printVal True  = "\'1\'"
+  printVal False = "\'0\'"
+  printBits      = printVal
 
 --------------------------------------------------------------------------------
 -- ** Signed
 
 instance Rep Int8 where
   declare _ = declareNumeric >> return signed8
-  format    = show
-  bits      = printBits 8
+  bits    _ = 8
+  printVal  = show
+  printBits = Util.printBits 8
 
 instance Rep Int16 where
   declare _ = declareNumeric >> return signed16
-  format    = show
-  bits      = printBits 16
+  bits    _ = 16
+  printVal  = show
+  printBits = Util.printBits 16
 
 instance Rep Int32 where
   declare _ = declareNumeric >> return signed32
-  format    = show
-  bits      = printBits 32
+  bits    _ = 32
+  printVal  = show
+  printBits = Util.printBits 32
 
 instance Rep Int64 where
   declare _ = declareNumeric >> return signed64
-  format    = show
-  bits      = printBits 64
+  bits    _ = 64
+  printVal  = show
+  printBits = Util.printBits 64
 
 --------------------------------------------------------------------------------
 -- ** Unsigned
 
 instance Rep Word8 where
   declare _ = declareNumeric >> return usigned8
-  format    = show
-  bits      = printBits 8
+  bits    _ = 8
+  printVal  = show
+  printBits = Util.printBits 8
 
 instance Rep Word16 where
   declare _ = declareNumeric >> return usigned16
-  format    = show
-  bits      = printBits 16
+  bits    _ = 16
+  printVal  = show
+  printBits = Util.printBits 16
 
 instance Rep Word32 where
   declare _ = declareNumeric >> return usigned32
-  format    = show
-  bits      = printBits 32
+  bits    _ = 32
+  printVal  = show
+  printBits = Util.printBits 32
 
 instance Rep Word64 where
   declare _ = declareNumeric >> return usigned64
-  format    = show
-  bits      = printBits 64
+  bits    _ = 64
+  printVal  = show
+  printBits = Util.printBits 64
 
 --------------------------------------------------------------------------------
 -- ** Floating point.
 
 instance Rep Float where
   declare _ = declareFloating >> return float
-  format    = show
   bits      = error "hardware-edsl.bits: float."
+  printVal  = show
+  printBits = error "hardware-edsl.printBits: float."
 
 instance Rep Double where
   declare _ = declareFloating >> return double
-  format    = show
-  bits      = error "hardware-edsl.bits: double."
+  bits    _ = error "hardware-edsl.bits: double."
+  printVal  = show
+  printBits = error "hardware-edsl.printBits: double."
 
 --------------------------------------------------------------------------------
 -- ** ...
 
 instance Rep Int where
   declare _ = return (integer Nothing)
-  format  i = show i
-  bits      = error "hardware-edsl.bits: int."
+  bits    _ = error "hardware-edsl.bits: int."
+  printVal  = show
+  printBits = error "hardware-edsl.printBits: int."
 
 instance Rep Integer where
   declare _ = return (integer Nothing)
-  format  i = show i
-  bits      = error "hardware-edsl.bits: integer."
+  bits    _ = error "hardware-edsl.bits: integer."
+  printVal  = show
+  printBits = error "hardware-edsl.printBits: integer."
 
 --------------------------------------------------------------------------------
 
@@ -158,10 +169,9 @@ instance Num Bool where
   signum = id
   fromInteger 0 = False
   fromInteger 1 = True
-  fromInteger _ = error "bool-num: >1"
+  fromInteger _ = error "bool-num: >1"  
 
 --------------------------------------------------------------------------------
--- todo : I should move this to its own module.
 
 -- | ...
 class HType a => Inhabited a

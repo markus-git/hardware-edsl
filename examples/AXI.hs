@@ -42,6 +42,38 @@ type HComp = Comp CMD HExp HType Identity
 type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
+-- ** Identity.
+
+ident :: Integer -> Signal Bit -> Array Word16 -> Array Word16 -> HProg ()
+ident size clk a b =
+  process (clk .: []) $
+    for 0 (value size - 1) $ \ix ->
+      do tmp <- getArray a ix
+         setArray b ix tmp
+
+ident_sig :: Integer -> HSig (
+     Signal Bit
+  -> Array Word16
+  -> Array Word16
+  -> ())
+ident_sig size =
+  namedInput     "clk"    $ \clk ->
+  namedInputArr  "a" size $ \a ->
+  namedOutputArr "b" size $ \b ->
+  ret (ident size clk a b)
+
+ident_comp :: Integer -> HProg (HComp (
+     Signal Bit
+  -> Array Word16
+  -> Array Word16
+  -> ()))
+ident_comp size = namedComponent "ident" (ident_sig size)
+
+--------------------------------------------------------------------------------
+
+test_ident = icompile (ident_comp 2)
+
+--------------------------------------------------------------------------------
 -- ** Addition of two 8-bit words.
 
 -- Adder program.
@@ -86,7 +118,7 @@ test_adder = icompile adder_comp
 mult :: Integer -> Signal Bit -> Array Word8 -> Array Word8 -> Array Word8 -> HProg ()
 mult size clk a b c =
   process (clk .: []) $
-    for 0 (value size) $ \ix ->
+    for 0 (value size - 1) $ \ix ->
       do va <- getArray a ix
          vb <- getArray b ix
          setArray c ix (va * vb)
@@ -124,8 +156,12 @@ test_mult = icompile (mult_comp 10)
 axi comp = namedComponent "axi_wrapper" (axi_light_signature comp)
 
 axi_comp :: HProg ()
-axi_comp = mult_comp 4 >>= axi >> return ()
-        -- adder_comp >>= axi
+axi_comp =
+  do c <- ident_comp 2
+          --adder_comp
+          --mult_comp 3
+     a <- axi c
+     return ()
 
 --------------------------------------------------------------------------------
 
