@@ -58,8 +58,10 @@ uCast exp from to | isBits from = go
     -- Bits n -> X
     go | isInteger  to, Just lit <- maybeLit exp = exp
        | isInteger  to = fromPrimary $ toInteger  $ fromPrimary $ asSigned exp
-       | isUnsigned to = fromPrimary $ asUnsigned $ uResize exp from to
-       | isSigned   to = fromPrimary $ asSigned   $ uResize exp from to
+       | isUnsigned to = uResize (fromPrimary $ asUnsigned exp) from to
+         -- fromPrimary $ asUnsigned $ uResize exp from to
+       | isSigned   to = uResize (fromPrimary $ asSigned exp) from to
+         -- fromPrimary $ asSigned   $ uResize exp from to
        | isBits     to = uResize exp from to
        | otherwise     = exp
 uCast exp from to | isBit from, isBit to = exp
