@@ -21,8 +21,7 @@ import Language.VHDL (Expression)
 
 import Language.Embedded.VHDL (VHDL)
 import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport)
-import Language.Embedded.VHDL.Monad.Expression (lit)
-import Language.Embedded.VHDL.Monad.Type hiding (literal)
+import Language.Embedded.VHDL.Monad.Type
 import qualified Language.Embedded.VHDL.Monad.Util as Util (printBits)
 
 import Language.Embedded.Hardware.Expression.Hoist (lift)

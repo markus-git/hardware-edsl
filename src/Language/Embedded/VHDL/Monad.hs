@@ -52,7 +52,7 @@ module Language.Embedded.VHDL.Monad (
 
 import Language.VHDL
 
-import Language.Embedded.VHDL.Monad.Util (stripPrimary)
+import Language.Embedded.VHDL.Monad.Util (maybePrimary)
 
 import Control.Applicative    ((<$>))
 import Control.Monad.Identity (Identity)
@@ -857,8 +857,8 @@ instance Ord Primary
     compare (PrimAlloc a) (PrimAlloc x) = compare a x
     compare (PrimExp   a) (PrimExp   x) = compare a x
 
-    compare a@(PrimExp _) x = compare (stripPrimary a) x
-    compare a x@(PrimExp _) = compare a (stripPrimary x)
+    compare (PrimExp a) x | Just p <- maybePrimary a = compare p x
+    compare a (PrimExp x) | Just p <- maybePrimary x = compare a p
     
     compare a x = error ("\na: " ++ show a ++ "\nx: " ++ show x)
 

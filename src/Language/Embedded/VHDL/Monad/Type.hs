@@ -1,21 +1,26 @@
 module Language.Embedded.VHDL.Monad.Type
   ( Type
   , Kind(..)
-
-  , std_logic, std_logic_vector --, std_logic_uvector
+  , std_logic, std_logic_vector
   , signed2,  signed4,  signed8,  signed16,  signed32,  signed64
   , usigned2, usigned4, usigned8, usigned16, usigned32, usigned64
-  , float, double
   , integer
+  , float, double
   , unconstrainedArray, constrainedArray
-
-  , typeName, typeWidth
-  , literal, point
+  -- utility.
+  , typeName, typeRange, typeWidth
+  , isBit, isBits, isSigned, isUnsigned, isInteger
   ) where
 
 import Language.VHDL
 
-import Language.Embedded.VHDL.Monad.Expression (lit)
+import Language.Embedded.VHDL.Monad.Expression
+         ( literal
+         , number
+         , range
+         , point
+         , upper
+         , zero )
 
 --------------------------------------------------------------------------------
 -- * VHDL Types.
@@ -31,31 +36,28 @@ data Kind = Constant | Signal | Variable | File
 -- ** Standard logic types.
 
 std_logic :: Type
-std_logic = SubtypeIndication Nothing (TMType (NSimple (Ident "std_logic"))) Nothing
+std_logic = SubtypeIndication Nothing
+  (TMType (NSimple (Ident "std_logic")))
+  (Nothing)
 
-std_logic_vector :: Int -> Type
+std_logic_vector :: Integer -> Type
 std_logic_vector range = SubtypeIndication Nothing
   (TMType (NSlice (SliceName
     (PName (NSimple (Ident "std_logic_vector")))
     (DRRange (RSimple (upper range) DownTo zero)))))
   (Nothing)
-{-
-std_logic_uvector :: Type
-std_logic_uvector = SubtypeIndication Nothing
-  (TMType (NSimple (Ident "std_logic_vector")))
-  (Nothing)
--}
+
 --------------------------------------------------------------------------------
 -- ** Signed & unsigned numbers.
 
-arith :: String -> Int -> Type
+arith :: String -> Integer -> Type
 arith typ range = SubtypeIndication Nothing
   (TMType (NSlice (SliceName
     (PName (NSimple (Ident typ)))
     (DRRange (RSimple (upper range) DownTo zero)))))
   (Nothing)
 
-signed, usigned :: Int -> Type
+signed, usigned :: Integer -> Type
 signed  = arith "signed"
 usigned = arith "unsigned"
 
@@ -111,39 +113,51 @@ constrainedArray name typ range = compositeTypeDeclaration name $
     (IndexConstraint [DRRange range]) typ))
 
 --------------------------------------------------------------------------------
--- ** Helpers.
+-- Utility.
 
 typeName :: Type -> String
 typeName (SubtypeIndication _ (TMType (NSimple (Ident n))) _) = n
 typeName (SubtypeIndication _ (TMType (NSlice (SliceName (PName (NSimple (Ident n))) _))) _) = n
 
+typeRange :: Type -> Maybe Range
+typeRange (SubtypeIndication _ (TMType (NSlice (SliceName _ (DRRange r)))) _) = Just r
+typeRange _ = Nothing
+
+-- todo: this assumes we only use numbers when specifying ranges and constraints.
 typeWidth :: Type -> Integer
-typeWidth (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)
+typeWidth (SubtypeIndication _ t c) = (unrange t) * (maybe 1 unconstraint c)
   where
+    unliteral :: SimpleExpression -> Integer
+    unliteral (SimpleExpression _ (Term (FacPrim (PrimLit (LitNum (NLitPhysical (PhysicalLiteral _ (NSimple (Ident i)))))) _) _) _) =
+      read i
+
     unrange :: TypeMark -> Integer
     unrange (TMType (NSlice (SliceName _ (DRRange (RSimple u DownTo l))))) =
-      literal u - literal l
+      unliteral u - unliteral l + 1
     unrange (TMType (NSlice (SliceName _ (DRRange (RSimple l To     u))))) =
-      literal u - literal l
+      unliteral u - unliteral l + 1
+
+    unconstraint :: Constraint -> Integer
+    unconstraint (CRange (RangeConstraint (RSimple u DownTo l))) =
+      unliteral u - unliteral l + 1
+    unconstraint (CRange (RangeConstraint (RSimple l To     u))) =
+      unliteral u - unliteral l + 1
 
 --------------------------------------------------------------------------------
 
-range :: Constraint -> Integer
-range (CRange (RangeConstraint (RSimple a DownTo b))) = literal a - literal b
+isBit :: Type -> Bool
+isBit t = "std_logic" == typeName t
 
-literal :: SimpleExpression -> Integer
-literal (SimpleExpression Nothing (Term (FacPrim i (Nothing)) []) []) = unlit i
-  where
-    unlit :: Primary -> Integer
-    unlit (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = read i
+isBits :: Type -> Bool
+isBits t = "std_logic_vector" == typeName t
 
---------------------------------------------------------------------------------
+isSigned :: Type -> Bool
+isSigned t = "signed" == typeName t
 
-point :: Show i => i -> SimpleExpression
-point i = SimpleExpression Nothing (Term (FacPrim (lit $ show i) (Nothing)) []) []
+isUnsigned :: Type -> Bool
+isUnsigned t = "unsigned" == typeName t
 
-upper 0 = point 0
-upper n = point (n-1)
-zero    = point 0
+isInteger :: Type -> Bool
+isInteger t = "integer" == typeName t
 
 --------------------------------------------------------------------------------

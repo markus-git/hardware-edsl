@@ -459,14 +459,14 @@ entity :: (StructuralCMD :<: instr)
   => String
   -> ProgramT instr (Param2 exp pred) m a
   -> ProgramT instr (Param2 exp pred) m a
-entity e = singleInj . StructEntity (Base e)
+entity e = singleInj . StructEntity (Exact e)
 
 -- | Declare a new architecture for some entity by wrapping the given program.
 architecture :: (StructuralCMD :<: instr)
   => String -> String
   -> ProgramT instr (Param2 exp pred) m a
   -> ProgramT instr (Param2 exp pred) m a
-architecture e a = singleInj . StructArchitecture (Base e) (Base a)
+architecture e a = singleInj . StructArchitecture (Exact e) (Exact a)
 
 -- | Declare a new process listening to some signals by wrapping the given program.
 process :: (StructuralCMD :<: instr)

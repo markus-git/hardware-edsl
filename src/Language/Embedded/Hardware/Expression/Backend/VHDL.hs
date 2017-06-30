@@ -173,11 +173,11 @@ compHExp e = Hoist.lift <$> compSimple e
           return $ Hoist.E $ VHDL.uCast x' tf tt
     compDomain primary args
       | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
-      | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.lit $ printVal i
+      | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.literal $ VHDL.number $ printVal i
       | Just (Aggregate a)  <- prj primary = return $ Hoist.P $ VHDL.aggregate a
       | Just (Function f _) <- prj primary = do
           as <- sequence $ listArgs compLoop args
-          return $ Hoist.P $ VHDL.function (VHDL.Ident f) (fmap Hoist.lift as)
+          return $ Hoist.P $ VHDL.function (VHDL.simple f) (fmap Hoist.lift as)
       | Just (Allocator)    <- prj primary = error "expression-backend: todo"
 
 --------------------------------------------------------------------------------

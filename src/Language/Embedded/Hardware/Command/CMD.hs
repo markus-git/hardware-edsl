@@ -503,6 +503,7 @@ instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
 instance ToIdent (Array    a) where toIdent (ArrayC    i) = Ident i
 instance ToIdent (VArray   a) where toIdent (VArrayC   i) = Ident i
 
+
 -- | Commands for structural entities.
 data StructuralCMD fs (a :: *)
   where
@@ -515,6 +516,8 @@ data StructuralCMD fs (a :: *)
     -- ^ Wraps the program in a process.
     StructProcess
       :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
+
+-- todo: make sure entity and architectures always share a name.
 
 instance HFunctor StructuralCMD
   where

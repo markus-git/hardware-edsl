@@ -5,19 +5,17 @@ module Language.Embedded.VHDL.Monad.Expression
   , add, sub, cat, neg
   , mul, div, mod, rem
   , exp, abs, not
-  , name, string, indexed, selected, slice
-  , lit --, null
-  , aggregate, aggregated, associate, others
+  , name, simple, indexed, selected, slice, attribute
+  , literal, number, string
+  , aggregate, aggregated, associated, others
   , function
   , qualified
   , cast
-  , resize
-  , asBits, asSigned, asUnsigned, toSigned, toUnsigned, toInteger
+  -- utility.
+  , resize, asBits, asSigned, asUnsigned, toSigned, toUnsigned, toInteger
   , range, downto, to
+  , point, upper, lower, zero
   , choices, is, between
-  
-  -- *** temp
-  , attribute
   ) where
 
 import Language.VHDL
@@ -106,90 +104,107 @@ abs = FacAbs
 not = FacNot
 
 --------------------------------------------------------------------------------
--- ** Primaries
+-- ** Primaries.
 
--- names
+--------------------------------------------------------------------------------
+-- *** Names.
+
 name :: Name -> Primary
 name = PrimName
 
-attribute :: String -> Primary -> Primary
-attribute s (PrimName n) = PrimName $ NAttr $ AttributeName (PName n) Nothing (Ident s) Nothing
+simple :: String -> Name
+simple = NSimple . Ident
 
-string :: String -> Primary
-string = PrimLit . LitString . SLit
+selected :: Name -> Identifier -> Name
+selected i s = NSelect $ SelectedName (PName i) (SSimple s)
 
-indexed :: Identifier -> Expression -> Name
-indexed i l = NIndex $ IndexedName (PName $ NSimple i) [l]
+indexed :: Name -> Expression -> Name
+indexed i l = NIndex $ IndexedName (PName i) [l]
 
-selected  :: Identifier -> Identifier -> Name
-selected p s = NSelect $ SelectedName (PName $ NSimple p) (SSimple s)
+slice :: Name -> Range -> Name
+slice i r = NSlice $ SliceName (PName i) (DRRange r)
 
-slice :: Identifier -> (SimpleExpression, SimpleExpression) -> Name
-slice i (f, t) = NSlice $ SliceName (PName $ NSimple i) (DRRange $ RSimple f DownTo t)
+attribute :: String -> Name -> Primary
+attribute s n = PrimName $ NAttr $ AttributeName (PName n) Nothing (Ident s) Nothing
 
--- literals
-lit :: String -> Primary
-lit = PrimLit . LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident
+--------------------------------------------------------------------------------
+-- *** Literals.
 
--- aggregates
+literal :: Literal -> Primary
+literal = PrimLit
+
+number :: String -> Literal
+number = LitNum . NLitPhysical . PhysicalLiteral Nothing . NSimple . Ident
+
+string :: String -> Literal
+string = LitString . SLit
+
+--------------------------------------------------------------------------------
+-- *** Aggregates.
+
 aggregate :: Aggregate -> Primary
 aggregate = PrimAgg
 
 aggregated :: [Expression] -> Aggregate
 aggregated = Aggregate . fmap (ElementAssociation Nothing)
 
-associate :: [(Maybe Choices, Expression)] -> Aggregate
-associate es = Aggregate $ map (uncurry ElementAssociation) es
+associated :: [(Maybe Choices, Expression)] -> Aggregate
+associated es = Aggregate $ map (uncurry ElementAssociation) es
 
 others :: Expression -> Aggregate
 others = Aggregate . (:[]) . ElementAssociation (Just (Choices [ChoiceOthers]))
 
--- function calls
-function :: Identifier -> [Expression] -> Primary
-function i [] = PrimFun $ FunctionCall (NSimple i) Nothing
+--------------------------------------------------------------------------------
+-- *** Functions.
+
+function :: Name -> [Expression] -> Primary
+function i [] = PrimFun $ FunctionCall i Nothing
 function i xs = PrimFun
-  . FunctionCall (NSimple i) . Just . AssociationList
+  . FunctionCall i . Just . AssociationList
   $ fmap (AssociationElement Nothing . APDesignator . ADExpression) xs
 
--- qualified expressions
+--------------------------------------------------------------------------------
+-- *** Qualified.
+
 qualified :: SubtypeIndication -> Expression -> Primary
 qualified (SubtypeIndication _ t _) = PrimQual . QualExp t
 
--- type conversions
+--------------------------------------------------------------------------------
+-- *** Type conversion.
+
 cast :: SubtypeIndication -> Expression -> Primary
 cast (SubtypeIndication _ t _) = PrimTCon . TypeConversion (unrange t)
   where
     unrange :: TypeMark -> TypeMark
-    unrange (TMType (NSlice (SliceName (PName (NSimple (Ident typ))) _))) =
-      TMType (NSimple (Ident typ))
-    unrange (TMType (NSimple (Ident typ))) =
-      TMType (NSimple (Ident typ))
+    unrange (TMType (NSlice (SliceName (PName (NSimple (Ident typ))) _))) = TMType (NSimple (Ident typ))
+    unrange (TMType (NSimple (Ident typ))) = TMType (NSimple (Ident typ))
 
 --------------------------------------------------------------------------------
--- ** Utility
+-- ...
 
 resize :: Expression -> Expression -> Primary
-resize exp size = function (Ident "resize") [exp, size]
+resize exp size = function (simple "resize") [exp, size]
 
 asBits :: Expression -> Primary
-asBits exp = function (Ident "std_logic_vector") [exp]
+asBits exp = function (simple "std_logic_vector") [exp]
 
 asSigned :: Expression -> Primary
-asSigned exp = function (Ident "signed") [exp]
+asSigned exp = function (simple "signed") [exp]
 
 asUnsigned :: Expression -> Primary
-asUnsigned exp = function (Ident "unsigned") [exp]
+asUnsigned exp = function (simple "unsigned") [exp]
 
 toSigned :: Expression -> Expression -> Primary
-toSigned exp size = function (Ident "to_signed") [exp, size]
+toSigned exp size = function (simple "to_signed") [exp, size]
 
 toUnsigned :: Expression -> Expression -> Primary
-toUnsigned exp size = function (Ident "to_unsigned") [exp, size]
+toUnsigned exp size = function (simple "to_unsigned") [exp, size]
 
 toInteger :: Expression -> Primary
-toInteger exp = function (Ident "to_integer") [exp]
+toInteger exp = function (simple "to_integer") [exp]
 
 --------------------------------------------------------------------------------
+-- ...
 
 range :: SimpleExpression -> Direction -> SimpleExpression -> Range
 range  = RSimple
@@ -199,6 +214,21 @@ downto = DownTo
 to     = To
 
 --------------------------------------------------------------------------------
+-- ...
+
+point :: Show i => i -> SimpleExpression
+point i = SimpleExpression Nothing (Term (FacPrim (literal (number (show i))) (Nothing)) []) []
+
+upper, lower :: Integer -> SimpleExpression
+upper 0 = point 0
+upper n = point (n-1)
+lower n = point n
+
+zero :: SimpleExpression
+zero = point 0
+
+--------------------------------------------------------------------------------
+-- ...
 
 choices :: [Choice] -> Choices
 choices = Choices

@@ -40,10 +40,10 @@ import GHC.TypeLits (KnownNat)
 --------------------------------------------------------------------------------
 -- ** ...
 
-evalEM :: forall exp a. EvaluateExp exp => Maybe (exp a) -> a
-evalEM e = maybe (error "empty value") (id) $ fmap evalE e
+evalEM :: forall exp a . EvaluateExp exp => Maybe (exp a) -> a
+evalEM e = maybe (error "empty value") id $ fmap evalE e
 
-compEM :: forall exp a. CompileExp exp => Maybe (exp a) -> VHDL (Maybe V.Expression)
+compEM :: forall exp a . CompileExp exp => Maybe (exp a) -> VHDL (Maybe V.Expression)
 compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
 
 --------------------------------------------------------------------------------
@@ -58,25 +58,25 @@ class CompileType ct
 instance CompileType HType
   where
     compileType _ = compT
-    compileLit  _ = return . lift . V.lit . printVal
-    compileBits _ = return . lift . V.lit . printBits
+    compileLit  _ = return . literal . printVal
+    compileBits _ = return . literal . printBits
 
 --------------------------------------------------------------------------------
 
 compT :: HType a => proxy a -> VHDL V.Type
 compT = declare
 
-compTM :: forall proxy ct exp a. (CompileType ct, ct a) => proxy ct -> Maybe (exp a) -> VHDL V.Type
+compTM :: forall proxy ct exp a . (CompileType ct, ct a) => proxy ct -> Maybe (exp a) -> VHDL V.Type
 compTM _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 
-compTF :: forall proxy ct exp a b. (CompileType ct, ct a) => proxy ct -> (exp a -> b) -> VHDL V.Type
+compTF :: forall proxy ct exp a b . (CompileType ct, ct a) => proxy ct -> (exp a -> b) -> VHDL V.Type
 compTF _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 
-compTA :: forall proxy ct array i a. (CompileType ct, ct a) => proxy ct -> V.Range -> array a -> VHDL V.Type
+compTA :: forall proxy ct array i a . (CompileType ct, ct a) => proxy ct -> V.Range -> array a -> VHDL V.Type
 compTA _ range _ =
   do i <- newSym (Base "array")
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
-     let array = V.constrainedArray (ident i) t range
+     let array = V.constrainedArray (ident' i) t range
      s <- V.findType array
      case s of
        Just n  -> do return (named n)
@@ -113,7 +113,7 @@ freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
 freshVar _ prefix =
   do i <- newSym prefix
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
-     V.variable (ident i) t Nothing
+     V.variable (ident' i) t Nothing
      return (ValC i)
 
 --------------------------------------------------------------------------------
@@ -127,25 +127,27 @@ instance InterpBi SignalCMD IO (Param1 pred)
   where
     interpBi = runSignal
 
+-- todo: is concurrent... really necessary? I think the VHDL monad handle that.
 compileSignal :: forall exp ct a. (CompileExp exp, CompileType ct) => SignalCMD (Param3 VHDL exp ct) a -> VHDL a
 compileSignal (NewSignal base mode exp) =
-  do v <- compEM exp
+  do i <- newSym base
+     v <- compEM exp
      t <- compTM (Proxy::Proxy ct) exp
-     i <- newSym base
-     V.signal (ident i) mode t v
+     V.signal (ident' i) mode t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "v")
-     V.assignVariable (simpleName i) (lift $ name s)
+     V.assignVariable (simple $ ident i) (simple' s)
      return i
 compileSignal (SetSignal (SignalC s) exp) =
   do e' <- compE exp
      t  <- compileType (Proxy::Proxy ct) (proxyE exp)
-     V.assignSignal (V.NSimple $ ident s) (V.uType e' t)
+     V.assignSignal (simple $ ident s) (V.uType e' t)
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ ValC s
 compileSignal (ConcurrentSetSignal (SignalC s) exp) =
-  do V.concurrentSignal (V.NSimple $ ident s) =<< compE exp
+  do e <- compE exp
+     V.concurrentSignal (simple $ ident s) e
 
 runSignal :: SignalCMD (Param3 IO IO pred) a -> IO a
 runSignal (NewSignal _ _ Nothing)     = fmap SignalE $ IR.newIORef (error "uninitialized signal")
@@ -167,24 +169,25 @@ instance InterpBi VariableCMD IO (Param1 pred)
   where
     interpBi = runVariable
 
+-- todo: why not initialize variable?
 compileVariable :: forall ct exp a. (CompileExp exp, CompileType ct) => VariableCMD (Param3 VHDL exp ct) a -> VHDL a
 compileVariable (NewVariable base exp) =
-  do v <- compEM exp
+  do i <- newSym base
+     v <- compEM exp
      t <- compTM (Proxy::Proxy ct) exp
-     i <- newSym base
-     V.variable (ident i) t (Nothing)
+     V.variable (ident' i) t (Nothing)
      case v of
        Nothing -> return ()
-       Just v' -> V.assignVariable (V.NSimple $ ident i) (V.uType v' t)
+       Just v' -> V.assignVariable (simple $ ident i) (V.uType v' t)
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "v")
-     V.assignVariable (simpleName i) (lift $ name var)
+     V.assignVariable (simple $ ident i) (simple' var)
      return i
 compileVariable (SetVariable (VariableC var) exp) =
   do e' <- compE exp
      t  <- compileType (Proxy::Proxy ct) (proxyE exp)
-     V.assignVariable (V.NSimple $ ident var) (V.uType e' t)
+     V.assignVariable (simple var) (V.uType e' t)
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ ValC v
 
@@ -208,10 +211,10 @@ instance InterpBi ConstantCMD IO (Param1 pred)
 
 compileConstant :: forall ct exp a. (CompileExp exp, CompileType ct) => ConstantCMD (Param3 VHDL exp ct) a -> VHDL a
 compileConstant (NewConstant base (exp :: exp c)) =
-  do v <- compE  exp
+  do i <- newSym base
+     v <- compE exp
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy c)
-     i <- newSym base
-     V.constant (ident i) t v
+     V.constant (ident' i) t v
      return (ConstantC i)
 compileConstant (GetConstant (ConstantC c)) =
   do return $ ValC c
@@ -233,44 +236,42 @@ instance InterpBi ArrayCMD IO (Param1 pred)
 
 compileArray :: forall ct exp a. (CompileExp exp, CompileType ct) => ArrayCMD (Param3 VHDL exp ct) a -> VHDL a
 compileArray (NewArray base len) =
-  do l <- compE len
-     let r = V.range (lift l) V.downto (V.point (0 :: Int))
-     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
-     i <- newSym base
-     V.array (ident i) V.InOut t Nothing
+  do i <- newSym base
+     l <- compE len
+     t <- compTA (Proxy::Proxy ct) (rangeZero l) (undefined :: a)
+     V.array (ident' i) V.InOut t Nothing
      return (ArrayC i)
 compileArray (InitArray base is) =
-  do let r = range (length is - 1) V.downto 0
-     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
-     i <- newSym base
+  do i <- newSym base
+     t <- compTA (Proxy::Proxy ct) (rangePoint (length is - 1)) (undefined :: a)
      x <- mapM (compileBits (Proxy::Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
-     V.array (ident i) V.InOut t (Just $ lift v)
+     V.array (ident' i) V.InOut t (Just $ lift v)
      return (ArrayC i)
 compileArray (GetArray (ArrayC s) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
-     V.assignVariable (simpleName i) (lift $ V.PrimName $ V.indexed (ident s) e)
+     V.assignVariable (simple $ ident i) (indexed' s e)
      return i
 compileArray (SetArray (ArrayC s) ix e) =
   do ix' <- compE ix
      e'  <- compE e
      t   <- compileType (Proxy::Proxy ct) (proxyE e)
-     V.assignArray (V.indexed (ident s) ix') (V.uType e' t)
+     V.assignArray (indexed s ix') (V.uType e' t)
 compileArray (CopyArray (ArrayC a, oa) (ArrayC b, ob) l) =
   do oa' <- compE oa
      ob' <- compE ob
      len <- compE l
-     let slice_a = (lift oa', lift (V.add [lift len, lift oa']))
-         slice_b = (lift ob', lift (V.add [lift len, lift ob']))
-         dest    = V.slice (ident a) slice_a
-         src     = V.slice (ident b) slice_b
-     V.assignSignal src (lift $ V.PrimName dest)
+     let lower_a = V.add [unpackTerm len, unpackTerm oa']
+         lower_b = V.add [unpackTerm len, unpackTerm ob']
+         dest    = slice  a $ range oa' V.downto $ lift $ lower_a
+         src     = slice' b $ range ob' V.downto $ lift $ lower_b
+     V.assignSignal dest src
 compileArray (ResetArray (ArrayC a) rst) =
   do rst' <- compE rst
      t    <- compileType (Proxy::Proxy ct) (proxyE rst)
      let others = V.aggregate $ V.others (V.uType rst' t)
-     V.assignArray (V.NSimple $ ident a) (lift others)
+     V.assignArray (simple a) (lift others)
 
 runArray :: ArrayCMD (Param3 IO IO pred) a -> IO a
 runArray = error "hardware-edsl.todo: run arrays"
@@ -289,38 +290,37 @@ instance InterpBi VArrayCMD IO (Param1 pred)
 compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct) => VArrayCMD (Param3 VHDL exp ct) a -> VHDL a
 compileVArray (NewVArray base len) =
   do l <- compE len
-     let r = V.range (lift l) V.downto (V.point (0 :: Int))
-     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
+     t <- compTA (Proxy::Proxy ct) (rangeZero l) (undefined :: a)
      i <- newSym base
-     V.variable (ident i) t Nothing
+     V.variable (ident' i) t Nothing
      return (VArrayC i)
 compileVArray (InitVArray base is) =
-  do let r = V.range (V.point (length is - 1)) V.downto (V.point (0 :: Int))
+  do let r = rangePoint (length is - 1)
      t <- compTA (Proxy::Proxy ct) r (undefined :: a)
      i <- newSym base
      x <- mapM (compileBits (Proxy::Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
-     V.variable (ident i) t (Just $ lift v)
+     V.variable (ident' i) t (Just $ lift v)
      return (VArrayC i)
 compileVArray (GetVArray (VArrayC arr) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
      e <- compE ix
-     V.assignVariable (simpleName i) (lift $ V.name $ V.indexed (ident arr) e)
+     V.assignVariable (simple $ ident i) (indexed' arr e)
      return i
 compileVArray (SetVArray a@(VArrayC arr) i e) =
   do i' <- compE i
      e' <- compE e
      t  <- compileType (Proxy::Proxy ct) (proxyE e)
-     V.assignVariable (V.indexed (ident arr) i') (V.uType e' t)
+     V.assignVariable (indexed arr i') (V.uType e' t)
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
   do oa' <- compE oa
      ob' <- compE ob
      len <- compE l
-     let slice_a = (lift oa', lift (V.add [lift len, lift oa']))
-         slice_b = (lift ob', lift (V.add [lift len, lift ob']))
-         dest    = V.slice (ident a) slice_a
-         src     = V.slice (ident b) slice_b
-     V.assignVariable src (lift $ V.PrimName dest)
+     let lower_a = V.add [unpackTerm len, unpackTerm oa']
+         lower_b = V.add [unpackTerm len, unpackTerm ob']
+         dest    = slice  a $ range oa' V.downto $ lift $ lower_a
+         src     = slice' b $ range ob' V.downto $ lift $ lower_b
+     V.assignVariable dest src
 compileVArray (UnsafeFreezeVArray (VArrayC arr)) = return $ IArrayC arr
 compileVArray (UnsafeThawVArray (IArrayC arr)) = return $ VArrayC arr
 
@@ -382,8 +382,7 @@ compileLoop (For l u step) =
      i    <- newSym (Base "l")
      l'   <- compE l
      u'   <- compE u
-     let r = V.range (lift l') V.to (lift u')
-     loop <- V.inFor (ident i) r (step (ValC i))
+     loop <- V.inFor (ident' i) (range l' V.to u') (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel
@@ -421,7 +420,7 @@ instance InterpBi ConditionalCMD IO (Param1 pred)
 compileConditional :: forall ct exp a. (CompileExp exp, CompileType ct) => ConditionalCMD (Param3 VHDL exp ct) a -> VHDL a
 compileConditional (If (a, b) cs em) =
   do let (es, ds) = unzip cs
-         el       = maybe (return ()) id em
+         el = maybe (return ()) id em
      ae  <- compE a
      ese <- mapM compE es
      s   <- V.inConditional (ae, b) (zip ese ds) el
@@ -436,11 +435,11 @@ compileConditional (Case e cs d) =
     compC :: ct b => When b VHDL -> VHDL (V.Choices, VHDL ())
     compC (When (Is e) p)   = do
       e' <- compileLit (Proxy::Proxy ct) e
-      return $ (V.Choices [V.ChoiceSimple $ lift e'], p)
+      return $ (V.Choices [V.is $ unpackSimple e'], p)
     compC (When (To l h) p) = do
       l' <- compileLit (Proxy::Proxy ct) l
       h' <- compileLit (Proxy::Proxy ct) h
-      return $ (V.Choices [V.ChoiceRange (V.DRRange (V.range (lift l') V.to (lift h')))], p)
+      return $ (V.Choices [V.between $ range l' V.to h'], p)
 compileConditional (Null) = V.null
 
 runConditional :: ConditionalCMD (Param3 IO IO pred) a -> IO a
@@ -476,11 +475,11 @@ compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct) => Compone
 compileComponent (StructComponent base sig) =
   do comp <- newSym base
      V.component $
-       do p <- V.entity  (ident comp) (traverseSig sig)
-          V.architecture (ident comp) (V.Ident "imp") p
+       do p <- V.entity  (ident' comp) (traverseSig sig)
+          V.architecture (ident' comp) (V.Ident "imp") p
      return comp
 compileComponent (PortMap (Component name sig) as) =
-  do let i = ident name
+  do let i = ident' name
      l  <- V.newLabel
      vs <- applySig sig as
      V.inheritContext i
@@ -497,18 +496,16 @@ traverseSig (Ret  prog)   = return prog
 traverseSig (SSig n m sf) = 
   do i <- newSym n
      t <- compTF (Proxy::Proxy ct) sf
-     V.signal (ident i) m t Nothing
+     V.signal (ident' i) m t Nothing
      traverseSig (sf (SignalC i))
 traverseSig (SArr n m l af) =
-  do let r = range l V.downto 0
-     i <- newSym n
-     t <- compTA (Proxy::Proxy ct) r (proxyF af)
-     V.array (ident i) m t Nothing
+  do i <- newSym n
+     t <- compTA (Proxy::Proxy ct) (rangePoint l) (proxyF af)
+     V.array (ident' i) m t Nothing
      traverseSig (af (ArrayC i))
 
 applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDL exp ct) a
-  -> Argument ct a
+  => Signature (Param3 VHDL exp ct) a -> Argument ct a
   -> VHDL [V.InterfaceDeclaration]
 applySig (Ret _)       (Nil)                  = return []
 applySig (SSig n m sf) (ASig s@(SignalC i) v) =
@@ -517,21 +514,19 @@ applySig (SSig n m sf) (ASig s@(SignalC i) v) =
      let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
      return (i : is)
 applySig (SArr n m l af) (AArr a@(ArrayC i) v) =
-  do let r = range l V.downto 0
-     t  <- compTA (Proxy::Proxy ct) r (proxyF af)
+  do t  <- compTA (Proxy::Proxy ct) (rangePoint l) (proxyF af)
      is <- applySig (af a) v
      let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
      return (i : is)
 
 assocSig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDL exp ct) a
-  -> Argument ct a
+  => Signature (Param3 VHDL exp ct) a -> Argument ct a
   -> [(V.Identifier, V.Identifier)]
 assocSig (Ret _)         (Nil)                  = []
 assocSig (SSig n _ sf)   (ASig s@(SignalC i) v) =
-  (ident' n, ident i) : assocSig (sf s) v
+  (ident' n, ident' i) : assocSig (sf s) v
 assocSig (SArr n _ _ af) (AArr a@(ArrayC i) v)  =
-  (ident' n, ident i) : assocSig (af a) v
+  (ident' n, ident' i) : assocSig (af a) v
 
 --------------------------------------------------------------------------------
 -- ** Structural.
@@ -545,13 +540,13 @@ instance InterpBi StructuralCMD IO (Param1 pred)
     interpBi = runStructural
 
 compileStructural :: forall ct exp a. (CompileExp exp, CompileType ct) => StructuralCMD (Param3 VHDL exp ct) a -> VHDL a
-compileStructural (StructEntity e prog)  =
-  V.entity (ident' e) prog
-compileStructural (StructArchitecture e a prog) =
-  V.architecture (ident' e) (ident' a) prog
+compileStructural (StructEntity (Exact e) prog)  =
+  do V.entity (V.Ident e) prog
+compileStructural (StructArchitecture (Exact e) (Exact a) prog) =
+  do V.architecture (V.Ident e) (V.Ident a) prog
 compileStructural (StructProcess xs prog) =
   do label  <- V.newLabel
-     (a, c) <- V.inProcess label (fmap (\(Ident i) -> ident i) xs) prog
+     (a, c) <- V.inProcess label (fmap (\(Ident i) -> V.Ident i) xs) prog
      V.addConcurrent (V.ConProcess c)
      return a
 
@@ -574,8 +569,8 @@ instance InterpBi VHDLCMD IO (Param1 pred)
 
 compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDLCMD (Param3 VHDL exp ct) a -> VHDL a
 compileVHDL (Rising (SignalC clk) (SignalC rst) tru fls) =
-  do let condC = V.function (ident "rising_edge") [lift (name clk)]
-         condR = V.eq (lift $ name rst) (lift $ V.lit "'0'")
+  do let condC = V.function (simple "rising_edge") [simple' clk]
+         condR = V.eq (unpackShift $ simple' rst) (unpackShift $ literal "'0'")
      clock <- V.inConditional (lift condC,
          do reset <- V.inConditional (lift condR, tru) [] (fls)
             V.addSequential $ V.SIf $ reset
@@ -585,40 +580,42 @@ compileVHDL (CopyBits ((SignalC a), oa) ((SignalC b), ob) l) =
   do oa' <- compE oa
      ob' <- compE ob
      len <- compE l
-     let slice_a = (lift oa', lift (V.add [lift len, lift oa']))
-         slice_b = (lift ob', lift (V.add [lift len, lift ob']))
-         dest    = V.slice (ident a) slice_a
-         src     = V.slice (ident b) slice_b
-     V.assignSignal dest (lift $ V.PrimName src)
+     let lower_a = V.add [unpackTerm len, unpackTerm oa']
+         lower_b = V.add [unpackTerm len, unpackTerm ob']
+         dest    = slice  a $ range oa' V.downto $ lift $ lower_a
+         src     = slice' b $ range ob' V.downto $ lift $ lower_b
+     V.assignSignal dest src
 compileVHDL (CopyVBits ((VariableC a), oa) ((SignalC b), ob) l) =
   do oa' <- compE oa
      ob' <- compE ob
      len <- compE l
-     let slice_a = (lift oa', lift (V.add [lift len, lift oa']))
-         slice_b = (lift ob', lift (V.add [lift len, lift ob']))
-         dest    = V.slice (ident a) slice_a
-         src     = V.slice (ident b) slice_b
-     V.assignVariable dest (lift $ V.PrimName src)
+     let lower_a = V.add [unpackTerm len, unpackTerm oa']
+         lower_b = V.add [unpackTerm len, unpackTerm ob']
+         dest    = slice  a $ range oa' V.downto $ lift $ lower_a
+         src     = slice' b $ range ob' V.downto $ lift $ lower_b
+     V.assignVariable dest src
 compileVHDL (GetBit (SignalC bits) ix) =
   do i   <- freshVar (Proxy::Proxy ct) (Base "b")
      ix' <- compE ix
-     let index = V.name $ V.indexed (ident bits) (lift ix')
-     V.assignVariable (simpleName i) (lift index)
+     V.assignVariable (simple $ ident i) (indexed' bits ix')
      return i
 compileVHDL (SetBit s@(SignalC bits) ix bit) =
   do ix'  <- compE ix
      bit' <- compE bit
      t    <- compileType (Proxy::Proxy ct) (proxyE s)
      case V.isBit t of
-       True  -> V.assignSignal (V.NSimple $ ident bits) (bit')
-       False -> V.assignArray (V.indexed (ident bits) ix') (bit')
+       True  -> V.assignSignal (simple bits)      (bit')
+       False -> V.assignArray  (indexed bits ix') (bit')
 compileVHDL (GetBits (SignalC bits) l u) =
   do i  <- freshVar (Proxy::Proxy ct) (Base "b")
      l' <- compE l
      u' <- compE u
-     let slice = V.slice (ident bits) (lift l', lift u')
-         integ = V.toInteger $ lift $ V.asSigned $ lift $ V.name slice
-     V.assignVariable (simpleName i) (lift integ)
+     -- todo: this wrap around.
+     V.assignVariable (simple $ ident i)
+       ( lift $ V.toInteger $
+         lift $ V.asSigned  $
+         slice' bits $
+         range l' V.downto u')
      return i
 
 runVHDL :: VHDLCMD (Param3 IO IO pred) a -> IO a
@@ -630,11 +627,75 @@ runVHDL = error "hardware-edsl.runVHDL: todo."
 -- todo : make a lift that first tries to go backwards. If that's not possible,
 --        perform a regular lift. This should get rid of most extra parenthesis.
 
-range :: Integral a => a -> V.Direction -> a -> V.Range
-range a d b = V.range (V.point $ toInteger a) d (V.point $ toInteger b)
+ident :: ToIdent a => a -> String
+ident a = let (Ident s) = toIdent a in s
+
+ident' :: ToIdent a => a -> V.Identifier
+ident' a = V.Ident $ ident a
+
+-- todo: this... why does this work?
+instance ToIdent String where toIdent = Ident
+instance ToIdent Ident  where toIdent = id
+instance ToIdent Name   where
+  toIdent (Base s)  = Ident s
+  toIdent (Exact s) = Ident s
 
 --------------------------------------------------------------------------------
 
+simple   :: String -> V.Name
+simple   s = V.simple s
+
+simple'  :: String -> V.Expression
+simple'  s = lift $ V.name $ simple s
+
+indexed  :: String -> V.Expression -> V.Name
+indexed  s = V.indexed $ V.simple s
+
+indexed' :: String -> V.Expression -> V.Expression
+indexed' s = lift . V.name . indexed s
+
+slice    :: String -> V.Range -> V.Name
+slice    s = V.slice $ V.simple s
+
+slice'   :: String -> V.Range -> V.Expression
+slice'   s = lift . V.name . slice s
+
+--------------------------------------------------------------------------------
+
+literal :: String -> V.Expression
+literal s = lift $ V.literal $ V.number s
+
+--------------------------------------------------------------------------------
+
+range  :: V.Expression -> V.Direction -> V.Expression -> V.Range
+range l dir r = V.range (unpackSimple l) dir (unpackSimple r)
+
+rangeZero :: V.Expression -> V.Range
+rangeZero l = V.range (unpackSimple l) V.downto (V.point 0)
+
+rangePoint :: Integral a => a -> V.Range
+rangePoint a = V.range (V.point $ toInteger a) V.downto (V.point 0)
+
+--------------------------------------------------------------------------------
+-- ...
+
+unpackShift :: V.Expression -> V.ShiftExpression
+unpackShift (V.ENand (V.Relation s Nothing) Nothing) = s
+unpackShift e = lift e
+
+unpackSimple :: V.Expression -> V.SimpleExpression
+unpackSimple (V.ENand (V.Relation (V.ShiftExpression s Nothing) Nothing) Nothing) = s
+unpackSimple e = lift e
+
+unpackTerm :: V.Expression -> V.Term
+unpackTerm (V.ENand (V.Relation (V.ShiftExpression (V.SimpleExpression Nothing t []) Nothing) Nothing) Nothing) = t
+unpackTerm e = lift e
+
+--------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+{-
 ident :: String -> V.Identifier
 ident s = V.Ident s
 
@@ -644,13 +705,10 @@ ident' (Exact n) = ident n
 
 name :: String -> V.Primary
 name = V.PrimName . V.NSimple . ident
-
+-}
 --------------------------------------------------------------------------------
-
+{-
 fromIdent :: ToIdent a => a -> V.Identifier
 fromIdent a = let (Ident i) = toIdent a in ident i
-
-simpleName :: ToIdent a => a -> V.Name
-simpleName = V.NSimple . fromIdent
-
+-}
 --------------------------------------------------------------------------------
