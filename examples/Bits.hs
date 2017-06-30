@@ -58,10 +58,10 @@ bits clk rst =
 
      ----------------------------------------
      -- Bits with an array.
-     let two  = litE (bitFromInteger 2) :: HExp (Bits 32)
+     let two  = litE (bitFromInteger 2) :: HExp (Bits 8)
      
-     c :: Variable (Bits 32) <- initVariable two
-     d :: Array    (Word8)   <- newArray 2
+     c :: Variable (Bits 8)  <- initVariable two
+     d :: Array    (Bits 32) <- newArray 2
 
      x <- unsafeFreezeVariable c
      setArray d 0 (fromBits x)
