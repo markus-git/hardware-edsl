@@ -2,6 +2,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DataKinds        #-}
 
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Bits where
 
 import Language.VHDL (Mode(..))
@@ -39,24 +41,30 @@ type HSig  = Sig CMD HExp HType Identity
 
 bits :: Signal Bit -> Signal Bit -> HProg ()
 bits clk rst =
-  do let zero = litE (bitFromInteger 0) :: HExp (Bits 2)
-         one  = litE (bitFromInteger 1) :: HExp (Bits 2)
-         two  = litE (bitFromInteger 2) :: HExp (Bits 4)
-
-         high = litE True  :: HExp Bit
-         low  = litE False :: HExp Bit
-
-     ----------------------------------------
+  do ----------------------------------------
      -- Bit vectors.
      --
-     a <- initVariable zero :: HProg (Variable (Bits 2))
-     b <- initVariable one  :: HProg (Variable (Bits 2))
+     let zero = litE (bitFromInteger 0) :: HExp (Bits 2)
+         one  = litE (bitFromInteger 1) :: HExp (Bits 2)
 
-     u <- getVariable a :: HProg (HExp (Bits 2))
-     v <- getVariable b :: HProg (HExp (Bits 2))
+     a :: Variable (Bits 2) <- initVariable zero
+     b :: Variable (Bits 2) <- initVariable one
+
+     u :: HExp (Bits 2) <- getVariable a
+     v :: HExp (Bits 2) <- getVariable b
 
      setVariable a (u + v)
      setVariable b (u - v)
+
+     ----------------------------------------
+     -- Bits with an array.
+     let two  = litE (bitFromInteger 2) :: HExp (Bits 32)
+     
+     c :: Variable (Bits 32) <- initVariable two
+     d :: Array    (Word8)   <- newArray 2
+
+     x <- unsafeFreezeVariable c
+     setArray d 0 (fromBits x)
 
 --------------------------------------------------------------------------------
 

@@ -117,10 +117,10 @@ typeName :: Type -> String
 typeName (SubtypeIndication _ (TMType (NSimple (Ident n))) _) = n
 typeName (SubtypeIndication _ (TMType (NSlice (SliceName (PName (NSimple (Ident n))) _))) _) = n
 
-typeWidth :: Type -> Int
+typeWidth :: Type -> Integer
 typeWidth (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)
   where
-    unrange :: TypeMark -> Int
+    unrange :: TypeMark -> Integer
     unrange (TMType (NSlice (SliceName _ (DRRange (RSimple u DownTo l))))) =
       literal u - literal l
     unrange (TMType (NSlice (SliceName _ (DRRange (RSimple l To     u))))) =
@@ -128,13 +128,13 @@ typeWidth (SubtypeIndication _ t r) = (unrange t + 1) * (maybe 1 range r)
 
 --------------------------------------------------------------------------------
 
-range :: Constraint -> Int
+range :: Constraint -> Integer
 range (CRange (RangeConstraint (RSimple a DownTo b))) = literal a - literal b
 
-literal :: SimpleExpression -> Int
+literal :: SimpleExpression -> Integer
 literal (SimpleExpression Nothing (Term (FacPrim i (Nothing)) []) []) = unlit i
   where
-    unlit :: Primary -> Int
+    unlit :: Primary -> Integer
     unlit (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = read i
 
 --------------------------------------------------------------------------------

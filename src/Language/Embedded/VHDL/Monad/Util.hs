@@ -27,6 +27,7 @@ uType exp to = uCast exp to to
 uCast :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
 uCast exp from to | isInteger from = go
   where
+    -- Integer -> X
     go | isInteger  to = exp
        | isUnsigned to = fromPrimary $ toUnsigned exp $ fromPrimary $ uWidth to
        | isSigned   to = fromPrimary $ toSigned   exp $ fromPrimary $ uWidth to
@@ -36,6 +37,7 @@ uCast exp from to | isInteger from = go
        | otherwise     = exp
 uCast exp from to | isUnsigned from = go
   where
+    -- Unsigned -> X
     go | isInteger  to, Just lit <- maybeLit exp = exp
        | isInteger  to = fromPrimary $ toInteger exp
        | isUnsigned to = uResize exp from to
@@ -44,6 +46,7 @@ uCast exp from to | isUnsigned from = go
        | otherwise     = exp
 uCast exp from to | isSigned from = go
   where
+    -- Signed -> X
     go | isInteger  to , Just lit <- maybeLit exp = exp
        | isInteger  to = fromPrimary $ toInteger exp
        | isUnsigned to = fromPrimary $ asUnsigned $ uResize exp from to
@@ -52,6 +55,7 @@ uCast exp from to | isSigned from = go
        | otherwise     = exp
 uCast exp from to | isBits from = go
   where
+    -- Bits n -> X
     go | isInteger  to, Just lit <- maybeLit exp = exp
        | isInteger  to = fromPrimary $ toInteger  $ fromPrimary $ asSigned exp
        | isUnsigned to = fromPrimary $ asUnsigned $ uResize exp from to
@@ -69,8 +73,13 @@ uWidth = lit . show . typeWidth
 
 uResize :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
 uResize exp from to
+  -- if literal, simply resize it.
   | Just p <- maybeLit exp = fromPrimary $ lit $ printPrimary p to
+  -- if variable, and types are equal, disregard resize.
   | Just v <- maybeVar exp, typeWidth from == typeWidth to = exp
+  -- if already resized, disregard new resize.
+  | Just w <- castWidth exp, w == typeWidth to = exp
+  -- otherwise, resize.
   | otherwise = fromPrimary $ resize exp $ fromPrimary $ uWidth to
 
 uLiteral :: Expression -> Primary
@@ -80,30 +89,58 @@ uLiteral exp
 
 --------------------------------------------------------------------------------
 
+maybePrimary :: Expression -> Maybe Primary
+maybePrimary (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing) = Just p
+maybePrimary _ = Nothing
+
 maybeLit :: Expression -> Maybe Primary
-maybeLit (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p@(PrimLit _) Nothing) []) []) Nothing) Nothing) Nothing) = Just p
-maybeLit _ = Nothing
+maybeLit e | Just p@(PrimLit _) <- maybePrimary e = Just p
+           | otherwise = Nothing
 
 maybeVar :: Expression -> Maybe Primary
-maybeVar (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p@(PrimName _) Nothing) []) []) Nothing) Nothing) Nothing) = Just p
-maybeVar _ = Nothing
+maybeVar e | Just p@(PrimName _) <- maybePrimary e = Just p
+           | otherwise = Nothing
+
+maybeFun :: Expression -> Maybe Primary
+maybeFun e | Just p@(PrimFun _) <- maybePrimary e = Just p
+           | otherwise = Nothing
+
+maybeCast :: Expression -> Maybe Primary
+maybeCast e | Just p@(PrimTCon _) <- maybePrimary e = Just p
+            | otherwise = Nothing
 
 --------------------------------------------------------------------------------
 
-fromPrimary :: Primary -> Expression
-fromPrimary p = stripExpression $ ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing
+stripNum :: Primary -> Maybe Integer
+stripNum (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = Just (read i)
+stripNum _ = Nothing
+
+stripFun :: Primary -> Maybe (String, [Expression])
+stripFun (PrimFun (FunctionCall (NSimple (Ident i)) Nothing)) = Just (i, [])
+stripFun (PrimFun (FunctionCall (NSimple (Ident i)) (Just (AssociationList as)))) = Just (i, stripArgs as)
+  where
+    stripArgs :: [AssociationElement] -> [Expression]
+    stripArgs [] = []
+    stripArgs ((AssociationElement Nothing (APDesignator (ADExpression a))):as) = a : stripArgs as
+strip _ = Nothing
 
 --------------------------------------------------------------------------------
 
-stripPrimary :: Primary -> Primary
-stripPrimary (PrimExp (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing)) = p
-stripPrimary p = p
-
-stripExpression :: Expression -> Expression
-stripExpression (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim (PrimExp e) Nothing) []) []) Nothing) Nothing) Nothing) = e
-stripExpression e = e
-
---------------------------------------------------------------------------------
+castWidth :: Expression -> Maybe Integer
+castWidth e
+  | Just f       <- maybeFun e
+  , Just (n, as) <- stripFun f = widthOf n as
+  where
+    widthOf :: String -> [Expression] -> Maybe Integer
+    widthOf "resize"      [e, size] = stripNum =<< maybeLit size
+    widthOf "to_signed"   [e, size] = stripNum =<< maybeLit size
+    widthOf "to_unsigned" [e, size] = stripNum =<< maybeLit size
+    widthOf "to_integer"  [e]       = Nothing -- todo: hmm?
+    widthOf "signed"      [e]       = castWidth e
+    widthOf "unsigned"    [e]       = castWidth e
+    widthOf "std_logic_vector" [e]  = castWidth e
+    widthOf _ _ = Nothing
+castWidth _ = Nothing
 
 isBit :: Type -> Bool
 isBit t = "std_logic" == typeName t
@@ -122,21 +159,28 @@ isInteger t = "integer" == typeName t
 
 --------------------------------------------------------------------------------
 
+stripPrimary :: Primary -> Primary
+stripPrimary (PrimExp (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing)) = p
+stripPrimary p = p
+
+stripExpression :: Expression -> Expression
+stripExpression (ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim (PrimExp e) Nothing) []) []) Nothing) Nothing) Nothing) = e
+stripExpression e = e
+
+fromPrimary :: Primary -> Expression
+fromPrimary p = stripExpression $ ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim p Nothing) []) []) Nothing) Nothing) Nothing
+
+--------------------------------------------------------------------------------
+
 -- todo: this assumes i>0? and i<2^(width t)?
 printPrimary :: Primary -> SubtypeIndication -> String
-printPrimary p t = case (unlit p) of
+printPrimary p t = case (stripNum p) of
   Just i  -> printBits (typeWidth t) i
   Nothing -> error "hardware-edsl.printPrimary: not a literal."
 
 -- todo: copy of the one in 'Represent.hs', should move one of them.
-printBits :: (PrintfArg a, PrintfType b) => Int -> a -> b
+printBits :: (PrintfArg a, PrintfType b) => Integer -> a -> b
 printBits zeroes = printf ("\"%0" ++ show zeroes ++ "b\"")
-
---------------------------------------------------------------------------------
-
-unlit :: Primary -> Maybe Integer
-unlit (PrimLit (LitNum (NLitPhysical (PhysicalLiteral Nothing (NSimple (Ident i)))))) = Just (read i)
-unlit _ = Nothing
 
 --------------------------------------------------------------------------------
 {-
