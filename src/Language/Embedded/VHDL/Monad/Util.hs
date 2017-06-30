@@ -77,24 +77,26 @@ uResize exp from to
   | Just w <- castWidth exp, w == typeWidth to = exp
   -- otherwise, resize.
   | otherwise = expr $ resize exp $ expr $ width to
+  where
+    
 
 uResizeBits :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
 uResizeBits exp from to
-  -- if same size, disregard resize.
-  | lenFrom == lenTo = exp
+  -- if literal, simply resize it.
+  | Just p <- maybeLit exp = expr $ literal $ number $ printPrimary p to
+  -- if variable, and same size, disregard resize.
+  | typeWidth from == typeWidth to = exp
   -- if target is smaller, slice source.
-  | lenFrom > lenTo, Just r <- typeRange to = expr $ name $ slice prefix r
+  | typeWidth from > typeWidth to
+  , Just r <- typeRange to = expr $ name $ slice prefix r
   -- if target is larger, append zeroes.
-  | lenFrom < lenTo =
-      let zeroes = name $ simple $ printBits (lenTo - lenFrom) (0 :: Int)
+  | typeWidth from < typeWidth to =
+      let zeroes = name $ simple $ printBits (typeWidth to - typeWidth from) (0 :: Int)
           bits   = name $ prefix
           wrap s = ENand (Relation (ShiftExpression s Nothing) Nothing) Nothing
        in wrap (cat [term zeroes, term bits])
+  | otherwise = error $ show exp
   where
-    lenFrom, lenTo :: Integer
-    lenFrom = typeWidth from
-    lenTo   = typeWidth to
-
     prefix :: Name
     prefix | Just (PrimName n) <- maybeVar exp = n
            | Just (PrimFun  f) <- maybeFun exp = fc_function_name f
