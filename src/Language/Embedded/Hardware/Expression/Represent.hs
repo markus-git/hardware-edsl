@@ -47,7 +47,7 @@ class Rep a
     bits      :: proxy a -> Integer
     printVal  :: a -> String
     printBits :: a -> String
-    
+
 --------------------------------------------------------------------------------
 -- ** Boolean
 
@@ -173,7 +173,7 @@ instance Num Bool where
 --------------------------------------------------------------------------------
 
 -- | ...
-class HType a => Inhabited a
+class Inhabited a
   where
     -- | Ground value.
     reset :: a

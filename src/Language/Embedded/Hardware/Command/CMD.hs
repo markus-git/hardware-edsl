@@ -411,11 +411,11 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 data Signature fs a
   where
     Ret  :: prog () -> Signature (Param3 prog exp pred) ()
-    SSig :: (pred a, Integral a, Inhabited a)
+    SSig :: (pred a, Inhabited a)
       => Name -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
-    SArr :: (pred a, Integral a, Inhabited a)
+    SArr :: (pred a, Inhabited a)
       => Name -> Mode -> Integer
       -> (Array a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Array a -> b)
