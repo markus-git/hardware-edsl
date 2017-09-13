@@ -328,42 +328,36 @@ runVArray :: VArrayCMD (Param3 IO IO pred) a -> IO a
 runVArray (NewVArray _ len) =
   do len' <- len
      arr  <- IA.newArray_ (0, len')
-     ref  <- IR.newIORef arr
-     return (VArrayE ref)
+     return (VArrayE arr)
 runVArray (InitVArray _ is) =
   do arr  <- IA.newListArray (0, fromIntegral $ length is - 1) is
-     ref  <- IR.newIORef arr
-     return (VArrayE ref)
-runVArray (GetVArray (VArrayE ref) i) =
-  do arr    <- IR.readIORef ref
-     (l, h) <- IA.getBounds arr
+     return (VArrayE arr)
+runVArray (GetVArray (VArrayE arr) i) =
+  do (l, h) <- IA.getBounds arr
      ix  <- i
      if (ix < l || ix > h)
         then error "getArr out of bounds"
         else do v <- IA.readArray arr ix
                 return (ValE v)
-runVArray (SetVArray (VArrayE ref) i e) =
-  do arr    <- IR.readIORef ref
-     (l, h) <- IA.getBounds arr
+runVArray (SetVArray (VArrayE arr) i e) =
+  do (l, h) <- IA.getBounds arr
      ix <- i
      e' <- e
      if (ix < l || ix > h)
         then error "setArr out of bounds"
         else IA.writeArray arr (fromIntegral ix) e'
-runVArray (CopyVArray (VArrayE ra, oa) (VArrayE rb, ob) l) =
+runVArray (CopyVArray (VArrayE arr, oa) (VArrayE brr, ob) l) =
   do oa'     <- oa
      ob'     <- ob
      l'      <- l
-     arr     <- IR.readIORef ra
-     brr     <- IR.readIORef rb
      (0, ha) <- IA.getBounds arr
      (0, hb) <- IA.getBounds brr
      if (l' > hb + 1 - oa' || l' > ha + 1 - ob')
         then error "copyArr out of bounts"
         else sequence_ [ IA.readArray brr (i+ob') >>= IA.writeArray arr (i+oa')
                        | i <- genericTake l' [0..] ]
-runVArray (UnsafeFreezeVArray (VArrayE ref)) = IR.readIORef ref >>= IA.freeze >>= return . IArrayE
-runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw arr >>= IR.newIORef >>= return . VArrayE
+runVArray (UnsafeFreezeVArray (VArrayE arr)) = IA.freeze arr >>= return . IArrayE
+runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw   arr >>= return . VArrayE
 
 --------------------------------------------------------------------------------
 -- ** Loops.

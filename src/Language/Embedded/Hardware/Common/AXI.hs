@@ -32,12 +32,12 @@ import Prelude hiding (not, and, or, div, null)
 --------------------------------------------------------------------------------
 -- * AXI-light Controller.
 --------------------------------------------------------------------------------
---
 -- todo : we make a slight simplification and assume that components which we
 --        connect to AXI-lite has a signature of
 --          "input -> input -> .. -> input -> output -> ()"
 --        this can easily be fixed by inspecting the modes given by the
 --        signature.
+--------------------------------------------------------------------------------
 
 -- | Short-hand for programs.
 type Prog instr exp pred = Program instr (Param2 exp pred)
@@ -363,6 +363,9 @@ axi_light comp
        -- User logic.
        --
        portmap comp registers
+       --
+       -- The end.
+       ----------------------------------------
   where
     -- Application-specific design signals.
     addr_lsb, addr_bits :: Integer
@@ -384,7 +387,7 @@ declareRegisters (SSig _ _ sf) =
      a <- declareRegisters (sf s)
      return (ASig s a)
 declareRegisters (SArr _ _ l af) =
-  do s <- newArray (value l)
+  do s <- newArray (litE l)
      a <- declareRegisters (af s)
      return (AArr s a)
 
@@ -399,12 +402,12 @@ resetInputs :: forall instr (exp :: * -> *) pred m a .
 resetInputs (Ret _) (Nil) =
   do return ()
 resetInputs (SSig _ In sf) (ASig s arg) =
-  do setSignal s (value reset)
+  do setSignal s (litE reset)
      resetInputs (sf s) arg
 resetInputs (SSig _ _ sf) (ASig s arg) =
   do resetInputs (sf s) arg
 resetInputs (SArr _ In _ af) (AArr a arg) =
-  do resetArray a (value reset)
+  do resetArray a (litE reset)
      resetInputs (af a) arg
 resetInputs (SArr _ _ _ af) (AArr a arg) =
   do resetInputs (af a) arg
@@ -447,7 +450,7 @@ loadInputs wdata wren tmp i (Ret _) (Nil) = []
 loadInputs wdata wren tmp i (SSig _ Out sf) (ASig s arg) =
     loadInputs wdata wren tmp (i+1) (sf s) arg
 loadInputs wdata wren tmp i (SArr _ Out l af) (AArr a arg) =
-    loadInputs wdata wren tmp (i+l) (af a) arg
+    loadInputs wdata wren tmp (i+(Prelude.toInteger l)) (af a) arg
 loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
     When (Is i) cases : loadInputs wdata wren tmp (i+1) (sf s) arg
   where
@@ -470,7 +473,7 @@ loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
     cases :: Prog instr exp pred ()
     cases | size == 1 = loadBit
           | otherwise = sequence_ $ map (uncurry loadBits) $ zip [0..] $ chunk size
-
+{-
 loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
     let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l-1]
      in cs ++ loadInputs wdata wren tmp (i+l) (af a) arg
@@ -493,6 +496,7 @@ loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
       sequence_ $ map (uncurry $ loadBits ax) $ zip [0..] $ chunk size
       val <- unsafeFreezeVariable tmp
       setArray a (value ax) (fromBits val)
+-}
 
 -- | ...
 loadOutputs :: forall instr (exp :: * -> *) pred m a .
@@ -503,6 +507,7 @@ loadOutputs :: forall instr (exp :: * -> *) pred m a .
   -> Argument pred a
   -> [When Integer (ProgramT instr (Param2 exp pred) m)]
 loadOutputs o i (Ret _) (Nil) = []
+{-
 loadOutputs o i (SSig _ Out sf) (ASig s arg) =
   let p = setSignal o . toBits =<< unsafeFreezeSignal s
    in When (Is i) p : loadOutputs o (i+1) (sf s) arg
@@ -513,7 +518,7 @@ loadOutputs o i (SArr _ Out l af) (AArr a arg) =
    in map f [i..i+l-1] ++ loadOutputs o (i+l) (af a) arg
 loadOutputs o i (SArr _ _ l af) (AArr a arg) =
   loadOutputs o (i+l) (af a) arg
-
+-}
 chunk :: Integer -> [Integer]
 chunk i | i >  8 = 8 : chunk (i - 8)
         | i <= 8 = [i]
@@ -541,7 +546,7 @@ widthOf = go . signatureOf
     go :: Sig instr exp pred m b -> Integer
     go (Ret _)        = 0
     go (SSig _ _ f)   = 1 + go (f dummy)
-    go (SArr _ _ l g) = l + go (g dummy)
+  --go (SArr _ _ l g) = l + go (g dummy)
 
 dummy :: a
 dummy = error "todo: evaluated dummy"

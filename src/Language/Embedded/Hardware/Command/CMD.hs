@@ -73,7 +73,7 @@ data SignalCMD fs a
     -- *** todo: maybe this should be part of a set for concurrent instructions?
     ConcurrentSetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
     -- *** todo: is this dangerous?
-    ToArray :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Array Bit)
+    ToArray :: (pred a, Integral i, Ix i) => Signal a -> SignalCMD (Param3 prog exp pred) (Array i Bit)
 
 instance HFunctor SignalCMD
   where
@@ -180,27 +180,27 @@ instance (ConstantCMD :<: instr) => Reexpressible ConstantCMD instr env
 class CompArrayIx exp
   where
     -- | Generate code for an array indexing operation
-    compArrayIx :: PredicateExp exp a => exp Integer -> Array a -> Maybe (exp a)
+    compArrayIx :: (PredicateExp exp a, Integral i, Ix i) => exp i -> Array i a -> Maybe (exp a)
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array a = ArrayC VarId | ArrayE (IOArray Integer a)
+data Array i a = ArrayC VarId | ArrayE (IOArray i a)
 
 -- | Commands for signal arrays.
 data ArrayCMD fs a
   where
     -- ^ Creates an array of given length.
-    NewArray :: pred a => Name -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Array a)
+    NewArray :: (pred a, Integral i, Ix i) => Name -> exp i -> ArrayCMD (Param3 prog exp pred) (Array i a)
     -- ^ Creates an array from the given list of elements.
-    InitArray :: pred a => Name -> [a] -> ArrayCMD (Param3 prog exp pred) (Array a)
+    InitArray :: (pred a, Integral i, Ix i) => Name -> [a] -> ArrayCMD (Param3 prog exp pred) (Array i a)
     -- ^ Fetches the array's value at the specified index.
-    GetArray :: pred a => Array a -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Val a)
+    GetArray :: (pred a, Integral i, Ix i) => Array i a -> exp i -> ArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetArray :: pred a => Array a -> exp Integer -> exp a -> ArrayCMD (Param3 prog exp pred) ()
+    SetArray :: (pred a, Integral i, Ix i) => Array i a -> exp i -> exp a -> ArrayCMD (Param3 prog exp pred) ()
     -- ^ Copies a slice from the second array into the first.
-    CopyArray :: pred a => (Array a, exp Integer) -> (Array a, exp Integer) -> exp Integer -> ArrayCMD (Param3 prog exp pred) ()
+    CopyArray :: (pred a, Integral i, Ix i) => (Array i a, exp i) -> (Array i a, exp i) -> exp i -> ArrayCMD (Param3 prog exp pred) ()
     -- ^ Writes a value to all indicies of the array.
-    ResetArray :: pred a => Array a -> exp a -> ArrayCMD (Param3 prog exp pred) ()
+    ResetArray :: (pred a, Integral i, Ix i) => Array i a -> exp a -> ArrayCMD (Param3 prog exp pred) ()
 
 instance HFunctor ArrayCMD
   where
@@ -243,30 +243,30 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
 -- ** Virtual arrays.
 
 -- | Virtual array reprensentation.
-data VArray a = VArrayC VarId | VArrayE (IORef (IOArray Integer a))
+data VArray i a = VArrayC VarId | VArrayE (IOArray i a)
   deriving (Eq, Typeable)
 
 -- | Immutable arrays.
-data IArray a = IArrayC VarId | IArrayE (Arr.Array Integer a)
+data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
   deriving (Show, Typeable)
 
 -- | Commands for variable arrays.
 data VArrayCMD fs a
   where
     -- ^ Creates an array of given length.
-    NewVArray :: pred a => Name -> exp Integer -> VArrayCMD (Param3 prog exp pred) (VArray a)
+    NewVArray :: (pred a, Integral i, Ix i) => Name -> exp i -> VArrayCMD (Param3 prog exp pred) (VArray i a)
     -- ^ Creates an array from the given list of elements.
-    InitVArray :: pred a => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray a)
+    InitVArray :: (pred a, Integral i, Ix i) => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray i a)
     -- ^ Fetches the array's value at a specified index.
-    GetVArray :: pred a => VArray a -> exp Integer -> VArrayCMD (Param3 prog exp pred) (Val a)
+    GetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp i -> VArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetVArray :: pred a => VArray a -> exp Integer -> exp a -> VArrayCMD (Param3 prog exp pred) ()
+    SetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp i -> exp a -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
-    CopyVArray:: pred a => (VArray a, exp Integer) -> (VArray a, exp Integer) -> exp Integer -> VArrayCMD (Param3 prog exp pred) ()
+    CopyVArray:: (pred a, Integral i, Ix i) => (VArray i a, exp i) -> (VArray i a, exp i) -> exp i -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
-    UnsafeFreezeVArray :: pred a => VArray a -> VArrayCMD (Param3 prog exp pred) (IArray a)
+    UnsafeFreezeVArray :: (pred a, Integral i, Ix i) => VArray i a -> VArrayCMD (Param3 prog exp pred) (IArray i a)
     -- ^ ...
-    UnsafeThawVArray :: pred a => IArray a -> VArrayCMD (Param3 prog exp pred) (VArray a)
+    UnsafeThawVArray :: (pred a, Integral i, Ix i) => IArray i a -> VArrayCMD (Param3 prog exp pred) (VArray i a)
 
 instance HFunctor VArrayCMD
   where
@@ -313,7 +313,7 @@ instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
 data LoopCMD fs a
   where
     -- ^ Creates a new for loop.
-    For   :: pred Integer => exp Integer -> exp Integer -> (Val Integer -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
+    For   :: (pred i, Integral i) => exp i -> exp i -> (Val i -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
     -- ^ Creates a new while loop.
     While :: prog (exp Bool) -> prog () -> LoopCMD (Param3 prog exp pred) ()
 
@@ -415,10 +415,10 @@ data Signature fs a
       => Name -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
-    SArr :: (pred a, Inhabited a)
-      => Name -> Mode -> Integer
-      -> (Array a -> Signature (Param3 prog exp pred) b)
-      -> Signature (Param3 prog exp pred) (Array a -> b)
+    SArr :: (pred a, Inhabited a, pred i, Integral i, Ix i)
+      => Name -> Mode -> i
+      -> (Array i a -> Signature (Param3 prog exp pred) b)
+      -> Signature (Param3 prog exp pred) (Array i a -> b)
 
 instance HFunctor Signature
   where
@@ -436,10 +436,8 @@ reexpressSignature :: env
   -> Signature (Param3 (ReaderT env (ProgramT instr (Param2 exp2 pred) m)) exp1 pred) a
   -> Signature (Param3              (ProgramT instr (Param2 exp2 pred) m)  exp2 pred) a
 reexpressSignature env (Ret prog)      = Ret (runReaderT prog env)
-reexpressSignature env (SSig n m sf)   = SSig n m (reexpressSignature env . sf)
+reexpressSignature env (SSig n m sf)   = SSig n m   (reexpressSignature env . sf)
 reexpressSignature env (SArr n m l af) = SArr n m l (reexpressSignature env . af)
-
---------------------------------------------------------------------------------
 
 -- | Signature arguments.
 data Argument pred a
@@ -449,12 +447,10 @@ data Argument pred a
       => Signal a
       -> Argument pred b
       -> Argument pred (Signal a -> b)
-    AArr :: (pred a, Inhabited a)
-      => Array a
+    AArr :: (pred a, Inhabited a, Integral i, Ix i)
+      => Array i a
       -> Argument pred b
-      -> Argument pred (Array a -> b)
-
---------------------------------------------------------------------------------
+      -> Argument pred (Array i a -> b)
 
 -- | Named components.
 data Component fs a = Component String (Signature fs a)
@@ -500,9 +496,8 @@ instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
 instance ToIdent (Signal   a) where toIdent (SignalC   i) = Ident i
 instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
 instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
-instance ToIdent (Array    a) where toIdent (ArrayC    i) = Ident i
-instance ToIdent (VArray   a) where toIdent (VArrayC   i) = Ident i
-
+instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
+instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
 
 -- | Commands for structural entities.
 data StructuralCMD fs (a :: *)

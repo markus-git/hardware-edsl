@@ -40,7 +40,7 @@ type HSig  = Sig CMD HExp HType Identity
 
 integers :: Signal Bit -> Signal Bit -> HProg ()
 integers clk rst =
-  do arr :: VArray Word8   <- initVArray [0..10]
+  do arr :: VArray Word32 Word8 <- initVArray [0..10]
      ref :: Variable Word8 <- initVariable 10
 
      setVArray arr 0 20

@@ -44,17 +44,17 @@ type HSig  = Sig CMD HExp HType Identity
 --------------------------------------------------------------------------------
 -- ** Identity.
 
-ident :: Integer -> Signal Bit -> Array Word16 -> Array Word16 -> HProg ()
+ident :: Word32 -> Signal Bit -> Array Word32 Word16 -> Array Word32 Word16 -> HProg ()
 ident size clk a b =
   process (clk .: []) $
     for 0 (value size - 1) $ \ix ->
       do tmp <- getArray a ix
          setArray b ix tmp
 
-ident_sig :: Integer -> HSig (
+ident_sig :: Word32 -> HSig (
      Signal Bit
-  -> Array Word16
-  -> Array Word16
+  -> Array Word32 Word16
+  -> Array Word32 Word16
   -> ())
 ident_sig size =
   namedInput     "clk"    $ \clk ->
@@ -62,10 +62,10 @@ ident_sig size =
   namedOutputArr "b" size $ \b ->
   ret (ident size clk a b)
 
-ident_comp :: Integer -> HProg (HComp (
+ident_comp :: Word32 -> HProg (HComp (
      Signal Bit
-  -> Array Word16
-  -> Array Word16
+  -> Array Word32 Word16
+  -> Array Word32 Word16
   -> ()))
 ident_comp size = namedComponent "ident" (ident_sig size)
 
@@ -115,7 +115,7 @@ test_adder = icompile adder_comp
 -- ** Point-wise multiplication of arrays over 8-bit words.
 
 -- Multiplier program.
-mult :: Integer -> Signal Bit -> Array Word8 -> Array Word8 -> Array Word8 -> HProg ()
+mult :: Word32 -> Signal Bit -> Array Word32 Word8 -> Array Word32 Word8 -> Array Word32 Word8 -> HProg ()
 mult size clk a b c =
   process (clk .: []) $
     for 0 (value size - 1) $ \ix ->
@@ -124,11 +124,11 @@ mult size clk a b c =
          setArray c ix (va * vb)
 
 -- An encoding of the multiplier's signature.
-mult_sig :: Integer -> HSig (
+mult_sig :: Word32 -> HSig (
      Signal Bit
-  -> Array Word8
-  -> Array Word8
-  -> Array Word8
+  -> Array Word32 Word8
+  -> Array Word32 Word8
+  -> Array Word32 Word8
   -> ())
 mult_sig size =
   namedInput     "clk"    $ \clk ->
@@ -138,11 +138,11 @@ mult_sig size =
   ret (mult size clk a b c)
 
 -- A multiplier component given by its signature.
-mult_comp :: Integer -> HProg (HComp (
+mult_comp :: Word32 -> HProg (HComp (
      Signal Bit
-  -> Array Word8
-  -> Array Word8
-  -> Array Word8
+  -> Array Word32 Word8
+  -> Array Word32 Word8
+  -> Array Word32 Word8
   -> ()))
 mult_comp size = namedComponent "multiplier" (mult_sig size)
 

@@ -62,16 +62,9 @@ unsafeFreezeSignal :: (SignalCMD :<: instr, pred a, FreeExp exp, PredicateExp ex
   => Signal a -> ProgramT instr (Param2 exp pred) m (exp a)
 unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
 
---------------------------------------------------------------------------------
-
 -- | Concurrent update of a signals value.
 concurrentSetSignal :: (SignalCMD :<: instr, pred a) => Signal a -> exp a -> ProgramT instr (Param2 exp pred) m ()
 concurrentSetSignal s = singleInj . ConcurrentSetSignal s
-
---------------------------------------------------------------------------------
--- *** Signal attributes.
-
--- ...
 
 --------------------------------------------------------------------------------
 -- ports.
@@ -192,99 +185,99 @@ constant = initNamedConstant
 -- ** Arrays.
 
 -- | Create an initialized named virtual array.
-initNamedArray :: (ArrayCMD :<: instr, pred a, pred Integer)
-  => String -> [a] -> ProgramT instr (Param2 exp pred) m (Array a)  
+initNamedArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => String -> [a] -> ProgramT instr (Param2 exp pred) m (Array i a)  
 initNamedArray name = singleInj . InitArray (Base name)
 
 -- | Create an initialized virtual array.
-initArray :: (ArrayCMD :<: instr, pred a, pred Integer)
-  => [a] -> ProgramT instr (Param2 exp pred) m (Array a)
+initArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => [a] -> ProgramT instr (Param2 exp pred) m (Array i a)
 initArray = initNamedArray "a"
 
 -- | Create an uninitialized named virtual array.
-newNamedArray :: (ArrayCMD :<: instr, pred a, pred Integer)
-  => String -> exp Integer -> ProgramT instr (Param2 exp pred) m (Array a)
+newNamedArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => String -> exp i -> ProgramT instr (Param2 exp pred) m (Array i a)
 newNamedArray name = singleInj . NewArray (Base name)
 
 -- | Create an uninitialized virtual array.
-newArray :: (ArrayCMD :<: instr, pred a, pred Integer)
-  => exp Integer -> ProgramT instr (Param2 exp pred) m (Array a) 
+newArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => exp i -> ProgramT instr (Param2 exp pred) m (Array i a) 
 newArray = newNamedArray "a"
 
-getArray :: (ArrayCMD :<: instr, pred a, pred Integer, PredicateExp exp a, FreeExp exp, Monad m)
-  => Array a -> exp Integer -> ProgramT instr (Param2 exp pred) m (exp a)
+getArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i, PredicateExp exp a, FreeExp exp, Monad m)
+  => Array i a -> exp i -> ProgramT instr (Param2 exp pred) m (exp a)
 getArray a = fmap valToExp . singleInj . GetArray a
 
 -- | Set an element of an array.
-setArray :: (ArrayCMD :<: instr, pred a, pred Integer, PredicateExp exp a, FreeExp exp, Monad m)
-  => Array a -> exp Integer -> exp a -> ProgramT instr (Param2 exp pred) m ()
+setArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i, PredicateExp exp a, FreeExp exp, Monad m)
+  => Array i a -> exp i -> exp a -> ProgramT instr (Param2 exp pred) m ()
 setArray a i = singleInj . SetArray a i
 
 -- | Copy a slice of one array to another.
-copyArray :: (ArrayCMD :<: instr, pred a, pred Integer)
-  => (Array a, exp Integer) -- ^ destination and its offset.
-  -> (Array a, exp Integer) -- ^ source and its offset.
-  -> exp Integer            -- ^ number of elements to copy.
+copyArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => (Array i a, exp i) -- ^ destination and its offset.
+  -> (Array i a, exp i) -- ^ source and its offset.
+  -> exp i              -- ^ number of elements to copy.
   -> ProgramT instr (Param2 exp pred) m ()
 copyArray dest src = singleInj . CopyArray dest src
 
 -- | ...
-resetArray :: (ArrayCMD :<: instr, pred a)
-  => Array a -> exp a -> ProgramT instr (Param2 exp pred) m ()
+resetArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => Array i a -> exp a -> ProgramT instr (Param2 exp pred) m ()
 resetArray a rst = singleInj $ ResetArray a rst
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
 
 -- | Create an initialized named virtual array.
-initNamedVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => String -> [a] -> ProgramT instr (Param2 exp pred) m (VArray a)  
+initNamedVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => String -> [a] -> ProgramT instr (Param2 exp pred) m (VArray i a)  
 initNamedVArray name = singleInj . InitVArray (Base name)
 
 -- | Create an initialized virtual array.
-initVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => [a] -> ProgramT instr (Param2 exp pred) m (VArray a)
+initVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => [a] -> ProgramT instr (Param2 exp pred) m (VArray i a)
 initVArray = initNamedVArray "a"
 
 -- | Create an uninitialized named virtual array.
-newNamedVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => String -> exp Integer -> ProgramT instr (Param2 exp pred) m (VArray a)
+newNamedVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => String -> exp i -> ProgramT instr (Param2 exp pred) m (VArray i a)
 newNamedVArray name = singleInj . NewVArray (Base name)
 
 -- | Create an uninitialized virtual array.
-newVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => exp Integer -> ProgramT instr (Param2 exp pred) m (VArray a) 
+newVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => exp i -> ProgramT instr (Param2 exp pred) m (VArray i a)
 newVArray = newNamedVArray "a"
 
 -- | Get an element of an array.
-getVArray :: (VArrayCMD :<: instr, pred a, pred Integer, PredicateExp exp a, FreeExp exp, Monad m)
-  => VArray a -> exp Integer -> ProgramT instr (Param2 exp pred) m (exp a)
+getVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i, PredicateExp exp a, FreeExp exp, Monad m)
+  => VArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (exp a)
 getVArray a = fmap valToExp . singleInj . GetVArray a
 
 -- | Set an element of an array.
-setVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => VArray a -> exp Integer -> exp a -> ProgramT instr (Param2 exp pred) m ()
+setVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => VArray i a -> exp i -> exp a -> ProgramT instr (Param2 exp pred) m ()
 setVArray a i = singleInj . SetVArray a i
 
 -- | Copy a slice of one array to another.
-copyVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => (VArray a, exp Integer) -- ^ destination and its offset.
-  -> (VArray a, exp Integer) -- ^ source and its offset.
-  -> exp Integer             -- ^ number of elements to copy.
+copyVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => (VArray i a, exp i) -- ^ destination and its offset.
+  -> (VArray i a, exp i) -- ^ source and its offset.
+  -> exp i               -- ^ number of elements to copy.
   -> ProgramT instr (Param2 exp pred) m ()
 copyVArray dest src = singleInj . CopyVArray dest src
 
 -- | Freeze a mutable array into an immutable one by copying.
-freezeVArray :: (VArrayCMD :<: instr, pred a, pred Integer, Num (exp Integer), Monad m)
-  => VArray a -> exp Integer -> ProgramT instr (Param2 exp pred) m (IArray a)
+freezeVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i, Num (exp i), Monad m)
+  => VArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (IArray i a)
 freezeVArray array len =
   do copy <- newVArray len
      copyVArray (copy,0) (array,0) len
      unsafeFreezeVArray copy
 
 -- | Thaw an immutable array into a mutable one by copying.
-thawVArray :: (VArrayCMD :<: instr, pred a, pred Integer, Num (exp Integer), Monad m)
-  => IArray a -> exp Integer -> ProgramT instr (Param2 exp pred) m (VArray a)
+thawVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i, Num (exp i), Monad m)
+  => IArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (VArray i a)
 thawVArray iarray len =
   do array <- unsafeThawVArray iarray
      copy  <- newVArray len
@@ -292,21 +285,21 @@ thawVArray iarray len =
      return copy
 
 -- | Freeze a mutable array to an immuatable one without making a copy.
-unsafeFreezeVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => VArray a -> ProgramT instr (Param2 exp pred) m (IArray a)
+unsafeFreezeVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => VArray i a -> ProgramT instr (Param2 exp pred) m (IArray i a)
 unsafeFreezeVArray = singleInj . UnsafeFreezeVArray
 
 -- | Thaw an immutable array to a mutable one without making a copy.
-unsafeThawVArray :: (VArrayCMD :<: instr, pred a, pred Integer)
-  => IArray a -> ProgramT instr (Param2 exp pred) m (VArray a)
+unsafeThawVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => IArray i a -> ProgramT instr (Param2 exp pred) m (VArray i a)
 unsafeThawVArray = singleInj . UnsafeThawVArray
 
 --------------------------------------------------------------------------------
 -- ** Looping.
 
 -- | For loop.
-for :: (LoopCMD :<: instr, pred Integer, PredicateExp exp Integer, FreeExp exp, Monad m)
-  => exp Integer -> exp Integer -> (exp Integer -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
+for :: (LoopCMD :<: instr, pred i, Integral i, PredicateExp exp i, FreeExp exp, Monad m)
+  => exp i -> exp i -> (exp i -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
 for lower upper body = singleInj $ For lower upper (body . valToExp)
 
 -- | While loop.
@@ -408,45 +401,41 @@ portmap pro arg = singleInj $ PortMap pro arg
 
 --------------------------------------------------------------------------------
 
-exactInput  :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactInput  :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 exactInput  n = SSig (Exact n) In
 
-namedInput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedInput :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 namedInput n = SSig (Base n) In
 
-input :: (pred a, Integral a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+input :: (pred a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 input = namedInput "in"
 
-exactInputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+exactInputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 exactInputArr n l = SArr (Exact n) In l
 
-namedInputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+namedInputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 namedInputArr n l = SArr (Base n) In l
 
-inputArr :: (pred a, Integral a, Inhabited a) => Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+inputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 inputArr = namedInputArr "in"
 
---------------------------------------------------------------------------------
-
-exactOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactOutput :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 exactOutput n = SSig (Exact n) Out
 
-namedOutput :: (pred a, Integral a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedOutput :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 namedOutput n = SSig (Base n) Out
 
-output :: (pred a, Integral a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+output :: (pred a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 output = namedOutput "out"
 
-exactOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+exactOutputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 exactOutputArr n l = SArr (Exact n) Out l
 
-namedOutputArr :: (pred a, Integral a, Inhabited a) => String -> Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+namedOutputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 namedOutputArr n l = SArr (Base n) Out l
 
-outputArr :: (pred a, Integral a, Inhabited a) => Integer -> (Array a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array a -> b)
+outputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 outputArr = namedOutputArr "out"
-
---------------------------------------------------------------------------------
 
 ret :: (ProgramT instr (Param2 exp pred) m) () -> Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred) ()
 ret = Ret
