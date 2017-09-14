@@ -458,7 +458,7 @@ loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
     When (Is i) cases : loadInputs wdata wren tmp (i+1) (sf s) arg
   where
     size :: Integer
-    size = 0 --bits s
+    size = bits s
 
     loadBit :: Prog instr exp pred ()
     loadBit = do
@@ -476,10 +476,10 @@ loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
     cases :: Prog instr exp pred ()
     cases | size == 1 = loadBit
           | otherwise = sequence_ $ map (uncurry loadBits) $ zip [0..] $ chunk size
-{-
+
 loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
     let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l-1]
-     in cs ++ loadInputs wdata wren tmp (i+l) (af a) arg
+     in cs ++ loadInputs wdata wren tmp (i+(Prelude.toInteger l)) (af a) arg
   where
     size :: Integer
     size = bits a
@@ -499,7 +499,6 @@ loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
       sequence_ $ map (uncurry $ loadBits ax) $ zip [0..] $ chunk size
       val <- unsafeFreezeVariable tmp
       setArray a (value ax) (fromBits val)
--}
 
 -- | ...
 loadOutputs :: forall instr (exp :: * -> *) pred m a .

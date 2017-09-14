@@ -401,40 +401,40 @@ portmap pro arg = singleInj $ PortMap pro arg
 
 --------------------------------------------------------------------------------
 
-exactInput  :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactInput  :: (pred a, Inhabited a, Sized a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 exactInput  n = SSig (Exact n) In
 
-namedInput :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedInput :: (pred a, Inhabited a, Sized a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 namedInput n = SSig (Base n) In
 
-input :: (pred a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+input :: (pred a, Inhabited a, Sized a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 input = namedInput "in"
 
-exactInputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
+exactInputArr :: (pred a, Inhabited a, Sized a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 exactInputArr n l = SArr (Exact n) In l
 
-namedInputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
+namedInputArr :: (pred a, Inhabited a, Sized a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 namedInputArr n l = SArr (Base n) In l
 
-inputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
+inputArr :: (pred a, Inhabited a, Sized a, pred i, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 inputArr = namedInputArr "in"
 
-exactOutput :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+exactOutput :: (pred a, Inhabited a, Sized a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 exactOutput n = SSig (Exact n) Out
 
-namedOutput :: (pred a, Inhabited a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+namedOutput :: (pred a, Inhabited a, Sized a) => String -> (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 namedOutput n = SSig (Base n) Out
 
-output :: (pred a, Inhabited a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
+output :: (pred a, Inhabited a, Sized a) => (Signal a -> Sig instr exp pred m b) -> Sig instr exp pred m (Signal a -> b)
 output = namedOutput "out"
 
-exactOutputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
+exactOutputArr :: (pred a, Inhabited a, Sized a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 exactOutputArr n l = SArr (Exact n) Out l
 
-namedOutputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
+namedOutputArr :: (pred a, Inhabited a, Sized a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 namedOutputArr n l = SArr (Base n) Out l
 
-outputArr :: (pred a, Inhabited a, pred i, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
+outputArr :: (pred a, Inhabited a, pred i, Sized a, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
 outputArr = namedOutputArr "out"
 
 ret :: (ProgramT instr (Param2 exp pred) m) () -> Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred) ()
@@ -490,37 +490,37 @@ whenRising :: (VHDLCMD :<: instr, pred Bit)
 whenRising clk rst tru fls = singleInj (Rising clk rst tru fls)
 
 -- | ...
-copyBits :: (VHDLCMD :<: instr, pred a, pred b, pred Integer)
-  => (Signal a, exp Integer)
-  -> (Signal b, exp Integer)
-  -> exp Integer
+copyBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
+  => (Signal a, exp i)
+  -> (Signal b, exp i)
+  -> exp i
   -> ProgramT instr (Param2 exp pred) m ()
 copyBits a b l = singleInj (CopyBits a b l)
 
 -- | ...
-copyVBits :: (VHDLCMD :<: instr, pred a, pred b, pred Integer)
-  => (Variable a, exp Integer)
-  -> (Signal   b, exp Integer)
-  -> exp Integer
+copyVBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
+  => (Variable a, exp i)
+  -> (Signal   b, exp i)
+  -> exp i
   -> ProgramT instr (Param2 exp pred) m ()
 copyVBits a b l = singleInj (CopyVBits a b l)
 
 -- | ...
-getBit :: (VHDLCMD :<: instr, pred a, pred Integer, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
-  => Signal a -> exp Integer -> ProgramT instr (Param2 exp pred) m (exp Bit)
+getBit :: (VHDLCMD :<: instr, pred a, Integral i, Ix i, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
+  => Signal a -> exp i -> ProgramT instr (Param2 exp pred) m (exp Bit)
 getBit bits ix = fmap valToExp $ singleInj $ GetBit bits ix
 
 -- | ...
-setBit :: (VHDLCMD :<: instr, pred a, pred Integer, pred Bit)
-  => Signal a -> exp Integer -> exp Bit -> ProgramT instr (Param2 exp pred) m ()
+setBit :: (VHDLCMD :<: instr, pred a, Integral i, Ix i, pred Bit)
+  => Signal a -> exp i -> exp Bit -> ProgramT instr (Param2 exp pred) m ()
 setBit bits ix bit = singleInj $ SetBit bits ix bit
 
 -- | ...
-getBits :: (VHDLCMD :<: instr, pred Integer, PredicateExp exp Integer, FreeExp exp, Monad m)
+getBits :: (VHDLCMD :<: instr, pred i, Integral i, Ix i, PredicateExp exp i, FreeExp exp, Monad m)
   => Signal (Bits u)
-  -> exp Integer
-  -> exp Integer
-  -> ProgramT instr (Param2 exp pred) m (exp Integer)
+  -> exp i
+  -> exp i
+  -> ProgramT instr (Param2 exp pred) m (exp i)
 getBits a l u = fmap valToExp $ singleInj $ GetBits a l u
 
 --------------------------------------------------------------------------------

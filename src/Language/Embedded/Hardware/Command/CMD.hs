@@ -15,7 +15,7 @@ module Language.Embedded.Hardware.Command.CMD where
 
 import Language.Embedded.VHDL (Mode)
 import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Represent (Inhabited)
+import Language.Embedded.Hardware.Expression.Represent (Inhabited, Sized)
 import Language.Embedded.Hardware.Expression.Represent.Bit (Bit, Bits)
 
 import Control.Monad.Reader (ReaderT(..), runReaderT, lift)
@@ -411,11 +411,11 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 data Signature fs a
   where
     Ret  :: prog () -> Signature (Param3 prog exp pred) ()
-    SSig :: (pred a, Inhabited a)
+    SSig :: (pred a, Inhabited a, Sized a)
       => Name -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
-    SArr :: (pred a, Inhabited a, pred i, Integral i, Ix i)
+    SArr :: (pred a, Inhabited a, Sized a, pred i, Integral i, Ix i)
       => Name -> Mode -> i
       -> (Array i a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Array i a -> b)
@@ -443,11 +443,11 @@ reexpressSignature env (SArr n m l af) = SArr n m l (reexpressSignature env . af
 data Argument pred a
   where
     Nil  :: Argument pred ()
-    ASig :: (pred a, Inhabited a)
+    ASig :: (pred a, Inhabited a, Sized a)
       => Signal a
       -> Argument pred b
       -> Argument pred (Signal a -> b)
-    AArr :: (pred a, Inhabited a, Integral i, Ix i)
+    AArr :: (pred a, Inhabited a, Sized a, Integral i, Ix i)
       => Array i a
       -> Argument pred b
       -> Argument pred (Array i a -> b)
@@ -539,8 +539,8 @@ instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr env
 
 data VHDLCMD fs a
   where
-    -- When we have external function calls we can replace this.
-    -- For now, its a handy short-hand for a common pattern in VHDL.
+    -- todo: When we have external function calls we can replace this.
+    --       For now, its a handy short-hand for a common pattern in VHDL.
     Rising :: pred Bit
       => Signal Bit -- ^ clock.
       -> Signal Bit -- ^ reset.
@@ -549,32 +549,33 @@ data VHDLCMD fs a
       -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: We should allow for base types to be treated as arrays of bits instead.
     -- todo: The second argument should be over a variable.
-    CopyBits :: (pred a, pred b, pred Integer)
-      => (Signal a, exp Integer)
-      -> (Signal b, exp Integer)
-      -> exp Integer
+    CopyBits :: (pred a, pred b, Integral i, Ix i)
+      => (Signal a, exp i)
+      -> (Signal b, exp i)
+      -> exp i
       -> VHDLCMD (Param3 prog exp pred) ()
-    CopyVBits :: (pred a, pred b, pred Integer)
-      => (Variable a, exp Integer)
-      -> (Signal   b, exp Integer)
-      -> exp Integer
+    CopyVBits :: (pred a, pred b, Integral i, Ix i)
+      => (Variable a, exp i)
+      -> (Signal   b, exp i)
+      -> exp i
       -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: These two should be expressions instead.
-    GetBit :: (pred a, pred Bit, pred Integer)
+    GetBit :: (pred a, pred Bit, Integral i, Ix i)
       => Signal a
-      -> exp Integer
+      -> exp i
       -> VHDLCMD (Param3 prog exp pred) (Val Bit)
-    SetBit :: (pred a, pred Bit, pred Integer)
+    SetBit :: (pred a, pred Bit, Integral i, Ix i)
       => Signal a
-      -> exp Integer
+      -> exp i
       -> exp Bit
       -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: same as above two?...
-    GetBits :: pred Integer
+    -- todo: result should be i?...
+    GetBits :: (pred i, Integral i, Ix i)
       => Signal (Bits n)
-      -> exp Integer
-      -> exp Integer
-      -> VHDLCMD (Param3 prog exp pred) (Val Integer)
+      -> exp i
+      -> exp i
+      -> VHDLCMD (Param3 prog exp pred) (Val i)
 
 instance HFunctor VHDLCMD
   where
