@@ -462,14 +462,16 @@ loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
 
     loadBit :: Prog instr exp pred ()
     loadBit = do
-      wb <- getBit wren 0
+      wb <- getBit wren (0 :: exp Integer)
+      undefined
       when (isHigh wb) $
-        do bit <- getBit wdata 0
-           setBit s 0 bit
+        do bit <- getBit wdata (0 :: exp Integer)
+           setBit s (0 :: exp Integer) bit
 
     loadBits :: Integer -> Integer -> Prog instr exp pred ()
     loadBits ix len = do
       wb <- getBit wren (value ix)
+      undefined
       when (isHigh wb) $
         copyBits (s, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
 
@@ -477,11 +479,12 @@ loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
     cases | size == 1 = loadBit
           | otherwise = sequence_ $ map (uncurry loadBits) $ zip [0..] $ chunk size
 
-loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
-    let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l-1]
-     in cs ++ loadInputs wdata wren tmp (i+(Prelude.toInteger l)) (af a) arg
+loadInputs wdata wren tmp i (SArr _ In l af) (AArr (a :: Array i b) arg) =
+    let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l'-1]
+     in cs ++ loadInputs wdata wren tmp (i+l') (af a) arg
   where
-    size :: Integer
+    l', size :: Integer
+    l'   = Prelude.toInteger l    
     size = bits a
 
     loadBit :: Integer -> Prog instr exp pred ()
@@ -494,11 +497,13 @@ loadInputs wdata wren tmp i (SArr _ In l af) (AArr a arg) =
         copyVBits (tmp, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
 
     cases :: Integer -> Prog instr exp pred ()
-    cases ax | size == 1 = loadBit ax
+    cases ax | size == 1 = loadBit xa
              | otherwise = do
       sequence_ $ map (uncurry $ loadBits ax) $ zip [0..] $ chunk size
-      val <- unsafeFreezeVariable tmp
-      setArray a (value ax) (fromBits val)
+      val :: exp (Bits 32) <- unsafeFreezeVariable tmp
+      let ix = litE (fromInteger ax) :: exp i
+      let b  = fromBits val          :: exp b
+      undefined --setArray a ix b
 
 -- | ...
 loadOutputs :: forall instr (exp :: * -> *) pred m a .
