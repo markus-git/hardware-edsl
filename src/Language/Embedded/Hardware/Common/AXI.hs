@@ -54,13 +54,16 @@ type Pred instr exp pred = (
      , VHDLCMD        :<: instr
      , Hardware exp
      , FreeExp exp
-     , PredicateExp exp ~ pred
-     , pred (Bit),     PredicateExp exp (Bit)
-     , pred (Bits 2),  PredicateExp exp (Bits 2)
-     , pred (Bits 3),  PredicateExp exp (Bits 3)
-     , pred (Bits 4),  PredicateExp exp (Bits 4)
-     , pred (Bits 32), PredicateExp exp (Bits 32)
-     , pred (Integer), PredicateExp exp (Integer)
+       -- todo: this equality might be bad. It should be enough to
+       --       say that 'PredicateExp' holds, and not that it has
+       --       to be equal to 'pred'.
+     , pred ~ PredicateExp exp
+     , pred (Bit)
+     , pred (Bits 2)
+     , pred (Bits 3)
+     , pred (Bits 4)
+     , pred (Bits 32)
+     , pred (Integer)
      , Num (exp Integer)
      )
 
@@ -455,7 +458,7 @@ loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
     When (Is i) cases : loadInputs wdata wren tmp (i+1) (sf s) arg
   where
     size :: Integer
-    size = bits s
+    size = 0 --bits s
 
     loadBit :: Prog instr exp pred ()
     loadBit = do

@@ -98,9 +98,12 @@ instance forall n. KnownNat n => Inhabited (Bits n)
 instance forall n. KnownNat n => Rep (Bits n)
   where
     declare     = declareBits
-    bits     _  = ni (Proxy::Proxy n)
     printVal    = show . bitToInteger
     printBits b = '\"' : (tail $ bitShowBin b) ++ ['\"'] -- *** why tail?
+
+instance forall n. KnownNat n => Sized (Bits n)
+  where
+    bits _ = ni (Proxy::Proxy n)
 
 deriving instance Typeable (Bits n)
 
@@ -308,7 +311,6 @@ newtype UBits = UB Integer
 instance Rep UBits
   where
     declare  = declareUBits
-    bits     = error "hardware.edsl: bits unknown for UBits."
     printVal = show
     -- *** This is bad and produces a warning in vhdl as there's no guarantee
     --     that the lenght of the printed binary will be the expected one.
