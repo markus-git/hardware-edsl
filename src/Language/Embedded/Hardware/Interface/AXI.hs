@@ -10,7 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances     #-}
 
-module Language.Embedded.Hardware.Common.AXI (axi_light_signature) where
+module Language.Embedded.Hardware.Interface.AXI (axi_light_signature) where
 
 import Language.Embedded.Hardware hiding (Constraint)
 import Language.Embedded.Hardware.Expression.Represent
@@ -28,6 +28,7 @@ import GHC.TypeLits
 import qualified GHC.Exts as GHC (Constraint)
 
 import Prelude hiding (not, and, or, div, null)
+import qualified Prelude as P
 
 --------------------------------------------------------------------------------
 -- * AXI-light Controller.
@@ -71,8 +72,7 @@ type Pred instr exp pred = (
 -- ** Signature.
 
 axi_light_signature
-  :: forall instr exp pred sig .
-     Pred instr exp pred
+  :: forall instr exp pred sig . Pred instr exp pred
   => Comp instr exp pred Identity sig
   -> Sig  instr exp pred Identity (
           Signal Bit       -- ^ Global clock signal.
@@ -132,10 +132,10 @@ axi_light_signature comp =
 -- ** Implementation.
 
 axi_light
-  :: forall instr exp pred sig .
-     Pred instr exp pred
+  :: forall instr exp pred sig . Pred instr exp pred
+  -- Component to connect:
   => Comp instr exp pred Identity sig
-  -- AXI.
+  -- AXI signals:
   -> Signal Bit       -- ^ Global clock signal.
   -> Signal Bit       -- ^ Global reset signal.
   -> Signal (Bits 32) -- ^ Write address.
@@ -202,8 +202,10 @@ axi_light comp
        let mWrite :: [When Integer (Prog instr exp pred)]
            mWrite = loadOutputs reg_out 0 (signatureOf comp) registers
        -- > read from input.
-       let mRead :: Variable (Bits 32) -> [When Integer (Prog instr exp pred)]
-           mRead var = loadInputs s_axi_wdata s_axi_wstrb var 0 (signatureOf comp) (registers)
+       let mRead :: [When Integer (Prog instr exp pred)]
+           mRead = loadInputs s_axi_wdata s_axi_wstrb 0
+             (signatureOf comp)
+             (registers)
        
        ----------------------------------------
        -- I/O Connections.
@@ -284,10 +286,10 @@ axi_light comp
            (do mReset)
            (do loc_addr <- getBits awaddr (value addr_lsb) (value addr_bits)
                rwren    <- getSignal reg_wren
-               temp     <- newVariable
-               when (isHigh rwren) $ switched loc_addr
-                 (mRead temp)
-                 (mReload)))
+               when (isHigh rwren) $
+                 switched loc_addr
+                   (mRead)
+                   (mReload)))
 
        ----------------------------------------
        -- Write response logic.
@@ -377,11 +379,11 @@ axi_light comp
 
 --------------------------------------------------------------------------------
 -- ** Helpers.
+--------------------------------------------------------------------------------
 
 -- | Declare the registers which will be used by our AXI-lite slave to store
 --   values received from the master and, once filled, as input for the comp.
-declareRegisters :: forall instr (exp :: * -> *) pred m a .
-     Pred instr exp pred
+declareRegisters :: forall instr (exp :: * -> *) pred m a . Pred instr exp pred
   => Sig  instr exp pred Identity a
   -> Prog instr exp pred (Argument pred a)
 declareRegisters (Ret _) = return Nil
@@ -396,46 +398,38 @@ declareRegisters (SArr _ _ l af) =
 
 --------------------------------------------------------------------------------
 
--- | ...
-resetInputs :: forall instr (exp :: * -> *) pred m a .
-     Pred instr exp pred
+-- | Reset the input registers.
+resetInputs :: forall instr (exp :: * -> *) pred m a . Pred instr exp pred
   => Sig  instr exp pred Identity a
   -> Argument pred a
   -> Prog instr exp pred ()
-resetInputs (Ret _) (Nil) =
-  do return ()
-resetInputs (SSig _ In sf) (ASig s arg) =
+resetInputs (Ret _)           (Nil)        = return ()
+resetInputs (SSig _ Out   sf) (ASig s arg) = resetInputs (sf s) arg
+resetInputs (SArr _ Out _ af) (AArr a arg) = resetInputs (af a) arg
+resetInputs (SSig _ In    sf) (ASig s arg) =
   do setSignal s (litE reset)
      resetInputs (sf s) arg
-resetInputs (SSig _ _ sf) (ASig s arg) =
-  do resetInputs (sf s) arg
-resetInputs (SArr _ In _ af) (AArr a arg) =
+resetInputs (SArr _ In  _ af) (AArr a arg) =
   do resetArray a (litE reset)
      resetInputs (af a) arg
-resetInputs (SArr _ _ _ af) (AArr a arg) =
-  do resetInputs (af a) arg
 
 --------------------------------------------------------------------------------
 
--- | ...
-reloadInputs :: forall instr (exp :: * -> *) pred m a .
-     Pred instr exp pred
+-- | Reset the input registers to their previous values.
+reloadInputs :: forall instr (exp :: * -> *) pred m a . Pred instr exp pred
   => Sig  instr exp pred Identity a
   -> Argument pred a
   -> Prog instr exp pred ()
-reloadInputs (Ret _) (Nil) =
-  do return ()
-reloadInputs (SSig _ In sf) (ASig s arg) =
+reloadInputs (Ret _)           (Nil)        = return ()
+reloadInputs (SSig _ Out   sf) (ASig s arg) = reloadInputs (sf s) arg
+reloadInputs (SArr _ Out _ af) (AArr a arg) = reloadInputs (af a) arg
+reloadInputs (SSig _ In    sf) (ASig s arg) =
   do sv <- unsafeFreezeSignal s
      setSignal s sv
      reloadInputs (sf s) arg
-reloadInputs (SSig _ _ sf) (ASig s arg) =
-  do reloadInputs (sf s) arg
-reloadInputs (SArr _ In l af) (AArr a arg) =
+reloadInputs (SArr _ In  l af) (AArr a arg) =
   do copyArray (a, litE 0) (a, litE 0) (litE l)
      reloadInputs (af a) arg
-reloadInputs (SArr _ _ _ af) (AArr a arg) =
-  do reloadInputs (af a) arg
 
 --------------------------------------------------------------------------------
 
@@ -444,66 +438,35 @@ loadInputs :: forall instr (exp :: * -> *) pred m a .
      Pred instr exp pred
   => Signal   (Bits 32) -- ^ Input.
   -> Signal   (Bits 4)  -- ^ Protected bits.
-  -> Variable (Bits 32) -- ^ Temp.
   -> Integer            -- ^ Index.
   -> Sig  instr exp pred Identity a
   -> Argument pred a
   -> [When Integer (Prog instr exp pred)]
-loadInputs wdata wren tmp i (Ret _) (Nil) = []
-loadInputs wdata wren tmp i (SSig _ Out sf) (ASig s arg) =
-    loadInputs wdata wren tmp (i+1) (sf s) arg
-loadInputs wdata wren tmp i (SArr _ Out l af) (AArr a arg) =
-    loadInputs wdata wren tmp (i+(Prelude.toInteger l)) (af a) arg
-loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
-    When (Is i) cases : loadInputs wdata wren tmp (i+1) (sf s) arg
+loadInputs wdata wren i (Ret _) (Nil) = []
+loadInputs wdata wren i (SSig _ Out sf) (ASig s arg) =
+    loadInputs wdata wren (i+1) (sf s) arg
+loadInputs wdata wren i (SArr _ _   l af) (AArr a arg) =
+    error "axi-todo: loading arrays."
+loadInputs wdata wren i (SSig _ In sf) (ASig s arg) =
+    undefined : loadInputs wdata wren (i+1) (sf s) arg
+
+loadSignal :: forall instr (exp :: * -> *) pred m a .
+     (Pred instr exp pred, pred a, Sized a)
+  => Signal (Bits 32)
+  -> Signal (Bits 4)
+  -> Signal a
+  -> Prog instr exp pred ()
+loadSignal wdata wren reg = for 0 (litE size) $ \byte_index ->
+  do bit <- getBit wren byte_index
+     when (isHigh bit) $
+       copyBits (reg, byte_index*8) (wdata, byte_index*8) (litE 7)
   where
     size :: Integer
-    size = bits s
+    size = (P.div (bits reg) 8) - 1
+-- todo: I assume that `a` has a type \width\ that is some multiple of eight,
+--       hence the hard-coded seven when copying.
 
-    loadBit :: Prog instr exp pred ()
-    loadBit = do
-      wb <- getBit wren (0 :: exp Integer)
-      undefined
-      when (isHigh wb) $
-        do bit <- getBit wdata (0 :: exp Integer)
-           setBit s (0 :: exp Integer) bit
-
-    loadBits :: Integer -> Integer -> Prog instr exp pred ()
-    loadBits ix len = do
-      wb <- getBit wren (value ix)
-      undefined
-      when (isHigh wb) $
-        copyBits (s, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
-
-    cases :: Prog instr exp pred ()
-    cases | size == 1 = loadBit
-          | otherwise = sequence_ $ map (uncurry loadBits) $ zip [0..] $ chunk size
-
-loadInputs wdata wren tmp i (SArr _ In l af) (AArr (a :: Array i b) arg) =
-    let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l'-1]
-     in cs ++ loadInputs wdata wren tmp (i+l') (af a) arg
-  where
-    l', size :: Integer
-    l'   = Prelude.toInteger l    
-    size = bits a
-
-    loadBit :: Integer -> Prog instr exp pred ()
-    loadBit ax = error "axi-todo: loadBit for array."
-
-    loadBits :: Integer -> Integer -> Integer -> Prog instr exp pred ()
-    loadBits ax ix len = do
-      wb <- getBit wren (value ix)
-      when (isHigh wb) $
-        copyVBits (tmp, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
-
-    cases :: Integer -> Prog instr exp pred ()
-    cases ax | size == 1 = loadBit xa
-             | otherwise = do
-      sequence_ $ map (uncurry $ loadBits ax) $ zip [0..] $ chunk size
-      val :: exp (Bits 32) <- unsafeFreezeVariable tmp
-      let ix = litE (fromInteger ax) :: exp i
-      let b  = fromBits val          :: exp b
-      undefined --setArray a ix b
+--------------------------------------------------------------------------------
 
 -- | ...
 loadOutputs :: forall instr (exp :: * -> *) pred m a .
@@ -578,3 +541,60 @@ ones = value $ bitFromInteger (read (replicate size '1') :: Integer)
   where size = fromIntegral (ni (Proxy::Proxy n)) - 1
 
 --------------------------------------------------------------------------------
+-- Program stubs.
+--------------------------------------------------------------------------------
+{-
+loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
+    When (Is i) cases : loadInputs wdata wren tmp (i+1) (sf s) arg
+  where
+    size :: Integer
+    size = bits s
+
+    loadBit :: Prog instr exp pred ()
+    loadBit = do
+      wb <- getBit wren (0 :: exp Integer)
+      undefined
+      when (isHigh wb) $
+        do bit <- getBit wdata (0 :: exp Integer)
+           setBit s (0 :: exp Integer) bit
+
+    loadBits :: Integer -> Integer -> Prog instr exp pred ()
+    loadBits ix len = do
+      wb <- getBit wren (value ix)
+      undefined
+      when (isHigh wb) $
+        copyBits (s, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
+
+    cases :: Prog instr exp pred ()
+    cases | size == 1 = loadBit
+          | otherwise = sequence_ $ map (uncurry loadBits) $ zip [0..] $ chunk size
+loadInputs wdata wren tmp i (SArr _ Out l af) (AArr a arg) =
+    loadInputs wdata wren tmp (i+(Prelude.toInteger l)) (af a) arg
+loadInputs wdata wren tmp i (SArr _ In l af) (AArr (a :: Array i b) arg)
+    let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l'-1]
+     in cs ++ loadInputs wdata wren tmp (i+l') (af a) arg
+  where
+    l', size :: Integer
+    l'   = Prelude.toInteger l    
+    size = bits a
+
+    loadBit :: Integer -> Prog instr exp pred ()
+    loadBit ax = error "axi-todo: loadBit for array."
+
+    loadBits :: Integer -> Integer -> Integer -> Prog instr exp pred ()
+    loadBits ax ix len = do
+      wb <- getBit wren (value ix)
+      when (isHigh wb) $
+        copyVBits (tmp, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
+
+    cases :: Integer -> Prog instr exp pred ()
+    cases ax | size == 1 = loadBit ax
+             | otherwise = do
+      sequence_ $ map (uncurry $ loadBits ax) $ zip [0..] $ chunk size
+      val :: exp (Bits 32) <- unsafeFreezeVariable tmp
+      let ix = litE (fromInteger ax) :: exp i
+      let b  = fromBits val          :: exp b
+      undefined --setArray a ix b
+-}
+--------------------------------------------------------------------------------
+

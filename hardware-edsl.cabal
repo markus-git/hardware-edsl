@@ -28,6 +28,7 @@ library
     Language.Embedded.Hardware.Expression.Represent.Bit,
     Language.Embedded.Hardware.Expression.Syntax,
     Language.Embedded.Hardware.Interface,
+    Language.Embedded.Hardware.Interface.AXI
     Language.Embedded.Hardware.Command,
     Language.Embedded.Hardware.Command.Backend.VHDL,
     Language.Embedded.Hardware.Command.CMD,
@@ -37,7 +38,6 @@ library
     Language.Embedded.VHDL.Monad.Type,
     Language.Embedded.VHDL.Monad.Expression
     Language.Embedded.VHDL.Monad.Util
---    Language.Embedded.Hardware.Common.AXI
 
   --other-modules:
     
