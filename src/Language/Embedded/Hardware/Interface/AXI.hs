@@ -199,11 +199,13 @@ axi_light comp
        -- > fetch the names of all input registers.
        let mInputs = identInputs  (signatureOf comp) registers
        -- > write to output.
-       let mWrite :: [When Integer (Prog instr exp pred)]
-           mWrite = loadOutputs reg_out 0 (signatureOf comp) registers
+       let mWrite :: Prog instr exp pred ()
+           mWrite = loadOutputs araddr reg_out
+             (signatureOf comp)
+             (registers)
        -- > read from input.
-       let mRead :: [When Integer (Prog instr exp pred)]
-           mRead = loadInputs s_axi_wdata s_axi_wstrb 0
+       let mRead :: Prog instr exp pred ()
+           mRead = loadInputs awaddr reg_wren s_axi_wdata s_axi_wstrb
              (signatureOf comp)
              (registers)
        
@@ -283,14 +285,9 @@ axi_light comp
        --
        process (s_axi_aclk .: []) (do
          whenRising s_axi_aclk s_axi_aresetn
-           (do mReset)
-           (do loc_addr <- getBits awaddr (value addr_lsb) (value addr_bits)
-               rwren    <- getSignal reg_wren
-               when (isHigh rwren) $
-                 switched loc_addr
-                   (mRead)
-                   (mReload)))
-
+           mReset
+           mRead)
+       
        ----------------------------------------
        -- Write response logic.
        --
@@ -349,11 +346,13 @@ axi_light comp
        -- read logic generaiton.
        --
        process (araddr .: s_axi_aresetn .: reg_rden .: mInputs) (do
+         undefined)
+{-
          loc_addr <- getBits araddr (value addr_lsb) (value addr_bits)
          switched loc_addr
-           (mWrite)
-           (mReload))
-
+           mWrite
+           mReload)
+-}
        ----------------------------------------
        -- Output register of memory read data.
        --
@@ -375,7 +374,8 @@ axi_light comp
     -- Application-specific design signals.
     addr_lsb, addr_bits :: Integer
     addr_lsb  = 2
-    addr_bits = addr_lsb + (widthOf comp)
+    addr_bits = 2 + 1
+      --addr_lsb + (widthOf comp)
 
 --------------------------------------------------------------------------------
 -- ** Helpers.
@@ -434,64 +434,81 @@ reloadInputs (SArr _ In  l af) (AArr a arg) =
 --------------------------------------------------------------------------------
 
 -- | ...
-loadInputs :: forall instr (exp :: * -> *) pred m a .
-     Pred instr exp pred
-  => Signal   (Bits 32) -- ^ Input.
+loadInputs :: forall instr (exp :: * -> *) pred a . Pred instr exp pred
+  => Signal   (Bits 32) -- ^ Address.
+  -> Signal   (Bit)     -- ^ Ready.
+  -> Signal   (Bits 32) -- ^ Input.
   -> Signal   (Bits 4)  -- ^ Protected bits.
-  -> Integer            -- ^ Index.
-  -> Sig  instr exp pred Identity a
+  -> Sig instr exp pred Identity a
   -> Argument pred a
-  -> [When Integer (Prog instr exp pred)]
-loadInputs wdata wren i (Ret _) (Nil) = []
-loadInputs wdata wren i (SSig _ Out sf) (ASig s arg) =
-    loadInputs wdata wren (i+1) (sf s) arg
-loadInputs wdata wren i (SArr _ _   l af) (AArr a arg) =
-    error "axi-todo: loading arrays."
-loadInputs wdata wren i (SSig _ In sf) (ASig s arg) =
-    undefined : loadInputs wdata wren (i+1) (sf s) arg
+  -> Prog instr exp pred ()
+loadInputs waddr rwren wdata wren sig arg =
+  do loc   <- getBits waddr addr_lsb addr_msb
+     ready <- getSignal rwren
+     when (isHigh ready) $
+       switched loc
+         (cases 0 sig arg)
+         (reloadInputs sig arg)
+  where
+    cases :: Integer
+          -> Sig instr exp pred Identity b
+          -> Argument pred b
+          -> [When Integer (Prog instr exp pred)]
+    cases ix (Ret _)         (Nil)        = []
+    cases ix (SArr _ _ l af) (AArr a arg) = error "axi-todo: loading arrays."
+    cases ix (SSig _ Out sf) (ASig s arg) = cases (ix+1) (sf s) arg
+    cases ix (SSig _ In  sf) (ASig s arg) =
+      is (ix) (loadInputSignal wdata wren s) : cases (ix+1) (sf s) arg
 
-loadSignal :: forall instr (exp :: * -> *) pred m a .
+    addr_lsb, addr_msb :: exp Integer
+    addr_lsb = litE 2
+    addr_msb = litE 3
+
+loadInputSignal :: forall instr (exp :: * -> *) pred a .
      (Pred instr exp pred, pred a, Sized a)
   => Signal (Bits 32)
   -> Signal (Bits 4)
   -> Signal a
   -> Prog instr exp pred ()
-loadSignal wdata wren reg = for 0 (litE size) $ \byte_index ->
+loadInputSignal wdata wren reg = for 0 size $ \byte_index ->
   do bit <- getBit wren byte_index
      when (isHigh bit) $
        copyBits (reg, byte_index*8) (wdata, byte_index*8) (litE 7)
   where
-    size :: Integer
-    size = (P.div (bits reg) 8) - 1
+    size :: exp Integer
+    size = litE $ (P.div (bits reg) 8) - 1
 -- todo: I assume that `a` has a type \width\ that is some multiple of eight,
 --       hence the hard-coded seven when copying.
 
 --------------------------------------------------------------------------------
 
 -- | ...
-loadOutputs :: forall instr (exp :: * -> *) pred m a .
-     (Pred instr exp pred, Monad m)
-  => Signal (Bits 32) -- ^ Output.
-  -> Integer          -- ^ Index.
-  -> Sig instr exp pred m a
+loadOutputs :: forall instr (exp :: * -> *) pred a . Pred instr exp pred
+  => Signal (Bits 32) -- ^ Address.
+  -> Signal (Bits 32) -- ^ Output.
+  -> Sig instr exp pred Identity a
   -> Argument pred a
-  -> [When Integer (ProgramT instr (Param2 exp pred) m)]
-loadOutputs o i (Ret _) (Nil) = []
-{-
-loadOutputs o i (SSig _ Out sf) (ASig s arg) =
-  let p = setSignal o . toBits =<< unsafeFreezeSignal s
-   in When (Is i) p : loadOutputs o (i+1) (sf s) arg
-loadOutputs o i (SSig _ _ sf) (ASig s arg) =
-  loadOutputs o (i+1) (sf s) arg
-loadOutputs o i (SArr _ Out l af) (AArr a arg) =
-  let f ix = When (Is ix) (setSignal o . toBits =<< getArray a (value ix))
-   in map f [i..i+l-1] ++ loadOutputs o (i+l) (af a) arg
-loadOutputs o i (SArr _ _ l af) (AArr a arg) =
-  loadOutputs o (i+l) (af a) arg
--}
-chunk :: Integer -> [Integer]
-chunk i | i >  8 = 8 : chunk (i - 8)
-        | i <= 8 = [i]
+  -> Prog instr exp pred ()
+loadOutputs araddr rout sig arg = undefined
+  where
+    cases :: Integer
+          -> Sig instr exp pred Identity b
+          -> Argument pred b
+          -> [When Integer (Prog instr exp pred)]
+    cases ix (Ret _) (Nil) = []
+    cases ix (SArr _ _ l af) (AArr a arg) = error "axi-todo: loading arrays."
+    cases ix (SSig _ Out sf) (ASig s arg) = cases (ix+1) (sf s) arg
+    cases ix (SSig _ In  sf) (ASig s arg) = undefined
+      -- is (ix) (loadOutputSignal rout s) : cases (ix+1) (sf s) arg
+
+loadOutputSignal :: forall instr (exp :: * -> *) pred a .
+     (Pred instr exp pred, pred a, Sized a, Typeable a, Rep a, Integral a)
+  => Signal (Bits 32)
+  -> Signal a
+  -> Prog instr exp pred ()
+loadOutputSignal rout reg =
+  do r <- unsafeFreezeSignal reg
+     setSignal rout (toBits r :: exp (Bits 32))
 
 --------------------------------------------------------------------------------
 
@@ -521,8 +538,6 @@ widthOf = go . signatureOf
 dummy :: a
 dummy = error "todo: evaluated dummy"
 
---------------------------------------------------------------------------------
-
 high, low :: Expr exp => exp Bit
 high = true
 low  = false
@@ -530,8 +545,6 @@ low  = false
 isHigh, isLow :: (Expr exp, Rel exp) => exp Bit -> exp Bit
 isHigh e = e `eq` high
 isLow  e = e `eq` low
-
---------------------------------------------------------------------------------
 
 zeroes :: (Primary exp, Typeable n, KnownNat n) => exp (Bits n)
 zeroes = value 0
@@ -595,6 +608,23 @@ loadInputs wdata wren tmp i (SArr _ In l af) (AArr (a :: Array i b) arg)
       let ix = litE (fromInteger ax) :: exp i
       let b  = fromBits val          :: exp b
       undefined --setArray a ix b
+-}
+{-
+loadOutputs o i (Ret _) (Nil) = []
+loadOutputs o i (SSig _ Out sf) (ASig s arg) =
+  let p = setSignal o . toBits =<< unsafeFreezeSignal s
+   in When (Is i) p : loadOutputs o (i+1) (sf s) arg
+loadOutputs o i (SSig _ _ sf) (ASig s arg) =
+  loadOutputs o (i+1) (sf s) arg
+loadOutputs o i (SArr _ Out l af) (AArr a arg) =
+  let f ix = When (Is ix) (setSignal o . toBits =<< getArray a (value ix))
+   in map f [i..i+l-1] ++ loadOutputs o (i+l) (af a) arg
+loadOutputs o i (SArr _ _ l af) (AArr a arg) =
+  loadOutputs o (i+l) (af a) arg
+
+chunk :: Integer -> [Integer]
+chunk i | i >  8 = 8 : chunk (i - 8)
+        | i <= 8 = [i]
 -}
 --------------------------------------------------------------------------------
 
