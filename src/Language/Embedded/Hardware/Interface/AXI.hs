@@ -10,7 +10,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances     #-}
 
-module Language.Embedded.Hardware.Interface.AXI (axi_light_signature) where
+module Language.Embedded.Hardware.Interface.AXI (axi_light) where
 
 import Language.Embedded.Hardware hiding (Constraint)
 import Language.Embedded.Hardware.Expression.Represent
@@ -70,8 +70,9 @@ type Pred instr exp pred = (
 
 --------------------------------------------------------------------------------
 -- ** Signature.
+--------------------------------------------------------------------------------
 
-axi_light_signature
+axi_light
   :: forall instr exp pred sig . Pred instr exp pred
   => Comp instr exp pred Identity sig
   -> Sig  instr exp pred Identity (
@@ -98,7 +99,7 @@ axi_light_signature
        -> Signal Bit       -- ^ Read ready.    
        -> ()
      )
-axi_light_signature comp =
+axi_light comp =
   exactInput  "S_AXI_ACLK"    $ \s_axi_aclk    ->       
   exactInput  "S_AXI_ARESETN" $ \s_axi_aresetn -> 
   exactInput  "S_AXI_AWADDR"  $ \s_axi_awaddr  ->
@@ -120,7 +121,7 @@ axi_light_signature comp =
   exactOutput "S_AXI_RRESP"   $ \s_axi_rresp   ->     
   exactOutput "S_AXI_RVALID"  $ \s_axi_rvalid  ->
   exactInput  "S_AXI_RREADY"  $ \s_axi_rready  ->   
-  ret $ axi_light comp
+  ret $ axi_light_impl comp
     s_axi_aclk s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
@@ -130,8 +131,9 @@ axi_light_signature comp =
 
 --------------------------------------------------------------------------------
 -- ** Implementation.
+--------------------------------------------------------------------------------
 
-axi_light
+axi_light_impl
   :: forall instr exp pred sig . Pred instr exp pred
   -- Component to connect:
   => Comp instr exp pred Identity sig
@@ -158,7 +160,7 @@ axi_light
   -> Signal Bit       -- ^ Read valid.
   -> Signal Bit       -- ^ Read ready.    
   -> Prog instr exp pred ()
-axi_light comp
+axi_light_impl comp
     s_axi_aclk   s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
@@ -346,13 +348,8 @@ axi_light comp
        -- read logic generaiton.
        --
        process (araddr .: s_axi_aresetn .: reg_rden .: mInputs) (do
-         undefined)
-{-
-         loc_addr <- getBits araddr (value addr_lsb) (value addr_bits)
-         switched loc_addr
-           mWrite
-           mReload)
--}
+         mWrite)
+
        ----------------------------------------
        -- Output register of memory read data.
        --
@@ -489,7 +486,11 @@ loadOutputs :: forall instr (exp :: * -> *) pred a . Pred instr exp pred
   -> Sig instr exp pred Identity a
   -> Argument pred a
   -> Prog instr exp pred ()
-loadOutputs araddr rout sig arg = undefined
+loadOutputs araddr rout sig arg =
+  do loc <- getBits araddr addr_lsb addr_msb
+     switched loc
+       (cases 0 sig arg)
+       (setSignal rout (litE reset))
   where
     cases :: Integer
           -> Sig instr exp pred Identity b
@@ -498,8 +499,12 @@ loadOutputs araddr rout sig arg = undefined
     cases ix (Ret _) (Nil) = []
     cases ix (SArr _ _ l af) (AArr a arg) = error "axi-todo: loading arrays."
     cases ix (SSig _ Out sf) (ASig s arg) = cases (ix+1) (sf s) arg
-    cases ix (SSig _ In  sf) (ASig s arg) = undefined
-      -- is (ix) (loadOutputSignal rout s) : cases (ix+1) (sf s) arg
+    cases ix (SSig _ In  sf) (ASig s arg) =
+      is (ix) (loadOutputSignal rout s) : cases (ix+1) (sf s) arg
+
+    addr_lsb, addr_msb :: exp Integer
+    addr_lsb = litE 2
+    addr_msb = litE 3
 
 loadOutputSignal :: forall instr (exp :: * -> *) pred a .
      (Pred instr exp pred, pred a, Sized a, Typeable a, Rep a, Integral a)
@@ -533,7 +538,7 @@ widthOf = go . signatureOf
     go :: Sig instr exp pred m b -> Integer
     go (Ret _)        = 0
     go (SSig _ _ f)   = 1 + go (f dummy)
-  --go (SArr _ _ l g) = l + go (g dummy)
+--  go (SArr _ _ l g) = l + go (g dummy)
 
 dummy :: a
 dummy = error "todo: evaluated dummy"
