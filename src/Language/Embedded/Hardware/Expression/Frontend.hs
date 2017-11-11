@@ -173,8 +173,7 @@ toUnsigned = cast (fromIntegral)
 toBits :: (Primary exp, HType a, HType (Bits b), Integral a, KnownNat b) => exp a -> exp (Bits b)
 toBits = cast (bitFromInteger . fromIntegral)
 
---------------------------------------------------------------------------------
-
+-- | Converts a bit representation of integral into its original form.
 fromBits :: (Primary exp, HType (Bits a), HType b, Num b, KnownNat a) => exp (Bits a) -> exp b
 fromBits = cast (fromIntegral . bitToInteger)
 
