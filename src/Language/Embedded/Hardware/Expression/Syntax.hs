@@ -378,3 +378,51 @@ instance Eval Primary
 instance EvalEnv Primary env
 
 --------------------------------------------------------------------------------
+-- *** Temporary fix until GHC fixes their class resolution for DTC ***
+--------------------------------------------------------------------------------
+
+instance {-# OVERLAPPING #-} Project sub Dom => Project sub (AST T)
+  where
+    prj (Sym s) = prj s
+
+instance {-# OVERLAPPING #-} Project sub Dom => Project sub T
+  where
+    prj (T a) = prj a
+
+instance {-# OVERLAPPING #-} Project Expression Dom
+  where
+    prj (InjL a) = Just a
+    prj _ = Nothing
+
+instance {-# OVERLAPPING #-} Project Relational Dom
+  where
+    prj (InjR (InjL a)) = Just a
+    prj _ = Nothing
+
+instance {-# OVERLAPPING #-} Project ShiftExpression Dom
+  where
+    prj (InjR (InjR (InjL a))) = Just a
+    prj _ = Nothing
+
+instance {-# OVERLAPPING #-} Project SimpleExpression Dom
+  where
+    prj (InjR (InjR (InjR (InjL a)))) = Just a
+    prj _ = Nothing
+
+instance {-# OVERLAPPING #-} Project Term Dom
+  where
+    prj (InjR (InjR (InjR (InjR (InjL a))))) = Just a
+    prj _ = Nothing
+
+instance {-# OVERLAPPING #-} Project Factor Dom
+  where
+    prj (InjR (InjR (InjR (InjR (InjR (InjL a)))))) = Just a
+    prj _ = Nothing
+
+instance {-# OVERLAPPING #-} Project Primary Dom
+  where
+    prj ((InjR (InjR (InjR (InjR (InjR (InjR a))))))) = Just a
+    prj _ = Nothing
+
+--------------------------------------------------------------------------------
+
