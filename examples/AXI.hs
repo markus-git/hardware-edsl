@@ -8,7 +8,7 @@ module AXI where
 import Language.VHDL (Mode(..))
 import Language.Embedded.Hardware
 
-import Language.Embedded.Hardware.Common.AXI
+import Language.Embedded.Hardware.Interface.AXI
 
 import Control.Monad.Identity
 import Control.Monad.Operational.Higher
@@ -44,55 +44,47 @@ type HSig  = Sig CMD HExp HType Identity
 --------------------------------------------------------------------------------
 -- ** Example component.
 
--- Multiplier program.
-ex :: Integer -> Array Word8 -> Array Word8 -> Signal Word32 -> HProg ()
-ex size a b c =
+-- Simple adder.
+ex :: Signal Word32 -> Signal Word32 -> Signal Word32 -> HProg ()
+ex a b c =
   process (a .: b .: []) $ do
-    -- init. temp. variable.
-    sum <- initVariable 0
-    -- calc.
-    for 0 (value size - 1) (\ix -> do
-      va  <- getArray a ix
-      vb  <- getArray b ix
-      old <- getVariable sum
-      setVariable sum (old + toUnsigned (va * vb)))
-    -- set output.
-    out <- unsafeFreezeVariable sum
-    setSignal c out
+    va <- getSignal a
+    vb <- getSignal b
+    setSignal c (va + vb)
 
--- An encoding of the multiplier's signature.
-ex_sig :: Integer -> HSig (
-     Array  Word8
-  -> Array  Word8
+--------------------------------------------------------------------------------
+
+-- Adder's signature.
+ex_sig :: HSig (
+     Signal Word32
+  -> Signal Word32
   -> Signal Word32
   -> ())
-ex_sig size =
-  namedInputArr  "a" size $ \a ->
-  namedInputArr  "b" size $ \b ->
-  namedOutput    "c"      $ \c ->
-  ret (ex size a b c)
+ex_sig =
+  namedInput  "a" $ \a ->
+  namedInput  "b" $ \b ->
+  namedOutput "c" $ \c ->
+  ret $ ex a b c
 
--- A multiplier component given by its signature.
-ex_comp :: Integer -> HProg (HComp (
-     Array  Word8
-  -> Array  Word8
+--------------------------------------------------------------------------------
+
+-- Adder component.
+ex_comp :: HProg (HComp (
+     Signal Word32
+  -> Signal Word32
   -> Signal Word32
   -> ()))
-ex_comp size = namedComponent "example" (ex_sig size)
-
---------------------------------------------------------------------------------
--- ** AXI-lite wrapping of example.
-
-axi comp = namedComponent "axi_wrapper" (axi_light_signature comp)
-
-axi_comp :: HProg ()
-axi_comp =
-  do c <- ex_comp 2
-     a <- axi c
-     return ()
+ex_comp = namedComponent "example" ex_sig
 
 --------------------------------------------------------------------------------
 
-test = icompile axi_comp
+-- Adder component wrapped in an AXI-lite interface.
+ex_axi :: HProg ()
+ex_axi =
+  ex_comp >>= void . namedComponent "axi_wrapper" . axi_light
+
+--------------------------------------------------------------------------------
+
+test = icompile ex_axi
 
 --------------------------------------------------------------------------------
