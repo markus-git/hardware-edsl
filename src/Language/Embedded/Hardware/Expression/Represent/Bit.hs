@@ -97,7 +97,7 @@ instance forall n. KnownNat n => Inhabited (Bits n)
 
 instance forall n. KnownNat n => Rep (Bits n)
   where
-    declare     = declareBits
+    represent   = representBits
     printVal    = show . bitToInteger
     printBits b = '\"' : (tail $ bitShowBin b) ++ ['\"'] -- *** why tail?
 
@@ -107,9 +107,12 @@ instance forall n. KnownNat n => Sized (Bits n)
 
 deriving instance Typeable (Bits n)
 
-declareBits :: forall proxy n. KnownNat n => proxy (Bits n) -> VHDL Type
-declareBits _ = declareBoolean >> return (std_logic_vector size)
+representBits :: forall proxy n. KnownNat n => proxy (Bits n) -> Type
+representBits _ = std_logic_vector size
   where size = fromInteger (ni (undefined :: Bits n))
+
+declareBits :: forall proxy n. KnownNat n => proxy (Bits n) -> VHDL Type
+declareBits proxy = declareBoolean >> return (representBits proxy)
         
 --------------------------------------------------------------------------------
 -- *** ...
@@ -310,8 +313,8 @@ newtype UBits = UB Integer
 
 instance Rep UBits
   where
-    declare  = declareUBits
-    printVal = show
+    represent = representUBits
+    printVal  = show
     -- *** This is bad and produces a warning in vhdl as there's no guarantee
     --     that the lenght of the printed binary will be the expected one.
     --     Give UB an extra 'Maybe Integer' for storing the length whenever its
@@ -319,8 +322,11 @@ instance Rep UBits
     printBits (UB i) = '\"' : (N.showIntAtBase 2 intToDigit i "") ++ ['\"']
     
 
+representUBits :: proxy UBits -> Type
+representUBits _ = std_logic
+
 declareUBits :: proxy UBits -> VHDL Type
-declareUBits _ = declareBoolean >> return std_logic
+declareUBits proxy = declareBoolean >> return (representUBits proxy)
 
 --------------------------------------------------------------------------------
 

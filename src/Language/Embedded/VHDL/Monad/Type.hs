@@ -9,7 +9,7 @@ module Language.Embedded.VHDL.Monad.Type
   , unconstrainedArray, constrainedArray
   -- utility.
   , typeName, typeRange, typeWidth
-  , isBit, isBits, isSigned, isUnsigned, isInteger
+  , isBit, isBits, isSigned, isUnsigned, isInteger, isFloating
   ) where
 
 import Language.VHDL
@@ -159,5 +159,8 @@ isUnsigned t = "unsigned" == typeName t
 
 isInteger :: Type -> Bool
 isInteger t = "integer" == typeName t
+
+isFloating :: Type -> Bool
+isFloating t = "float" == typeName t
 
 --------------------------------------------------------------------------------

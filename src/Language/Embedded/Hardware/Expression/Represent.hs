@@ -7,7 +7,8 @@ module Language.Embedded.Hardware.Expression.Represent
   , Inhabited(..)
   , Sized(..)
   , HType(..)
-  
+
+  , declare
   , declareBoolean
   , declareNumeric
   , declareFloating
@@ -47,75 +48,87 @@ instance (Typeable a, Rep a, Eq a) => HType a
 -- | 'Rep'resentable types.
 class Rep a
   where
-    declare   :: proxy a -> VHDL Type
+    represent :: proxy a -> Type
     printVal  :: a -> String
     printBits :: a -> String
 
 instance Rep Bool where
-  declare  _     = declareBoolean >> return std_logic
+  represent  _   = std_logic
   printVal True  = "\'1\'"
   printVal False = "\'0\'"
   printBits      = printVal
 
 instance Rep Int8 where
-  declare _ = declareNumeric >> return signed8
-  printVal  = show
-  printBits = Util.printBits 8
+  represent _ = signed8
+  printVal    = show
+  printBits   = Util.printBits 8
 
 instance Rep Int16 where
-  declare _ = declareNumeric >> return signed16
-  printVal  = show
-  printBits = Util.printBits 16
+  represent _ = signed16
+  printVal    = show
+  printBits   = Util.printBits 16
 
 instance Rep Int32 where
-  declare _ = declareNumeric >> return signed32
-  printVal  = show
-  printBits = Util.printBits 32
+  represent _ = signed32
+  printVal    = show
+  printBits   = Util.printBits 32
 
 instance Rep Int64 where
-  declare _ = declareNumeric >> return signed64
-  printVal  = show
-  printBits = Util.printBits 64
+  represent _ = signed64
+  printVal    = show
+  printBits   = Util.printBits 64
 
 instance Rep Word8 where
-  declare _ = declareNumeric >> return usigned8
-  printVal  = show
-  printBits = Util.printBits 8
+  represent _ = usigned8
+  printVal    = show
+  printBits   = Util.printBits 8
 
 instance Rep Word16 where
-  declare _ = declareNumeric >> return usigned16
-  printVal  = show
-  printBits = Util.printBits 16
+  represent _ = usigned16
+  printVal    = show
+  printBits   = Util.printBits 16
 
 instance Rep Word32 where
-  declare _ = declareNumeric >> return usigned32
-  printVal  = show
-  printBits = Util.printBits 32
+  represent _ = usigned32
+  printVal    = show
+  printBits   = Util.printBits 32
 
 instance Rep Word64 where
-  declare _ = declareNumeric >> return usigned64
-  printVal  = show
-  printBits = Util.printBits 64
+  represent _ = usigned64
+  printVal    = show
+  printBits   = Util.printBits 64
 
 instance Rep Int where
-  declare _ = return (integer Nothing)
-  printVal  = show
-  printBits = error "hardware-edsl.printBits: int."
+  represent _ = integer Nothing
+  printVal    = show
+  printBits   = error "hardware-edsl.printBits: int."
 
 instance Rep Integer where
-  declare _ = return (integer Nothing)
-  printVal  = show
-  printBits = error "hardware-edsl.printBits: integer."
+  represent _ = integer Nothing
+  printVal    = show
+  printBits   = error "hardware-edsl.printBits: integer."
 
 instance Rep Float where
-  declare _ = declareFloating >> return float
-  printVal  = show
-  printBits = error "hardware-edsl.printBits: float."
+  represent _ = float
+  printVal    = show
+  printBits   = error "hardware-edsl.printBits: float."
 
 instance Rep Double where
-  declare _ = declareFloating >> return double
-  printVal  = show
-  printBits = error "hardware-edsl.printBits: double."
+  represent _ = double
+  printVal    = show
+  printBits   = error "hardware-edsl.printBits: double."
+
+declare :: Rep a => proxy a -> VHDL Type
+declare proxy =
+  do let typ = represent proxy
+     case typ of 
+       typ | isBit typ      -> declareBoolean
+       typ | isBits typ     -> declareBoolean
+       typ | isSigned typ   -> declareNumeric
+       typ | isUnsigned typ -> declareNumeric
+       typ | isInteger typ  -> declareNumeric
+       typ | isFloating typ -> declareFloating
+     return typ
 
 -- | Declare the necessary libraries to support boolean operations.
 declareBoolean :: VHDL ()
