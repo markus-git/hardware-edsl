@@ -16,7 +16,7 @@ import Language.Embedded.VHDL (Mode(..))
 import Language.Embedded.Hardware.Command.CMD
 import Language.Embedded.Hardware.Command.Frontend
 import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Syntax hiding (Primary)
+import Language.Embedded.Hardware.Expression.Syntax hiding (Primary, Factor)
 import Language.Embedded.Hardware.Expression.Frontend
 import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit
@@ -59,7 +59,12 @@ type AXIPred instr exp pred = (
      , LoopCMD        :<: instr
      , ComponentCMD   :<: instr
      , VHDLCMD        :<: instr
-     , Hardware exp
+--
+     , Expr    exp
+     , Rel     exp
+     , Factor  exp
+     , Primary exp
+--
      , FreeExp exp
        -- todo: this equality might be bad. It should be enough to
        --       say that 'PredicateExp' holds, and not that it has
