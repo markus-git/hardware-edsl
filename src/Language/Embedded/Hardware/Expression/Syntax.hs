@@ -14,7 +14,9 @@ import Language.Syntactic.Functional (Denotation, Eval(..), EvalEnv)
 
 import qualified Language.VHDL as V (Name, Aggregate)
 
-import Language.Embedded.Hardware.Command (CompArrayIx)
+--import Language.Embedded.Hardware.Command (CompArrayIx)
+--instance CompArrayIx HExp
+
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit
@@ -138,8 +140,6 @@ data Primary sig
     
 --------------------------------------------------------------------------------
 -- ** Syntactic instances.
-
-instance CompArrayIx HExp
 
 instance Equality T
   where

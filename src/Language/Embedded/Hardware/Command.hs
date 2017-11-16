@@ -4,17 +4,22 @@
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ConstraintKinds     #-}
 
+{-# LANGUAGE GADTs #-}
+
 module Language.Embedded.Hardware.Command
-  ( compile
+  (
+  -- Regular hardware compilers.
+    compile
   , icompile
   , runIO
-
+  -- AXI compilers.
+  , compileAXILite
+  , icompileAXILite
+  -- compilers that wraps a program in a dummy entity.
   , compileWrap
   , icompileWrap
-  , runIOWrap
-
+  
   , VHDL.Mode(..)
-
   , module CMD
   , module Language.Embedded.Hardware.Command.CMD
   , module Language.Embedded.Hardware.Command.Frontend
@@ -26,6 +31,7 @@ import Language.Embedded.Hardware.Command.CMD hiding (Signal, Variable, Array)
 import Language.Embedded.Hardware.Command.Frontend
 import Language.Embedded.Hardware.Command.Backend.VHDL
 import Language.Embedded.Hardware.Interface
+import Language.Embedded.Hardware.Interface.AXI
 
 import Language.Embedded.VHDL (VHDL, prettyVHDL)
 
@@ -33,6 +39,8 @@ import qualified Language.VHDL          as VHDL -- temp
 import qualified Language.Embedded.VHDL as VHDL -- temp
 
 import Control.Monad.Operational.Higher
+
+import Control.Monad.Identity
 
 import qualified GHC.Exts as GHC (Constraint)
 
@@ -69,6 +77,28 @@ runIO :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
 runIO = interpretBi (return . evalE)
 
 --------------------------------------------------------------------------------
+-- Some extra compilers that might be handy to have.
+
+compileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
+  ( Interp instr VHDL (Param2 exp pred)
+  , HFunctor instr
+  , AXIPred instr exp pred
+  )
+  => Comp instr exp pred Identity a
+  -> String
+compileAXILite = compile . void . component . axi_light 
+
+icompileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
+  ( Interp instr VHDL (Param2 exp pred)
+  , HFunctor instr
+  , AXIPred instr exp pred
+  )
+  => Comp instr exp pred Identity a
+  -> IO ()
+icompileAXILite = putStrLn . compileAXILite
+
+--------------------------------------------------------------------------------
+-- todo: Not sure we need these any more.
 
 compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      ( Interp instr VHDL (Param2 exp pred)
@@ -93,21 +123,6 @@ icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
   => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
   -> IO ()
 icompileWrap = icompile . wrap
-
-runIOWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
-   . ( InterpBi instr IO (Param1 pred)
-     , HBifunctor instr
-     , EvaluateExp exp
-     , ComponentCMD  :<: instr
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr
-     , pred Bool
-     )
-  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
-  -> IO ()
-runIOWrap = runIO . wrap
-
---------------------------------------------------------------------------------
 
 -- | Wrap a hardware program in a architecture/entity pair.
 wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .

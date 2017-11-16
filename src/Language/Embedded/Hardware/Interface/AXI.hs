@@ -10,10 +10,16 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances     #-}
 
-module Language.Embedded.Hardware.Interface.AXI (axi_light) where
+module Language.Embedded.Hardware.Interface.AXI (axi_light, AXIPred) where
 
-import Language.Embedded.Hardware hiding (Constraint)
+import Language.Embedded.VHDL (Mode(..))
+import Language.Embedded.Hardware.Command.CMD
+import Language.Embedded.Hardware.Command.Frontend
+import Language.Embedded.Hardware.Interface
+import Language.Embedded.Hardware.Expression.Syntax hiding (Primary)
+import Language.Embedded.Hardware.Expression.Frontend
 import Language.Embedded.Hardware.Expression.Represent
+import Language.Embedded.Hardware.Expression.Represent.Bit
 
 import Control.Monad.Identity (Identity)
 import Control.Monad.Operational.Higher hiding (when)
@@ -44,7 +50,7 @@ import qualified Prelude as P
 type Prog instr exp pred = Program instr (Param2 exp pred)
 
 -- | Short-hand for constraints.
-type Pred instr exp pred = (
+type AXIPred instr exp pred = (
        SignalCMD      :<: instr
      , ArrayCMD       :<: instr
      , VariableCMD    :<: instr
@@ -73,7 +79,7 @@ type Pred instr exp pred = (
 --------------------------------------------------------------------------------
 
 axi_light
-  :: forall instr exp pred sig . Pred instr exp pred
+  :: forall instr exp pred sig . AXIPred instr exp pred
   => Comp instr exp pred Identity sig
   -> Sig  instr exp pred Identity (
           Signal Bit       -- ^ Global clock signal.
@@ -134,7 +140,7 @@ axi_light comp =
 --------------------------------------------------------------------------------
 
 axi_light_impl
-  :: forall instr exp pred sig . Pred instr exp pred
+  :: forall instr exp pred sig . AXIPred instr exp pred
   -- Component to connect:
   => Comp instr exp pred Identity sig
   -- AXI signals:
@@ -380,7 +386,7 @@ axi_light_impl comp
 
 -- | Declare the registers which will be used by our AXI-lite slave to store
 --   values received from the master and, once filled, as input for the comp.
-declareRegisters :: forall instr (exp :: * -> *) pred m a . Pred instr exp pred
+declareRegisters :: forall instr (exp :: * -> *) pred m a . AXIPred instr exp pred
   => Sig  instr exp pred Identity a
   -> Prog instr exp pred (Argument pred a)
 declareRegisters (Ret _) = return Nil
@@ -396,7 +402,7 @@ declareRegisters (SArr _ _ l af) =
 --------------------------------------------------------------------------------
 
 -- | Reset the input registers.
-resetInputs :: forall instr (exp :: * -> *) pred m a . Pred instr exp pred
+resetInputs :: forall instr (exp :: * -> *) pred m a . AXIPred instr exp pred
   => Sig  instr exp pred Identity a
   -> Argument pred a
   -> Prog instr exp pred ()
@@ -413,7 +419,7 @@ resetInputs (SArr _ In  _ af) (AArr a arg) =
 --------------------------------------------------------------------------------
 
 -- | Reset the input registers to their previous values.
-reloadInputs :: forall instr (exp :: * -> *) pred m a . Pred instr exp pred
+reloadInputs :: forall instr (exp :: * -> *) pred m a . AXIPred instr exp pred
   => Sig  instr exp pred Identity a
   -> Argument pred a
   -> Prog instr exp pred ()
@@ -431,7 +437,7 @@ reloadInputs (SArr _ In  l af) (AArr a arg) =
 --------------------------------------------------------------------------------
 
 -- | ...
-loadInputs :: forall instr (exp :: * -> *) pred a . Pred instr exp pred
+loadInputs :: forall instr (exp :: * -> *) pred a . AXIPred instr exp pred
   => Signal   (Bits 32) -- ^ Address.
   -> Signal   (Bit)     -- ^ Ready.
   -> Signal   (Bits 32) -- ^ Input.
@@ -462,7 +468,7 @@ loadInputs waddr rwren wdata wren sig arg =
     addr_msb = litE 3
 
 loadInputSignal :: forall instr (exp :: * -> *) pred a .
-     (Pred instr exp pred, pred a, Sized a)
+     (AXIPred instr exp pred, pred a, Sized a)
   => Signal (Bits 32)
   -> Signal (Bits 4)
   -> Signal a
@@ -480,7 +486,7 @@ loadInputSignal wdata wren reg = for 0 size $ \byte_index ->
 --------------------------------------------------------------------------------
 
 -- | ...
-loadOutputs :: forall instr (exp :: * -> *) pred a . Pred instr exp pred
+loadOutputs :: forall instr (exp :: * -> *) pred a . AXIPred instr exp pred
   => Signal (Bits 32) -- ^ Address.
   -> Signal (Bits 32) -- ^ Output.
   -> Sig instr exp pred Identity a
@@ -507,7 +513,7 @@ loadOutputs araddr rout sig arg =
     addr_msb = litE 3
 
 loadOutputSignal :: forall instr (exp :: * -> *) pred a .
-     (Pred instr exp pred, pred a, Sized a, Typeable a, Rep a, Integral a)
+     (AXIPred instr exp pred, pred a, Sized a, Typeable a, Rep a, Integral a)
   => Signal (Bits 32)
   -> Signal a
   -> Prog instr exp pred ()
