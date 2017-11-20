@@ -6,6 +6,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE ConstraintKinds       #-}
 
 module Language.Embedded.Hardware.Expression.Syntax where
 
@@ -43,7 +44,7 @@ type Dom =
 -- | Typed expressions.
 data T sig
   where
-    T :: HType (DenResult sig) => { unT :: Dom sig } -> T sig
+    T :: PrimType (DenResult sig) => { unT :: Dom sig } -> T sig
 
 -- | Specialized sugarSym for T.
 sugarT
@@ -51,10 +52,13 @@ sugarT
      , T :<: SmartSym fi
      , SyntacticN f fi
      , SmartFun (SmartSym fi) (SmartSig fi) ~ fi
-     , HType (DenResult (SmartSig fi)))
+     , PrimType (DenResult (SmartSig fi)))
   => sub (SmartSig fi)
   -> f
 sugarT sym = sugarSym (T $ inj sym)
+
+-- | Hardware primitive types.
+type HType = PrimType
 
 -- | Hardware expressions.
 newtype HExp a = HExp { unHExp :: ASTF T a }
@@ -83,58 +87,59 @@ data Expression sig
 -- | Relational expressions.
 data Relational sig
   where
-    Eq   :: (HType a)        => Relational (a :-> a :-> Full Bool)
-    Neq  :: (HType a)        => Relational (a :-> a :-> Full Bool)
-    Lt   :: (HType a, Ord a) => Relational (a :-> a :-> Full Bool)
-    Lte  :: (HType a, Ord a) => Relational (a :-> a :-> Full Bool)
-    Gt   :: (HType a, Ord a) => Relational (a :-> a :-> Full Bool)
-    Gte  :: (HType a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Eq   :: (PrimType a)        => Relational (a :-> a :-> Full Bool)
+    Neq  :: (PrimType a)        => Relational (a :-> a :-> Full Bool)
+    Lt   :: (PrimType a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Lte  :: (PrimType a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Gt   :: (PrimType a, Ord a) => Relational (a :-> a :-> Full Bool)
+    Gte  :: (PrimType a, Ord a) => Relational (a :-> a :-> Full Bool)
 
 -- | Bit vector expressions.
 data ShiftExpression sig
   where
-    Sll :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
-    Srl :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
-    Sla :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
-    Sra :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
-    Rol :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
-    Ror :: (HType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Sll :: (PrimType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Srl :: (PrimType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Sla :: (PrimType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Sra :: (PrimType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Rol :: (PrimType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
+    Ror :: (PrimType a, B.Bits a) => ShiftExpression (a :-> Integer :-> Full a)
 
 -- | Numerical expressions.
 data SimpleExpression sig
   where
-    Neg :: (HType a, Num a) => SimpleExpression (a :->       Full a)
-    Pos :: (HType a, Num a) => SimpleExpression (a :->       Full a)
-    Add :: (HType a, Num a) => SimpleExpression (a :-> a :-> Full a)
-    Sub :: (HType a, Num a) => SimpleExpression (a :-> a :-> Full a)
+    Neg :: (PrimType a, Num a) => SimpleExpression (a :->       Full a)
+    Pos :: (PrimType a, Num a) => SimpleExpression (a :->       Full a)
+    Add :: (PrimType a, Num a) => SimpleExpression (a :-> a :-> Full a)
+    Sub :: (PrimType a, Num a) => SimpleExpression (a :-> a :-> Full a)
     Cat :: (KnownNat n, KnownNat m)
         => SimpleExpression (Bits n :-> Bits m :-> Full (Bits (n + m)))
 
 -- | Integral expressions.
 data Term sig
   where
-    Mul :: (HType a, Num a)      => Term (a :-> a :-> Full a)
-    Div :: (HType a, Integral a) => Term (a :-> a :-> Full a)
-    Mod :: (HType a, Integral a) => Term (a :-> a :-> Full a)
-    Rem :: (HType a, Integral a) => Term (a :-> a :-> Full a)
+    Mul :: (PrimType a, Num a)      => Term (a :-> a :-> Full a)
+    Div :: (PrimType a, Integral a) => Term (a :-> a :-> Full a)
+    Mod :: (PrimType a, Integral a) => Term (a :-> a :-> Full a)
+    Rem :: (PrimType a, Integral a) => Term (a :-> a :-> Full a)
 
 -- | ...
 data Factor sig
   where
-    Exp :: (HType a, Num a, HType b, Integral b) => Factor (a :-> b :-> Full a)
-    Abs :: (HType a, Num a) => Factor (a :-> Full a)
+    Exp :: (PrimType a, Num a, PrimType b, Integral b)
+        => Factor (a :-> b :-> Full a)
+    Abs :: (PrimType a, Num a) => Factor (a :-> Full a)
     Not :: Factor (Bool :-> Full Bool)
 
 -- | ...
 data Primary sig
   where
-    Name       :: (HType a) => V.Name      -> Primary (Full a)
-    Literal    :: (HType a) => a           -> Primary (Full a)
-    Aggregate  :: (HType a) => V.Aggregate -> Primary (Full a)
+    Name       :: (PrimType a) => V.Name -> Primary (Full a)
+    Literal    :: (PrimType a) => a -> Primary (Full a)
+    Aggregate  :: (PrimType a) => V.Aggregate -> Primary (Full a)
     Function   :: (Signature sig) => String -> Denotation sig -> Primary sig
-    Qualified  :: (HType a, HType b) => b        -> Primary (a :-> Full a)
-    Conversion :: (HType a, HType b) => (a -> b) -> Primary (a :-> Full b)
-    Allocator  :: (HType a) => Primary (Full a)
+    Qualified  :: (PrimType a, PrimType b) => b -> Primary (a :-> Full a)
+    Conversion :: (PrimType a, PrimType b) => (a -> b) -> Primary (a :-> Full b)
+    Allocator  :: (PrimType a) => Primary (Full a)
     -- *** todo: expanded aggregate
     Others     :: Primary (Bit :-> Full (Bits n))
     

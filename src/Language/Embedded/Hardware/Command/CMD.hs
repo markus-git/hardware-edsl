@@ -15,7 +15,7 @@ module Language.Embedded.Hardware.Command.CMD where
 
 import Language.Embedded.VHDL (Mode)
 import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Represent (Rep, Inhabited, Sized)
+import Language.Embedded.Hardware.Expression.Represent (PrimType, Inhabited, Sized)
 import Language.Embedded.Hardware.Expression.Represent.Bit (Bit, Bits)
 
 import Control.Monad.Reader (ReaderT(..), runReaderT, lift)
@@ -411,11 +411,11 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 data Signature fs a
   where
     Ret  :: prog () -> Signature (Param3 prog exp pred) ()
-    SSig :: (pred a, Inhabited a, Sized a, Integral a, Typeable a, Rep a)
+    SSig :: (pred a, Integral a, PrimType a)
       => Name -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
-    SArr :: (pred a, Inhabited a, Sized a, pred i, Integral i, Ix i)
+    SArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i)
       => Name -> Mode -> i
       -> (Array i a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Array i a -> b)
@@ -443,11 +443,11 @@ reexpressSignature env (SArr n m l af) = SArr n m l (reexpressSignature env . af
 data Argument pred a
   where
     Nil  :: Argument pred ()
-    ASig :: (pred a, Inhabited a, Sized a, Integral a, Typeable a, Rep a)
+    ASig :: (pred a, Integral a, PrimType a)
       => Signal a
       -> Argument pred b
       -> Argument pred (Signal a -> b)
-    AArr :: (pred a, Inhabited a, Sized a, Integral i, Ix i)
+    AArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i)
       => Array i a
       -> Argument pred b
       -> Argument pred (Array i a -> b)

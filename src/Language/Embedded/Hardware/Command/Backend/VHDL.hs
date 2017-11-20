@@ -37,42 +37,33 @@ import GHC.TypeLits (KnownNat)
 -- * Translation of hardware commands into VHDL.
 --------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
--- ** ...
-
-evalEM :: forall exp a . EvaluateExp exp => Maybe (exp a) -> a
-evalEM e = maybe (error "empty value") id $ fmap evalE e
-
-compEM :: forall exp a . CompileExp exp => Maybe (exp a) -> VHDL (Maybe V.Expression)
-compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
-
---------------------------------------------------------------------------------
--- ** ...
-
 class CompileType ct
   where
     compileType :: ct a => proxy1 ct -> proxy2 a -> VHDL V.Type
     compileLit  :: ct a => proxy1 ct ->        a -> VHDL V.Expression
     compileBits :: ct a => proxy1 ct ->        a -> VHDL V.Expression
 
-instance CompileType HType
+instance CompileType PrimType
   where
     compileType _ = compT
-    compileLit  _ = return . literal . printVal
-    compileBits _ = return . literal . printBits
+    compileLit  _ = return . literal . primTypeVal
+    compileBits _ = return . literal . primTypeBits
 
 --------------------------------------------------------------------------------
 
-compT :: HType a => proxy a -> VHDL V.Type
-compT = declare
+compT :: forall proxy a . PrimType a => proxy a -> VHDL V.Type
+compT _ = declareType (Proxy :: Proxy a)
 
-compTM :: forall proxy ct exp a . (CompileType ct, ct a) => proxy ct -> Maybe (exp a) -> VHDL V.Type
+compTM :: forall proxy ct exp a . (CompileType ct, ct a)
+  => proxy ct -> Maybe (exp a) -> VHDL V.Type
 compTM _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 
-compTF :: forall proxy ct exp a b . (CompileType ct, ct a) => proxy ct -> (exp a -> b) -> VHDL V.Type
+compTF :: forall proxy ct exp a b . (CompileType ct, ct a)
+  => proxy ct -> (exp a -> b) -> VHDL V.Type
 compTF _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 
-compTA :: forall proxy ct array i a . (CompileType ct, ct a) => proxy ct -> V.Range -> array a -> VHDL V.Type
+compTA :: forall proxy ct array i a . (CompileType ct, ct a)
+  => proxy ct -> V.Range -> array a -> VHDL V.Type
 compTA _ range _ =
   do i <- newSym (Base "array")
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
@@ -92,6 +83,16 @@ compTA _ range _ =
 
 --------------------------------------------------------------------------------
 
+evalEM :: forall exp a . EvaluateExp exp
+  => Maybe (exp a) -> a
+evalEM e = maybe (error "empty value") id $ fmap evalE e
+
+compEM :: forall exp a . CompileExp exp
+  => Maybe (exp a) -> VHDL (Maybe V.Expression)
+compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
+
+--------------------------------------------------------------------------------
+
 proxyE :: exp a -> Proxy a
 proxyE _ = Proxy
 
@@ -102,11 +103,6 @@ proxyF :: (exp a -> b) -> Proxy a
 proxyF _ = Proxy
 
 --------------------------------------------------------------------------------
--- ** ...
-
-newSym :: Name -> VHDL String
-newSym (Base  n) = V.newSym n
-newSym (Exact n) = return   n
 
 freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
   => proxy ct -> Name -> VHDL (Val a)
@@ -116,8 +112,26 @@ freshVar _ prefix =
      V.variable (ident' i) t Nothing
      return (ValC i)
 
+newSym :: Name -> VHDL String
+newSym (Base  n) = V.newSym n
+newSym (Exact n) = return   n
+
+ident :: ToIdent a => a -> String
+ident a = let (Ident s) = toIdent a in s
+
+ident' :: ToIdent a => a -> V.Identifier
+ident' a = V.Ident $ ident a
+
+-- todo: this... why does this work?
+instance ToIdent String where toIdent = Ident
+instance ToIdent Ident  where toIdent = id
+instance ToIdent Name   where
+  toIdent (Base s)  = Ident s
+  toIdent (Exact s) = Ident s
+
 --------------------------------------------------------------------------------
 -- ** Signals.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp SignalCMD VHDL (Param2 exp ct)
   where
@@ -160,6 +174,7 @@ runSignal (ConcurrentSetSignal (SignalE r) exp) =
 
 --------------------------------------------------------------------------------
 -- ** Variables.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp VariableCMD VHDL (Param2 exp ct)
   where
@@ -200,6 +215,7 @@ runVariable x@(UnsafeFreezeVariable v)      = runVariable (GetVariable v `asType
 
 --------------------------------------------------------------------------------
 -- ** Constants.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp ConstantCMD VHDL (Param2 exp ct)
   where
@@ -225,6 +241,7 @@ runConstant (GetConstant (ConstantE exp)) = return $ ValE exp
 
 --------------------------------------------------------------------------------
 -- ** Arrays.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp ArrayCMD VHDL (Param2 exp ct)
   where
@@ -278,6 +295,7 @@ runArray = error "hardware-edsl.todo: run arrays"
 
 --------------------------------------------------------------------------------
 -- ** Virtual Arrays.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp VArrayCMD VHDL (Param2 exp ct)
   where
@@ -361,6 +379,7 @@ runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw   arr >>= return . VArray
 
 --------------------------------------------------------------------------------
 -- ** Loops.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp LoopCMD VHDL (Param2 exp ct)
   where
@@ -402,6 +421,7 @@ runLoop (While b step) = loop
 
 --------------------------------------------------------------------------------
 -- ** Conditional.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp ConditionalCMD VHDL (Param2 exp ct)
   where
@@ -456,6 +476,7 @@ runConditional (Null) = return ()
 
 --------------------------------------------------------------------------------
 -- ** Components.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp ComponentCMD VHDL (Param2 exp ct)
   where
@@ -524,6 +545,7 @@ assocSig (SArr n _ _ af) (AArr a@(ArrayC i) v)  =
 
 --------------------------------------------------------------------------------
 -- ** Structural.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp StructuralCMD VHDL (Param2 exp ct)
   where
@@ -552,6 +574,7 @@ runStructural (StructProcess xs prog)       =
 
 --------------------------------------------------------------------------------
 -- ** VHDL.
+--------------------------------------------------------------------------------
 
 instance (CompileExp exp, CompileType ct) => Interp VHDLCMD VHDL (Param2 exp ct)
   where
@@ -616,25 +639,6 @@ runVHDL :: VHDLCMD (Param3 IO IO pred) a -> IO a
 runVHDL = error "hardware-edsl.runVHDL: todo."
 
 --------------------------------------------------------------------------------
--- Helpers.
---
--- todo : make a lift that first tries to go backwards. If that's not possible,
---        perform a regular lift. This should get rid of most extra parenthesis.
-
-ident :: ToIdent a => a -> String
-ident a = let (Ident s) = toIdent a in s
-
-ident' :: ToIdent a => a -> V.Identifier
-ident' a = V.Ident $ ident a
-
--- todo: this... why does this work?
-instance ToIdent String where toIdent = Ident
-instance ToIdent Ident  where toIdent = id
-instance ToIdent Name   where
-  toIdent (Base s)  = Ident s
-  toIdent (Exact s) = Ident s
-
---------------------------------------------------------------------------------
 
 simple   :: String -> V.Name
 simple   s = V.simple s
@@ -654,12 +658,8 @@ slice    s = V.slice $ V.simple s
 slice'   :: String -> V.Range -> V.Expression
 slice'   s = lift . V.name . slice s
 
---------------------------------------------------------------------------------
-
 literal :: String -> V.Expression
 literal s = lift $ V.literal $ V.number s
-
---------------------------------------------------------------------------------
 
 range  :: V.Expression -> V.Direction -> V.Expression -> V.Range
 range l dir r = V.range (unpackSimple l) dir (unpackSimple r)
@@ -671,7 +671,6 @@ rangePoint :: Integral a => a -> V.Range
 rangePoint a = V.range (V.point $ toInteger a) V.downto (V.point 0)
 
 --------------------------------------------------------------------------------
--- ...
 
 unpackShift :: V.Expression -> V.ShiftExpression
 unpackShift (V.ENand (V.Relation s Nothing) Nothing) = s
@@ -685,24 +684,4 @@ unpackTerm :: V.Expression -> V.Term
 unpackTerm (V.ENand (V.Relation (V.ShiftExpression (V.SimpleExpression Nothing t []) Nothing) Nothing) Nothing) = t
 unpackTerm e = lift e
 
---------------------------------------------------------------------------------
-
-
---------------------------------------------------------------------------------
-{-
-ident :: String -> V.Identifier
-ident s = V.Ident s
-
-ident' :: Name -> V.Identifier
-ident' (Base  n) = ident n
-ident' (Exact n) = ident n
-
-name :: String -> V.Primary
-name = V.PrimName . V.NSimple . ident
--}
---------------------------------------------------------------------------------
-{-
-fromIdent :: ToIdent a => a -> V.Identifier
-fromIdent a = let (Ident i) = toIdent a in ident i
--}
 --------------------------------------------------------------------------------

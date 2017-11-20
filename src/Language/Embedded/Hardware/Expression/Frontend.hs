@@ -7,11 +7,9 @@ module Language.Embedded.Hardware.Expression.Frontend where
 
 import qualified Language.VHDL as V
 
-import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Syntax hiding (Term, Factor, Primary)
-import Language.Embedded.Hardware.Expression.Hoist
-import Language.Embedded.Hardware.Expression.Represent
-import Language.Embedded.Hardware.Expression.Represent.Bit
+import Language.Embedded.Hardware.Expression.Syntax (HExp, HType, sugarT)
+import Language.Embedded.Hardware.Expression.Represent.Bit (Bits, bitFromInteger, bitToInteger)
+import qualified Language.Embedded.Hardware.Expression.Syntax as H
 import qualified Language.Embedded.VHDL.Monad.Expression as V
 
 import Data.Typeable (Typeable)
@@ -51,31 +49,31 @@ class Expr exp where
 instance Expr HExp where
   true  = value True
   false = value False
-  and   = sugarT And
-  or    = sugarT Or
-  xor   = sugarT Xor
-  xnor  = sugarT Xnor
-  nand  = sugarT Nand
-  nor   = sugarT Nor
+  and   = sugarT H.And
+  or    = sugarT H.Or
+  xor   = sugarT H.Xor
+  xnor  = sugarT H.Xnor
+  nand  = sugarT H.Nand
+  nor   = sugarT H.Nor
 
 --------------------------------------------------------------------------------
 
 -- | Relational operators.
 class Rel exp where
-  eq  :: (HType a, Eq a) => exp a -> exp a -> exp Bool
-  neq :: (HType a, Eq a) => exp a -> exp a -> exp Bool
+  eq  :: (HType a, Eq a)  => exp a -> exp a -> exp Bool
+  neq :: (HType a, Eq a)  => exp a -> exp a -> exp Bool
   lt  :: (HType a, Ord a) => exp a -> exp a -> exp Bool
   lte :: (HType a, Ord a) => exp a -> exp a -> exp Bool
   gt  :: (HType a, Ord a) => exp a -> exp a -> exp Bool
   gte :: (HType a, Ord a) => exp a -> exp a -> exp Bool
 
 instance Rel HExp where
-  eq  = sugarT Eq
-  neq = sugarT Neq
-  lt  = sugarT Lt
-  lte = sugarT Lte
-  gt  = sugarT Gt
-  gte = sugarT Gte
+  eq  = sugarT H.Eq
+  neq = sugarT H.Neq
+  lt  = sugarT H.Lt
+  lte = sugarT H.Lte
+  gt  = sugarT H.Gt
+  gte = sugarT H.Gte
 
 --------------------------------------------------------------------------------
 
@@ -89,12 +87,12 @@ class Shift exp where
   ror :: (HType a, B.Bits a) => exp a -> exp Integer -> exp a
 
 instance Shift HExp where
-  sll = sugarT Sll
-  srl = sugarT Srl
-  sla = sugarT Sla
-  sra = sugarT Sra
-  rol = sugarT Rol
-  ror = sugarT Ror
+  sll = sugarT H.Sll
+  srl = sugarT H.Srl
+  sla = sugarT H.Sla
+  sra = sugarT H.Sra
+  rol = sugarT H.Rol
+  ror = sugarT H.Ror
 
 --------------------------------------------------------------------------------
 
@@ -103,14 +101,14 @@ class Simple exp where
   neg :: (HType a, Num a) => exp a -> exp a
   add :: (HType a, Num a) => exp a -> exp a -> exp a
   sub :: (HType a, Num a) => exp a -> exp a -> exp a
-  cat :: ( KnownNat n, KnownNat m, KnownNat (n + m), Typeable (n + m))
+  cat :: (KnownNat n, KnownNat m, KnownNat (n + m), Typeable (n + m))
       => exp (Bits n) -> exp (Bits m) -> exp (Bits (n + m))
 
 instance Simple HExp where
-  neg = sugarT Neg
-  add = sugarT Add
-  sub = sugarT Sub
-  cat = sugarT Cat
+  neg = sugarT H.Neg
+  add = sugarT H.Add
+  sub = sugarT H.Sub
+  cat = sugarT H.Cat
 
 --------------------------------------------------------------------------------
 
@@ -122,10 +120,10 @@ class Term exp where
   rem :: (HType a, Integral a) => exp a -> exp a -> exp a
 
 instance Term HExp where
-  mul = sugarT Mul
-  div = sugarT Div
-  mod = sugarT Mod
-  rem = sugarT Rem
+  mul = sugarT H.Mul
+  div = sugarT H.Div
+  mod = sugarT H.Mod
+  rem = sugarT H.Rem
 
 --------------------------------------------------------------------------------
 
@@ -136,9 +134,9 @@ class Factor exp where
   not :: exp Bool -> exp Bool
 
 instance Factor HExp where
-  exp = sugarT Exp
-  abs = sugarT Abs
-  not = sugarT Not
+  exp = sugarT H.Exp
+  abs = sugarT H.Abs
+  not = sugarT H.Not
 
 --------------------------------------------------------------------------------
 
@@ -149,32 +147,37 @@ class Primary exp where
   cast  :: (HType a, HType b) => (a -> b) -> exp a -> exp b
   
 instance Primary HExp where
-  value  = sugarT . Literal
-  name n = sugarT (Name (V.NSimple (V.Ident n)))
-  cast f = sugarT (Conversion f)
+  value  = sugarT . H.Literal
+  name n = sugarT (H.Name (V.NSimple (V.Ident n)))
+  cast f = sugarT (H.Conversion f)
 
 -- | Creates a variable from a string.
 var :: (Primary exp, HType a) => String -> exp a
 var = name
 
 -- | Converts an integral (signed/unsigned/integer) to an integer.
-toInteger :: (Primary exp, HType a, Integral a) => exp a -> exp Integer
+toInteger :: (Primary exp, HType a, Integral a)
+  => exp a -> exp Integer
 toInteger = cast (fromIntegral)
 
 -- | Converts an integral to a signed value.
-toSigned :: (Primary exp, HType a, HType b, Integral a, Num b) => exp a -> exp b
+toSigned :: (Primary exp, HType a, HType b, Integral a, Num b)
+  => exp a -> exp b
 toSigned = cast (fromIntegral)
 
 -- | Converts an integral to a unsigned value.
-toUnsigned :: (Primary exp, HType a, HType b, Integral a, Num b) => exp a -> exp b
+toUnsigned :: (Primary exp, HType a, HType b, Integral a, Num b)
+  => exp a -> exp b
 toUnsigned = cast (fromIntegral)
 
 -- | Converts an integral to its bit representation.
-toBits :: (Primary exp, HType a, HType (Bits b), Integral a, KnownNat b) => exp a -> exp (Bits b)
+toBits :: (Primary exp, HType a, Integral a, KnownNat b)
+  => exp a -> exp (Bits b)
 toBits = cast (bitFromInteger . fromIntegral)
 
 -- | Converts a bit representation of integral into its original form.
-fromBits :: (Primary exp, HType (Bits a), HType b, Num b, KnownNat a) => exp (Bits a) -> exp b
+fromBits :: (Primary exp, HType b, Num b, KnownNat a)
+  => exp (Bits a) -> exp b
 fromBits = cast (fromIntegral . bitToInteger)
 
 --------------------------------------------------------------------------------

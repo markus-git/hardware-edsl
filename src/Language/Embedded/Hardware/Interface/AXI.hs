@@ -1,12 +1,11 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE TypeOperators       #-}
-{-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE ConstraintKinds     #-}
-{-# LANGUAGE PolyKinds           #-}
-{-# LANGUAGE GADTs               #-}
-
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE PolyKinds             #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances     #-}
 
@@ -16,10 +15,9 @@ import Language.Embedded.VHDL (Mode(..))
 import Language.Embedded.Hardware.Command.CMD
 import Language.Embedded.Hardware.Command.Frontend
 import Language.Embedded.Hardware.Interface
-import Language.Embedded.Hardware.Expression.Syntax hiding (Primary, Factor)
 import Language.Embedded.Hardware.Expression.Frontend
 import Language.Embedded.Hardware.Expression.Represent
-import Language.Embedded.Hardware.Expression.Represent.Bit
+import Language.Embedded.Hardware.Expression.Represent.Bit (Bits, Bit, bitFromInteger, ni)
 
 import Control.Monad.Identity (Identity)
 import Control.Monad.Operational.Higher hiding (when)
@@ -518,7 +516,7 @@ loadOutputs araddr rout sig arg =
     addr_msb = litE 3
 
 loadOutputSignal :: forall instr (exp :: * -> *) pred a .
-     (AXIPred instr exp pred, pred a, Sized a, Typeable a, Rep a, Integral a)
+     (AXIPred instr exp pred, pred a, PrimType a, Integral a)
   => Signal (Bits 32)
   -> Signal a
   -> Prog instr exp pred ()

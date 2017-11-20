@@ -29,7 +29,7 @@ import Control.Applicative
 
 instance FreeExp HExp
   where
-    type PredicateExp HExp = HType
+    type PredicateExp HExp = PrimType
     litE = value
     varE = var
 
@@ -52,11 +52,13 @@ instance CompileExp HExp
   where
     compE  = compHExp
 
-compHType :: forall a . HType a => HExp a -> VHDL VHDL.Type
-compHType _ = declare (undefined :: proxy a)
+compHType :: forall a . PrimType a
+  => HExp a -> VHDL VHDL.Type
+compHType _ = declareType (Proxy :: Proxy a)
 
-compHTypeFun :: forall a b . (HType a, HType b) => (a -> b) -> VHDL VHDL.Type
-compHTypeFun _ = declare (undefined :: proxy a)
+compHTypeFun :: forall a b . (PrimType a, PrimType b)
+  => (a -> b) -> VHDL VHDL.Type
+compHTypeFun _ = declareType (Proxy :: Proxy a)
 
 compHExp :: forall a . HExp a -> VHDL VHDL.Expression
 compHExp e = Hoist.lift <$> compSimple e
@@ -69,7 +71,7 @@ compHExp e = Hoist.lift <$> compSimple e
 
     compDomain
       :: forall sig
-       . HType (DenResult sig)
+       . PrimType (DenResult sig)
       => Dom sig
       -> Args (AST T) sig
       -> VHDL Kind
@@ -172,12 +174,16 @@ compHExp e = Hoist.lift <$> compSimple e
           x' <- Hoist.lift <$> compLoop x
           return $ Hoist.E $ VHDL.uCast x' tf tt
     compDomain primary args
-      | Just (Name n)       <- prj primary = return $ Hoist.P $ VHDL.name n
-      | Just (Literal i)    <- prj primary = return $ Hoist.P $ VHDL.literal $ VHDL.number $ printVal i
-      | Just (Aggregate a)  <- prj primary = return $ Hoist.P $ VHDL.aggregate a
+      | Just (Name n)       <- prj primary =
+          return $ Hoist.P $ VHDL.name n
+      | Just (Literal i)    <- prj primary =
+          return $ Hoist.P $ VHDL.literal $ VHDL.number $ primTypeVal i
+      | Just (Aggregate a)  <- prj primary =
+          return $ Hoist.P $ VHDL.aggregate a
       | Just (Function f _) <- prj primary = do
           as <- sequence $ listArgs compLoop args
           return $ Hoist.P $ VHDL.function (VHDL.simple f) (fmap Hoist.lift as)
-      | Just (Allocator)    <- prj primary = error "expression-backend: todo"
+      | Just (Allocator)    <- prj primary =
+          error "expression-backend-todo: allocators."
 
 --------------------------------------------------------------------------------
