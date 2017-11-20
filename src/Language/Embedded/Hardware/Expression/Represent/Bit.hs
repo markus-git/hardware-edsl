@@ -38,25 +38,15 @@ module Language.Embedded.Hardware.Expression.Represent.Bit
   , bitToList
   , bitShowBin
   , bitShowHex
-
-  , UBits
-  , forgetBits
-  , recallBits
   )
   where
-
-import Language.Embedded.Hardware.Expression.Represent
-
-import Language.Embedded.VHDL            (VHDL)
-import Language.Embedded.VHDL.Monad      (newSym, newLibrary, newImport)
-import Language.Embedded.VHDL.Monad.Type
 
 import Data.Ix
 import Data.Typeable
 import Data.Bits hiding (Bits)
 import qualified Data.Bits as Bit (Bits)
 
-import Control.Monad   (guard)
+import Control.Monad (guard)
 import Control.DeepSeq (NFData(..))
 
 import Data.Char (intToDigit)
@@ -65,57 +55,14 @@ import qualified Numeric as N
 import GHC.TypeLits
 
 --------------------------------------------------------------------------------
--- * ...
+-- * Bit vectors of known lenght.
 --------------------------------------------------------------------------------
-
---------------------------------------------------------------------------------
--- ** Single bit.
-
-type Bit = Bool
-
---------------------------------------------------------------------------------
--- These aren't great to have..
-
-instance Real Bool
-  where
-    toRational = error "toRational not implemented for bit."
-
-instance Integral Bool
-  where
-    toInteger True  = 1
-    toInteger False = 0
-    quotRem         = error "quotRem not implemented for bit."
-
---------------------------------------------------------------------------------
--- ** Bit vectors of known lenght.
 
 newtype Bits (n :: Nat) = B Integer
 
-instance forall n. KnownNat n => Inhabited (Bits n)
-  where
-    reset = bitFromInteger 0
-
-instance forall n. KnownNat n => Rep (Bits n)
-  where
-    represent   = representBits
-    printVal    = show . bitToInteger
-    printBits b = '\"' : (tail $ bitShowBin b) ++ ['\"'] -- *** why tail?
-
-instance forall n. KnownNat n => Sized (Bits n)
-  where
-    bits _ = ni (Proxy::Proxy n)
-
 deriving instance Typeable (Bits n)
-
-representBits :: forall proxy n. KnownNat n => proxy (Bits n) -> Type
-representBits _ = std_logic_vector size
-  where size = fromInteger (ni (undefined :: Bits n))
-
-declareBits :: forall proxy n. KnownNat n => proxy (Bits n) -> VHDL Type
-declareBits proxy = declareBoolean >> return (representBits proxy)
         
 --------------------------------------------------------------------------------
--- *** ...
 
 ni :: KnownNat n => proxy n -> Integer
 ni = fromIntegral . natVal
@@ -130,7 +77,6 @@ bitToInteger :: Bits n -> Integer
 bitToInteger (B i) = i
 
 --------------------------------------------------------------------------------
--- *** ...
 
 lift1 :: KnownNat n => (Integer -> Integer) -> Bits n -> Bits n
 lift1 f (B i) = norm (B (f i))
@@ -139,7 +85,6 @@ lift2 :: KnownNat n => (Integer -> Integer -> Integer) -> Bits n -> Bits n -> Bi
 lift2 f (B i) (B j) = norm (B (f i j))
 
 --------------------------------------------------------------------------------
--- *** ...
 
 bitAdd :: KnownNat n => Bits n -> Bits n -> Bits n
 bitAdd = lift2 (+)
@@ -210,7 +155,9 @@ bitTestBit (B i) n = testBit i n
 bitRotate :: KnownNat n => Bits n -> Int -> Bits n
 bitRotate b@(B i) n
   | si < 2    = b
-  | otherwise = bitOr (bitFromInteger (shiftL i n)) (bitFromInteger (shiftR i (si - n)))
+  | otherwise =
+      bitOr (bitFromInteger (shiftL i n))
+            (bitFromInteger (shiftR i (si - n)))
   where n' = mod n si
         si = fromInteger (ni b)
 
@@ -306,39 +253,32 @@ instance KnownNat n => Ix (Bits n) where
   inRange = undefined
 
 --------------------------------------------------------------------------------
--- ** Bit vectors of unknown lenght.
+-- * Bit.
+--------------------------------------------------------------------------------
 
-newtype UBits = UB Integer
-  deriving (Eq, Enum, Ord, Num, Real, Integral)
+type Bit = Bool
 
-instance Rep UBits
+--------------------------------------------------------------------------------
+-- These aren't too great to have..
+
+instance Num Bool where
+  (+)    = error "(+) not implemented for Bool"
+  (-)    = error "(-) not implemented for Bool"
+  (*)    = error "(*) not implemented for Bool"
+  abs    = id
+  signum = id
+  fromInteger 0 = False
+  fromInteger 1 = True
+  fromInteger _ = error "bool-num: >1"  
+
+instance Real Bool
   where
-    represent = representUBits
-    printVal  = show
-    -- *** This is bad and produces a warning in vhdl as there's no guarantee
-    --     that the lenght of the printed binary will be the expected one.
-    --     Give UB an extra 'Maybe Integer' for storing the length whenever its
-    --     available.
-    printBits (UB i) = '\"' : (N.showIntAtBase 2 intToDigit i "") ++ ['\"']
-    
+    toRational = error "toRational not implemented for bit."
 
-representUBits :: proxy UBits -> Type
-representUBits _ = std_logic
-
-declareUBits :: proxy UBits -> VHDL Type
-declareUBits proxy = declareBoolean >> return (representUBits proxy)
-
---------------------------------------------------------------------------------
-
-forgetBits :: Bits n -> UBits
-forgetBits b = UB (bitToInteger b)
-
-recallBits :: KnownNat n => UBits -> Bits n
-recallBits (UB i) = (B i)
-
---------------------------------------------------------------------------------
-
-instance Show UBits where
-  showsPrec p (UB x) = showsPrec p x
+instance Integral Bool
+  where
+    toInteger True  = 1
+    toInteger False = 0
+    quotRem         = error "quotRem not implemented for bit."
 
 --------------------------------------------------------------------------------

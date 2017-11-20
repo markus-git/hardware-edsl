@@ -1,156 +1,29 @@
+{-# LANGUAGE GADTs                #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE StandaloneDeriving   #-}
 
-module Language.Embedded.Hardware.Expression.Represent
-  ( Rep(..)
-  , Inhabited(..)
-  , Sized(..)
-  , HType(..)
+module Language.Embedded.Hardware.Expression.Represent where
 
-  , declare
-  , declareBoolean
-  , declareNumeric
-  , declareFloating
-    
-  , module Data.Int
-  , module Data.Word
-  ) where
-
-import qualified Language.VHDL as V
-
-import Language.VHDL (Expression)
+import Language.Embedded.Hardware.Expression.Represent.Bit
 
 import Language.Embedded.VHDL (VHDL)
 import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport)
 import Language.Embedded.VHDL.Monad.Type
-import qualified Language.Embedded.VHDL.Monad.Util as Util (printBits)
-
-import Language.Embedded.Hardware.Expression.Hoist (lift)
+import Language.Embedded.VHDL.Monad.Util (printBits)
 
 import Data.Char (isDigit)
 import Data.Int
 import Data.Word
-import Data.Typeable
-import Text.Printf
+import Data.Proxy (Proxy(..))
+import Data.Typeable (Typeable)
+
+import GHC.TypeLits
 
 --------------------------------------------------------------------------------
--- * Representation of types.
+-- * Inhabited types.
 --------------------------------------------------------------------------------
-
--- | Collection of required classes for hardware expressions.
-class    (Typeable a, Rep a, Eq a) => HType a
-instance (Typeable a, Rep a, Eq a) => HType a
-
---------------------------------------------------------------------------------
--- ** Representable types.
-
--- | 'Rep'resentable types.
-class Rep a
-  where
-    represent :: proxy a -> Type
-    printVal  :: a -> String
-    printBits :: a -> String
-
-instance Rep Bool where
-  represent  _   = std_logic
-  printVal True  = "\'1\'"
-  printVal False = "\'0\'"
-  printBits      = printVal
-
-instance Rep Int8 where
-  represent _ = signed8
-  printVal    = show
-  printBits   = Util.printBits 8
-
-instance Rep Int16 where
-  represent _ = signed16
-  printVal    = show
-  printBits   = Util.printBits 16
-
-instance Rep Int32 where
-  represent _ = signed32
-  printVal    = show
-  printBits   = Util.printBits 32
-
-instance Rep Int64 where
-  represent _ = signed64
-  printVal    = show
-  printBits   = Util.printBits 64
-
-instance Rep Word8 where
-  represent _ = usigned8
-  printVal    = show
-  printBits   = Util.printBits 8
-
-instance Rep Word16 where
-  represent _ = usigned16
-  printVal    = show
-  printBits   = Util.printBits 16
-
-instance Rep Word32 where
-  represent _ = usigned32
-  printVal    = show
-  printBits   = Util.printBits 32
-
-instance Rep Word64 where
-  represent _ = usigned64
-  printVal    = show
-  printBits   = Util.printBits 64
-
-instance Rep Int where
-  represent _ = integer Nothing
-  printVal    = show
-  printBits   = error "hardware-edsl.printBits: int."
-
-instance Rep Integer where
-  represent _ = integer Nothing
-  printVal    = show
-  printBits   = error "hardware-edsl.printBits: integer."
-
-instance Rep Float where
-  represent _ = float
-  printVal    = show
-  printBits   = error "hardware-edsl.printBits: float."
-
-instance Rep Double where
-  represent _ = double
-  printVal    = show
-  printBits   = error "hardware-edsl.printBits: double."
-
-declare :: Rep a => proxy a -> VHDL Type
-declare proxy =
-  do let typ = represent proxy
-     case typ of 
-       typ | isBit typ      -> declareBoolean
-       typ | isBits typ     -> declareBoolean
-       typ | isSigned typ   -> declareNumeric
-       typ | isUnsigned typ -> declareNumeric
-       typ | isInteger typ  -> declareNumeric
-       typ | isFloating typ -> declareFloating
-     return typ
-
--- | Declare the necessary libraries to support boolean operations.
-declareBoolean :: VHDL ()
-declareBoolean =
-  do newLibrary "IEEE"
-     newImport  "IEEE.std_logic_1164"
-
--- | Declare the necessary libraries to support numerical operations.
-declareNumeric :: VHDL ()
-declareNumeric =
-  do newLibrary "IEEE"
-     newImport  "IEEE.std_logic_1164"
-     newImport  "IEEE.numeric_std"
-
--- | Declare the necessary libraries to support floating point operations.
-declareFloating :: VHDL ()
-declareFloating =
-  do newLibrary "IEEE"
-     newImport  "IEEE.float_pkg"
-
---------------------------------------------------------------------------------
--- ** Inhabited types.
 
 -- | Inhabited types, that is, types with a base element.
 class Inhabited a
@@ -172,8 +45,13 @@ instance Inhabited Integer where reset = 0
 instance Inhabited Float   where reset = 0
 instance Inhabited Double  where reset = 0
 
+instance forall n . KnownNat n => Inhabited (Bits n)
+  where
+    reset = bitFromInteger 0
+
 --------------------------------------------------------------------------------
--- ** Sized types.
+-- * Sized types.
+--------------------------------------------------------------------------------
 
 -- | Types with a known size.
 class Sized a
@@ -190,18 +68,158 @@ instance Sized Word8   where bits _ = 8
 instance Sized Word16  where bits _ = 16
 instance Sized Word32  where bits _ = 32
 instance Sized Word64  where bits _ = 64
+instance Sized Int     where bits _ = 32
+instance Sized Integer where bits _ = 64
+instance Sized Float   where bits _ = 32
+instance Sized Double  where bits _ = 64
+
+instance forall n . KnownNat n => Sized (Bits n)
+  where
+    bits _ = ni (Proxy :: Proxy n)
 
 --------------------------------------------------------------------------------
--- ** Hmm...
+-- * Representable types.
+--------------------------------------------------------------------------------
 
-instance Num Bool where
-  (+)    = error "(+) not implemented for Bool"
-  (-)    = error "(-) not implemented for Bool"
-  (*)    = error "(*) not implemented for Bool"
-  abs    = id
-  signum = id
-  fromInteger 0 = False
-  fromInteger 1 = True
-  fromInteger _ = error "bool-num: >1"  
+-- | Representation of primitive hardware types.
+data TypeRep a
+  where
+    -- booleans.
+    BoolT    :: TypeRep Bool
+    -- signed numbers.
+    Int8T    :: TypeRep Int8
+    Int16T   :: TypeRep Int16
+    Int32T   :: TypeRep Int32
+    Int64T   :: TypeRep Int64
+    -- unsigned numbers.
+    Word8T   :: TypeRep Word8
+    Word16T  :: TypeRep Word16
+    Word32T  :: TypeRep Word32
+    Word64T  :: TypeRep Word64
+    -- integers.
+    IntT     :: TypeRep Int
+    IntegerT :: TypeRep Integer
+    -- floating point numbers.
+    FloatT   :: TypeRep Float
+    DoubleT  :: TypeRep Double
+    -- variable sized bit values (todo).
+    BitsT    :: KnownNat n => TypeRep (Bits n)
+
+deriving instance Eq       (TypeRep a)
+deriving instance Show     (TypeRep a)
+deriving instance Typeable (TypeRep a)
+
+--------------------------------------------------------------------------------
+
+-- | Primitive hardware types.
+class (Eq a, Show a, Typeable a, Inhabited a, Sized a) => PrimType a
+  where
+    typeRep :: TypeRep a
+
+instance PrimType Bool    where typeRep = BoolT
+instance PrimType Int8    where typeRep = Int8T
+instance PrimType Int16   where typeRep = Int16T
+instance PrimType Int32   where typeRep = Int32T
+instance PrimType Int64   where typeRep = Int64T
+instance PrimType Word8   where typeRep = Word8T
+instance PrimType Word16  where typeRep = Word16T
+instance PrimType Word32  where typeRep = Word32T
+instance PrimType Word64  where typeRep = Word64T
+instance PrimType Int     where typeRep = IntT
+instance PrimType Integer where typeRep = IntegerT
+instance PrimType Float   where typeRep = FloatT
+instance PrimType Double  where typeRep = DoubleT
+
+instance forall n . KnownNat n => PrimType (Bits n)
+  where
+    typeRep = BitsT
+
+--------------------------------------------------------------------------------
+
+-- | Print a value.
+primTypeVal :: forall a . PrimType a => a -> String
+primTypeVal a = case typeRep :: TypeRep a of
+  BoolT    -> if a then "\'1\'" else "\'0\'"
+  _        -> show a
+
+-- | Print a value as its bit representation.
+primTypeBits :: forall a . PrimType a => a -> String
+primTypeBits a = case typeRep :: TypeRep a of
+  BoolT    -> primTypeVal a
+  Int8T    -> printBits 8  a
+  Int16T   -> printBits 16 a
+  Int32T   -> printBits 32 a
+  Int64T   -> printBits 64 a
+  Word8T   -> printBits 8  a
+  Word16T  -> printBits 16 a
+  Word32T  -> printBits 32 a
+  Word64T  -> printBits 64 a
+  IntT     -> error "todo: print ints as bits."
+  IntegerT -> error "todo: print integers as bits."
+  FloatT   -> error "todo: print floats as bits."
+  DoubleT  -> error "todo: print doubles as bits."
+
+-- | Hardware type representation of a primitive type.
+primTypeRep :: forall a . PrimType a => Proxy a -> Type
+primTypeRep _ = case typeRep :: TypeRep a of
+  BoolT    -> std_logic
+  Int8T    -> signed8
+  Int16T   -> signed16
+  Int32T   -> signed32
+  Int64T   -> signed64
+  Word8T   -> usigned8
+  Word16T  -> usigned16
+  Word32T  -> usigned32
+  Word64T  -> usigned64
+  IntT     -> integer Nothing -- todo: might be wrong.
+  IntegerT -> integer Nothing -- todo: migth be wrong.
+  FloatT   -> float
+  DoubleT  -> double
+  BitsT    -> primTypeRepBits (Proxy :: Proxy a)
+
+primTypeRepBits :: forall n . KnownNat n => Proxy (Bits n) -> Type
+primTypeRepBits _ = std_logic_vector size
+  where size = fromInteger (ni (undefined :: Bits n))
+
+-- | Declare the necessary imports/packages to support a primitive type.
+primTypeDeclare :: forall a . PrimType a => Proxy a -> VHDL ()
+primTypeDeclare p = case typeRep :: TypeRep a of
+  BoolT    -> declareBoolean
+  Int8T    -> declareNumeric
+  Int16T   -> declareNumeric
+  Int32T   -> declareNumeric
+  Int64T   -> declareNumeric
+  Word8T   -> declareNumeric
+  Word16T  -> declareNumeric
+  Word32T  -> declareNumeric
+  Word64T  -> declareNumeric
+  IntT     -> declareNumeric
+  IntegerT -> declareNumeric
+  FloatT   -> declareFloating
+  DoubleT  -> declareFloating
+  BitsT    -> declareBoolean
+
+-- | Declare a primitive hardware type and get back its representation.
+declareType :: PrimType a => Proxy a -> VHDL Type
+declareType proxy = primTypeDeclare proxy >> return (primTypeRep proxy)
+
+-- | Declare the necessary libraries to support boolean operations.
+declareBoolean :: VHDL ()
+declareBoolean =
+  do newLibrary "IEEE"
+     newImport  "IEEE.std_logic_1164"
+
+-- | Declare the necessary libraries to support numerical operations.
+declareNumeric :: VHDL ()
+declareNumeric =
+  do newLibrary "IEEE"
+     newImport  "IEEE.std_logic_1164"
+     newImport  "IEEE.numeric_std"
+
+-- | Declare the necessary libraries to support floating point operations.
+declareFloating :: VHDL ()
+declareFloating =
+  do newLibrary "IEEE"
+     newImport  "IEEE.float_pkg"
 
 --------------------------------------------------------------------------------
