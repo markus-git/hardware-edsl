@@ -415,7 +415,7 @@ data Signature fs a
       => Name -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
-    SArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i)
+    SArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i, PrimType i)
       => Name -> Mode -> i
       -> (Array i a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Array i a -> b)
@@ -447,7 +447,7 @@ data Argument pred a
       => Signal a
       -> Argument pred b
       -> Argument pred (Signal a -> b)
-    AArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i)
+    AArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i, PrimType i)
       => Array i a
       -> Argument pred b
       -> Argument pred (Array i a -> b)

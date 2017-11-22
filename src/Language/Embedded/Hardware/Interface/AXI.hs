@@ -21,6 +21,10 @@ import Language.Embedded.Hardware.Expression.Frontend
 import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit (Bits, Bit, bitFromInteger, ni)
 
+-- hmm...
+import Language.Embedded.Hardware.Expression.Syntax (HExp, HType)
+import Language.Embedded.Hardware.Expression.Backend.VHDL ()
+
 import Control.Monad.Identity (Identity)
 import Control.Monad.Operational.Higher hiding (when)
 import Data.Constraint (Constraint)
@@ -41,19 +45,17 @@ import qualified Prelude as P
 --------------------------------------------------------------------------------
 -- * AXI-light Controller.
 --------------------------------------------------------------------------------
--- todo : we make a slight simplification and assume that components which we
---        connect to AXI-lite has a signature of
---          "input -> input -> .. -> input -> output -> ()"
---        this can easily be fixed by inspecting the modes given by the
---        signature.
---------------------------------------------------------------------------------
 
 -- | Make sure that `pred a` implies `PredicateExp exp a`.
 class FreeExp exp => FreePrim exp pred
   where
-    witPred :: Proxy exp -> Dict (pred a) -> Dict (PredicateExp exp a)
+    witPred :: PrimType a => Proxy exp -> Dict (pred a) -> Dict (PredicateExp exp a)
 
-litP :: forall exp pred a . (FreePrim exp pred, pred a)
+instance FreePrim HExp HType
+  where
+    witPred _ _ = Dict
+
+litP :: forall exp pred a . (FreePrim exp pred, PrimType a, pred a)
   => Proxy pred -> a -> exp a
 litP _ a = case witPred (Proxy :: Proxy exp) (Dict :: Dict (pred a)) of
   Dict -> litE a
@@ -82,8 +84,6 @@ type AXIPred instr exp pred = (
      -- 
      , FreeExp  exp
      , FreePrim exp pred
-     --
---     , pred ~ PredicateExp exp
      --
      , PredicateExp exp (Bit)
      , PredicateExp exp (Bits 2)
@@ -464,7 +464,7 @@ reloadInputs (SArr _ In  l af) (AArr a arg) =
   do copyArray (a, lit 0) (a, lit 0) (lit l)
      reloadInputs (af a) arg
   where
-    lit :: (FreePrim exp pred, pred b) => b -> exp b
+    lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
     lit = litP (Proxy :: Proxy pred)
 
 --------------------------------------------------------------------------------
@@ -514,7 +514,7 @@ loadInputSignal wdata wren reg = for 0 size $ \byte_index ->
     size :: exp Integer
     size = lit $ (P.div (bits reg) 8) - 1
 
-    lit :: (FreePrim exp pred, pred b) => b -> exp b
+    lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
     lit = litP (Proxy :: Proxy pred)
 -- todo: I assume that `a` has a type \width\ that is some multiple of eight,
 --       hence the hard-coded seven when copying.
