@@ -9,6 +9,8 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances     #-}
 
+{-# LANGUAGE Rank2Types #-}
+
 module Language.Embedded.Hardware.Interface.AXI (axi_light, AXIPred) where
 
 import Language.Embedded.VHDL (Mode(..))
@@ -28,6 +30,8 @@ import Data.Word
 import Data.Bits ()
 import Data.Ix (Ix)
 
+import Data.Constraint
+
 import GHC.TypeLits
 import qualified GHC.Exts as GHC (Constraint)
 
@@ -44,11 +48,24 @@ import qualified Prelude as P
 --        signature.
 --------------------------------------------------------------------------------
 
+-- | Make sure that `pred a` implies `PredicateExp exp a`.
+class FreeExp exp => FreePrim exp pred
+  where
+    witPred :: Proxy exp -> Dict (pred a) -> Dict (PredicateExp exp a)
+
+litP :: forall exp pred a . (FreePrim exp pred, pred a)
+  => Proxy pred -> a -> exp a
+litP _ a = case witPred (Proxy :: Proxy exp) (Dict :: Dict (pred a)) of
+  Dict -> litE a
+
+--------------------------------------------------------------------------------
+
 -- | Short-hand for programs.
 type Prog instr exp pred = Program instr (Param2 exp pred)
 
 -- | Short-hand for constraints.
 type AXIPred instr exp pred = (
+     -- Instructions.
        SignalCMD      :<: instr
      , ArrayCMD       :<: instr
      , VariableCMD    :<: instr
@@ -57,23 +74,31 @@ type AXIPred instr exp pred = (
      , LoopCMD        :<: instr
      , ComponentCMD   :<: instr
      , VHDLCMD        :<: instr
---
+     -- Expressions.
      , Expr    exp
      , Rel     exp
      , Factor  exp
      , Primary exp
---
-     , FreeExp exp
-       -- todo: this equality might be bad. It should be enough to
-       --       say that 'PredicateExp' holds, and not that it has
-       --       to be equal to 'pred'.
-     , pred ~ PredicateExp exp
+     -- 
+     , FreeExp  exp
+     , FreePrim exp pred
+     --
+--     , pred ~ PredicateExp exp
+     --
+     , PredicateExp exp (Bit)
+     , PredicateExp exp (Bits 2)
+     , PredicateExp exp (Bits 3)
+     , PredicateExp exp (Bits 4)
+     , PredicateExp exp (Bits 32)
+     , PredicateExp exp (Integer)
+     --
      , pred (Bit)
      , pred (Bits 2)
      , pred (Bits 3)
      , pred (Bits 4)
      , pred (Bits 32)
      , pred (Integer)
+     --
      , Num (exp Integer)
      )
 
@@ -398,7 +423,7 @@ declareRegisters (SSig _ _ sf) =
      a <- declareRegisters (sf s)
      return (ASig s a)
 declareRegisters (SArr _ _ l af) =
-  do s <- newArray (litE l)
+  do s <- newArray (litP (Proxy :: Proxy pred) l)
      a <- declareRegisters (af s)
      return (AArr s a)
 
@@ -413,10 +438,10 @@ resetInputs (Ret _)           (Nil)        = return ()
 resetInputs (SSig _ Out   sf) (ASig s arg) = resetInputs (sf s) arg
 resetInputs (SArr _ Out _ af) (AArr a arg) = resetInputs (af a) arg
 resetInputs (SSig _ In    sf) (ASig s arg) =
-  do setSignal s (litE reset)
+  do setSignal s (litP (Proxy :: Proxy pred) reset)
      resetInputs (sf s) arg
 resetInputs (SArr _ In  _ af) (AArr a arg) =
-  do resetArray a (litE reset)
+  do resetArray a (litP (Proxy :: Proxy pred) reset)
      resetInputs (af a) arg
 
 --------------------------------------------------------------------------------
@@ -429,13 +454,18 @@ reloadInputs :: forall instr (exp :: * -> *) pred m a . AXIPred instr exp pred
 reloadInputs (Ret _)           (Nil)        = return ()
 reloadInputs (SSig _ Out   sf) (ASig s arg) = reloadInputs (sf s) arg
 reloadInputs (SArr _ Out _ af) (AArr a arg) = reloadInputs (af a) arg
-reloadInputs (SSig _ In    sf) (ASig s arg) =
-  do sv <- unsafeFreezeSignal s
-     setSignal s sv
-     reloadInputs (sf s) arg
+reloadInputs (SSig _ In    sf) (ASig (s :: Signal b) arg) =
+  case witPred (Proxy :: Proxy exp) (Dict :: Dict (pred b)) of
+    Dict -> do
+      sv <- unsafeFreezeSignal s
+      setSignal s sv
+      reloadInputs (sf s) arg
 reloadInputs (SArr _ In  l af) (AArr a arg) =
-  do copyArray (a, litE 0) (a, litE 0) (litE l)
+  do copyArray (a, lit 0) (a, lit 0) (lit l)
      reloadInputs (af a) arg
+  where
+    lit :: (FreePrim exp pred, pred b) => b -> exp b
+    lit = litP (Proxy :: Proxy pred)
 
 --------------------------------------------------------------------------------
 
@@ -467,8 +497,8 @@ loadInputs waddr rwren wdata wren sig arg =
       is (ix) (loadInputSignal wdata wren s) : cases (ix+1) (sf s) arg
 
     addr_lsb, addr_msb :: exp Integer
-    addr_lsb = litE 2
-    addr_msb = litE 3
+    addr_lsb = litP (Proxy :: Proxy pred) 2
+    addr_msb = litP (Proxy :: Proxy pred) 3
 
 loadInputSignal :: forall instr (exp :: * -> *) pred a .
      (AXIPred instr exp pred, pred a, Sized a)
@@ -479,10 +509,13 @@ loadInputSignal :: forall instr (exp :: * -> *) pred a .
 loadInputSignal wdata wren reg = for 0 size $ \byte_index ->
   do bit <- getBit wren byte_index
      when (isHigh bit) $
-       copyBits (reg, byte_index*8) (wdata, byte_index*8) (litE 7)
+       copyBits (reg, byte_index*8) (wdata, byte_index*8) (lit 7)
   where
     size :: exp Integer
-    size = litE $ (P.div (bits reg) 8) - 1
+    size = lit $ (P.div (bits reg) 8) - 1
+
+    lit :: (FreePrim exp pred, pred b) => b -> exp b
+    lit = litP (Proxy :: Proxy pred)
 -- todo: I assume that `a` has a type \width\ that is some multiple of eight,
 --       hence the hard-coded seven when copying.
 
@@ -499,7 +532,7 @@ loadOutputs araddr rout sig arg =
   do loc <- getBits araddr addr_lsb addr_msb
      switched loc
        (cases 0 sig arg)
-       (setSignal rout (litE reset))
+       (setSignal rout (litP (Proxy :: Proxy pred) reset))
   where
     cases :: Integer
           -> Sig instr exp pred Identity b
@@ -512,8 +545,8 @@ loadOutputs araddr rout sig arg =
       is (ix) (loadOutputSignal rout s) : cases (ix+1) (sf s) arg
 
     addr_lsb, addr_msb :: exp Integer
-    addr_lsb = litE 2
-    addr_msb = litE 3
+    addr_lsb = litP (Proxy :: Proxy pred) 2
+    addr_msb = litP (Proxy :: Proxy pred) 3
 
 loadOutputSignal :: forall instr (exp :: * -> *) pred a .
      (AXIPred instr exp pred, pred a, PrimType a, Integral a)
@@ -521,8 +554,10 @@ loadOutputSignal :: forall instr (exp :: * -> *) pred a .
   -> Signal a
   -> Prog instr exp pred ()
 loadOutputSignal rout reg =
-  do r <- unsafeFreezeSignal reg
-     setSignal rout (toBits r :: exp (Bits 32))
+  case witPred (Proxy :: Proxy exp) (Dict :: Dict (pred a)) of
+    Dict -> do
+      r <- unsafeFreezeSignal reg
+      setSignal rout (toBits r :: exp (Bits 32))
 
 --------------------------------------------------------------------------------
 
