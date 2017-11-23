@@ -87,4 +87,6 @@ ex_axi =
 
 test = icompile ex_axi
 
+test2 = icompileAXILite ex_sig
+
 --------------------------------------------------------------------------------
