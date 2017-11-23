@@ -86,7 +86,10 @@ compileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
   )
   => Sig instr exp pred Identity a
   -> String
-compileAXILite sig = compile $ component . axi_light <$> component sig
+compileAXILite sig = compile $
+  do cmp <- component sig
+     axi <- component (axi_light cmp)
+     return ()
 
 icompileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
   ( Interp instr VHDL (Param2 exp pred)
