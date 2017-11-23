@@ -11,7 +11,7 @@
 
 {-# LANGUAGE Rank2Types #-}
 
-module Language.Embedded.Hardware.Interface.AXI (axi_light, AXIPred) where
+module Language.Embedded.Hardware.Interface.AXI (axi_light, AXIPred, FreePrim(..)) where
 
 import Language.Embedded.VHDL (Mode(..))
 import Language.Embedded.Hardware.Command.CMD
