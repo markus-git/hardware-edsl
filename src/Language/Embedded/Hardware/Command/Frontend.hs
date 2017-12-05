@@ -464,35 +464,44 @@ ret = Ret
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
+-- | Declare a new and named entity by wrapping the program to declare ports & generics.
+namedEntity :: (StructuralCMD :<: instr)
+  => String
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+namedEntity e = singleInj . StructEntity (Base e)
+
 -- | Declare a new entity by wrapping the program to declare ports & generics.
 entity :: (StructuralCMD :<: instr)
-  => String
-  -> ProgramT instr (Param2 exp pred) m a
-  -> ProgramT instr (Param2 exp pred) m a
-entity e = singleInj . StructEntity (Exact e)
+  => ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+entity = namedEntity "entity"
 
+-- | Declare a new process listening to some signals by wrapping the given program.
+process :: (StructuralCMD :<: instr)
+  => Signal Bool
+  -> Signal Bool
+  -> Signals
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+  -> ProgramT instr (Param2 exp pred) m ()
+process clk rst is q = singleInj . StructProcess clk rst is q
+
+-- | Construct the untyped signal list for processes.
+(.:) :: ToIdent a => a -> Signals -> Signals
+(.:) x xs = toIdent x : xs
+
+infixr .:
+
+{-
 -- | Declare a new architecture for some entity by wrapping the given program.
 architecture :: (StructuralCMD :<: instr)
   => String -> String
   -> ProgramT instr (Param2 exp pred) m a
   -> ProgramT instr (Param2 exp pred) m a
 architecture e a = singleInj . StructArchitecture (Exact e) (Exact a)
-
--- | Declare a new process listening to some signals by wrapping the given program.
-process :: (StructuralCMD :<: instr)
-  => [Ident]
-  -> ProgramT instr (Param2 exp pred) m ()
-  -> ProgramT instr (Param2 exp pred) m ()
-process is = singleInj . StructProcess is
-
---------------------------------------------------------------------------------
-
--- | Construct the untyped signal list for processes.
-(.:) :: ToIdent a => a -> [Ident] -> [Ident]
-(.:) x xs = toIdent x : xs
-
-infixr .:
-
+-}
+  
 --------------------------------------------------------------------------------
 -- ** VHDL specific instructions.
 --

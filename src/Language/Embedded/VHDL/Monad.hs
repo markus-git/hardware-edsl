@@ -39,6 +39,7 @@ module Language.Embedded.VHDL.Monad (
     -- ^ statements
   , inProcess, inFor, inWhile, inConditional, inCase
   , exit, null
+  , inSingleProcess
 
     -- ^ structures
   , entity, architecture, package, component
@@ -52,7 +53,8 @@ module Language.Embedded.VHDL.Monad (
 
 import Language.VHDL
 
-import Language.Embedded.VHDL.Monad.Util (maybePrimary)
+import Language.Embedded.VHDL.Monad.Expression (eq, literal, number, simple, name, function)
+import Language.Embedded.VHDL.Monad.Util (expr, primShift, primSimple, primTerm, primFactor, maybePrimary)
 
 import Control.Applicative    ((<$>))
 import Control.Monad.Identity (Identity)
@@ -440,7 +442,42 @@ inCase e choices d =
     maybeList :: [SequentialStatement] -> [CaseStatementAlternative]
     maybeList [] = []
     maybeList xs = [CaseStatementAlternative (Choices [ChoiceOthers]) xs]
-    
+
+--------------------------------------------------------------------------------
+
+-- | Runs the given action, with its corresponding reset, in a process that
+--   triggers on positive clock edges.
+inSingleProcess :: MonadV m
+  => Label
+  -> Identifier   -- ^ Clock.
+  -> Identifier   -- ^ Reset.
+  -> [Identifier] -- ^ Sensitivity list.
+  -> m ()         -- ^ Reset program.
+  -> m ()         -- ^ Main program.
+  -> m ()
+inSingleProcess l clk rst is m n =
+  inProcess' (clk : rst : is) $
+    inConditional' (whenRising' clk, inConditional' (isLow rst, m) n) (return ())
+  where
+    inProcess' :: MonadV m => [Identifier] -> m () -> m ()
+    inProcess' is m = inProcess l is m >>= addConcurrent . ConProcess . snd
+
+    inConditional' :: MonadV m => (Condition, m ()) -> m () -> m ()
+    inConditional' c e = inConditional c [] e >>= addSequential . SIf
+
+    whenRising' :: Identifier -> Condition
+    whenRising' i = expr (function (simple "rising_edge") [expr (name (NSimple i))])
+
+    isLow :: Identifier -> Condition
+    isLow i = primExpr' $ eq
+        (primShift' (name (NSimple i)))
+        (primShift' (literal (number "0")))
+      where
+        primExpr' :: Relation -> Expression
+        primExpr' = undefined
+        
+        primShift' :: Primary -> ShiftExpression
+        primShift' = primShift . primSimple . primTerm . primFactor 
 
 --------------------------------------------------------------------------------
 -- * Design units

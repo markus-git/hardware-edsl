@@ -556,21 +556,28 @@ instance InterpBi StructuralCMD IO (Param1 pred)
     interpBi = runStructural
 
 compileStructural :: forall ct exp a. (CompileExp exp, CompileType ct) => StructuralCMD (Param3 VHDL exp ct) a -> VHDL a
-compileStructural (StructEntity (Exact e) prog)  =
-  do V.entity (V.Ident e) prog
+compileStructural (StructEntity base prog)  =
+  do i <- newSym base
+     j <- newSym (Exact "behavioural")
+     V.entity (ident' i) (V.architecture (ident' i) (ident' j) prog)
+compileStructural (StructProcess (SignalC clk) (SignalC rst) is q prog) =
+  do label <- V.newLabel
+     V.inSingleProcess label (V.Ident clk) (V.Ident rst) (identifiers is) q prog
+  where
+    identifiers :: Signals -> [V.Identifier]
+    identifiers = fmap (\(Ident i) -> V.Ident i)
+{-
 compileStructural (StructArchitecture (Exact e) (Exact a) prog) =
   do V.architecture (V.Ident e) (V.Ident a) prog
-compileStructural (StructProcess xs prog) =
-  do label  <- V.newLabel
-     (a, c) <- V.inProcess label (fmap (\(Ident i) -> V.Ident i) xs) prog
-     V.addConcurrent (V.ConProcess c)
-     return a
+-}
 
 runStructural :: StructuralCMD (Param3 IO IO pred) a -> IO a
-runStructural (StructEntity _ prog)         = prog
-runStructural (StructArchitecture _ _ prog) = prog
-runStructural (StructProcess xs prog)       =
+runStructural (StructEntity _ prog) = prog
+runStructural (StructProcess clk rst is q prog) =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
+{-
+runStructural (StructArchitecture _ _ prog) = prog
+-}
 
 --------------------------------------------------------------------------------
 -- ** VHDL.

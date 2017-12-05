@@ -489,7 +489,9 @@ instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
-data Ident = Ident VarId
+type Signals = [Ident]
+
+data Ident   = Ident VarId
 
 class    ToIdent a            where toIdent :: a -> Ident
 instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
@@ -504,36 +506,50 @@ data StructuralCMD fs (a :: *)
   where
     -- ^ Wraps the program in an entity.
     StructEntity
-      :: Name -> prog a -> StructuralCMD (Param3 prog exp pred) a
-    -- ^ Wraps the program in an architecture.
-    StructArchitecture
-      :: Name -> Name -> prog a -> StructuralCMD (Param3 prog exp pred) a
+      :: Name
+      -> prog ()
+      -> StructuralCMD (Param3 prog exp pred) ()
     -- ^ Wraps the program in a process.
     StructProcess
-      :: [Ident] -> prog () -> StructuralCMD (Param3 prog exp pred) ()
-
--- todo: make sure entity and architectures always share a name.
+      :: Signal Bool -- ^ Clock.
+      -> Signal Bool -- ^ Reset.
+      -> Signals     -- ^ Inputs.
+      -> prog ()     -- ^ Reset program.
+      -> prog ()     -- ^ Main program.
+      -> StructuralCMD (Param3 prog exp pred) ()
+{-
+    -- ^ Wraps the program in an architecture.
+    StructArchitecture
+      :: Name
+      -> Name
+      -> prog a
+      -> StructuralCMD (Param3 prog exp pred) a
+-}
 
 instance HFunctor StructuralCMD
   where
-    hfmap f (StructEntity e p)         = StructEntity e (f p)
-    hfmap f (StructArchitecture e a p) = StructArchitecture e a (f p)
-    hfmap f (StructProcess xs p)       = StructProcess xs (f p)
+    hfmap f (StructEntity e p) = StructEntity e (f p)
+    hfmap f (StructProcess clk rst xs q p) = StructProcess clk rst xs (f q) (f p)
+--  hfmap f (StructArchitecture e a p) = StructArchitecture e a (f p)
 
 instance HBifunctor StructuralCMD
   where
-    hbimap g _ (StructEntity e p)         = StructEntity e (g p)
-    hbimap g _ (StructArchitecture e a p) = StructArchitecture e a (g p)
-    hbimap g _ (StructProcess xs p)       = StructProcess xs (g p)
+    hbimap g _ (StructEntity e p) = StructEntity e (g p)
+    hbimap g _ (StructProcess clk rst xs q p) = StructProcess clk rst xs (g q) (g p)
+--  hbimap g _ (StructArchitecture e a p) = StructArchitecture e a (g p)
 
 instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr env
   where
-    reexpressInstrEnv reexp (StructEntity n p)         =
+    reexpressInstrEnv reexp (StructEntity n p) =
       ReaderT $ \env -> singleInj $ StructEntity n $ runReaderT p env
+    reexpressInstrEnv reexp (StructProcess clk rst is q p) =
+      ReaderT $ \env -> singleInj $ StructProcess clk rst is
+        (runReaderT q env)
+        (runReaderT p env)
+{-
     reexpressInstrEnv reexp (StructArchitecture e n p) =
       ReaderT $ \env -> singleInj $ StructArchitecture e n $ runReaderT p env
-    reexpressInstrEnv reexp (StructProcess is p)       =
-      ReaderT $ \env -> singleInj $ StructProcess is $ runReaderT p env
+-}
 
 --------------------------------------------------------------------------------
 

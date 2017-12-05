@@ -4,6 +4,9 @@ module Language.Embedded.VHDL.Monad.Util
   , maybePrimary, maybeLit, maybeVar, maybeFun, maybeExp
   , printPrimary
   , printBits
+  --
+  , expr
+  , primRelation, primShift, primSimple, primTerm, primFactor
   ) where
 
 import Language.VHDL
@@ -94,7 +97,7 @@ uResizeBits exp from to
       let zeroes = name $ simple $ printBits (typeWidth to - typeWidth from) (0 :: Int)
           bits   = name $ prefix
           wrap s = ENand (Relation (ShiftExpression s Nothing) Nothing) Nothing
-       in wrap (cat [term zeroes, term bits])
+       in wrap (cat [primTerm (primFactor zeroes), primTerm (primFactor bits)])
   | otherwise = error $ show exp
   where
     prefix :: Name
@@ -106,10 +109,22 @@ uResizeBits exp from to
 
 expr :: Primary -> Expression
 expr (PrimExp e) = e
-expr (primary)   = ENand (Relation (ShiftExpression (SimpleExpression Nothing (Term (FacPrim primary Nothing) []) []) Nothing) Nothing) Nothing
+expr (primary)   = ENand (primRelation $ primShift $ primSimple $ primTerm $ primFactor primary) Nothing
 
-term :: Primary -> Term
-term primary = Term (FacPrim primary Nothing) []
+primRelation :: ShiftExpression -> Relation
+primRelation shift = Relation shift Nothing
+
+primShift :: SimpleExpression -> ShiftExpression
+primShift simple = ShiftExpression simple Nothing
+
+primSimple :: Term -> SimpleExpression
+primSimple term = SimpleExpression Nothing term []
+
+primTerm :: Factor -> Term
+primTerm factor = Term factor []
+
+primFactor :: Primary -> Factor
+primFactor primary = FacPrim primary Nothing
 
 width :: SubtypeIndication -> Primary
 width = literal . number . show . typeWidth
