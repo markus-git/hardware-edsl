@@ -45,9 +45,9 @@ type HSig  = Sig CMD HExp HType Identity
 -- ** Example component.
 
 -- Simple adder.
-ex :: Signal Word32 -> Signal Word32 -> Signal Word32 -> HProg ()
-ex a b c =
-  process (a .: b .: []) $ do
+ex :: Signal Bit -> Signal Bit -> Signal Word32 -> Signal Word32 -> Signal Word32 -> HProg ()
+ex clk rst a b c =
+  process clk rst [] (return ()) $ do
     va <- getSignal a
     vb <- getSignal b
     setSignal c (va + vb)
@@ -56,36 +56,41 @@ ex a b c =
 
 -- Adder's signature.
 ex_sig :: HSig (
-     Signal Word32
+     Signal Bit
+  -> Signal Bit
+  -> Signal Word32
   -> Signal Word32
   -> Signal Word32
   -> ())
 ex_sig =
-  namedInput  "a" $ \a ->
-  namedInput  "b" $ \b ->
-  namedOutput "c" $ \c ->
-  ret $ ex a b c
+  namedInput  "clk" $ \clk ->
+  namedInput  "rst" $ \rst ->
+  namedInput  "a"   $ \a ->
+  namedInput  "b"   $ \b ->
+  namedOutput "c"   $ \c ->
+  ret $ ex clk rst a b c
 
 --------------------------------------------------------------------------------
 
 -- Adder component.
 ex_comp :: HProg (HComp (
-     Signal Word32
+     Signal Bit
+  -> Signal Bit
+  -> Signal Word32
   -> Signal Word32
   -> Signal Word32
   -> ()))
-ex_comp = namedComponent "example" ex_sig
+ex_comp = namedComponent "ex" ex_sig
 
 --------------------------------------------------------------------------------
 
 -- Adder component wrapped in an AXI-lite interface.
 ex_axi :: HProg ()
-ex_axi =
-  ex_comp >>= void . namedComponent "axi_wrapper" . axi_light
+ex_axi = ex_comp >>= void . namedComponent "axi_wrapper" . axi_light
 
 --------------------------------------------------------------------------------
 
-test = icompile ex_axi
+test  = icompile ex_axi
 
 test2 = icompileAXILite ex_sig
 

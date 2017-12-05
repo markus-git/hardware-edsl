@@ -38,8 +38,8 @@ type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 
-arrays :: Signal Bit -> Signal Bit -> HProg ()
-arrays clk rst =
+arrays :: HProg ()
+arrays =
   do a :: Array  Word32 Word8 <- newArray  20
      b :: VArray Word32 Word8 <- newVArray 10
 

@@ -8,6 +8,7 @@ module Bits where
 
 import Language.VHDL (Mode(..))
 import Language.Embedded.Hardware
+import Language.Embedded.Hardware.Expression.Represent.Bit (Bit, Bits)
 
 import Control.Monad.Identity
 import Control.Monad.Operational.Higher
@@ -39,8 +40,8 @@ type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 
-bits :: Signal Bit -> Signal Bit -> HProg ()
-bits clk rst =
+bits :: HProg ()
+bits =
   do ----------------------------------------
      -- Bit vectors.
      --

@@ -38,8 +38,8 @@ type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 
-casting :: Signal Bit -> Signal Bit -> HProg ()
-casting clk rst =
+casting :: HProg ()
+casting =
   do a :: Variable Word8 <- initVariable 0
      b :: Variable Int8  <- initVariable 2
      c :: Variable Int16 <- initVariable 200
