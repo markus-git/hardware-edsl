@@ -281,118 +281,111 @@ axi_light_impl comp
        ----------------------------------------
        -- AXI_AWREADY generation.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           (do awready <== low)
-           (do rdy <- getSignal awready
-               awv <- getSignal s_axi_awvalid
-               wv  <- getSignal s_axi_wvalid
-               iff (isLow rdy `and` isHigh awv `and` isHigh wv)
-                 (do awready <== high)
-                 (do awready <== low)))
-           
+       process s_axi_aclk s_axi_aresetn []
+         (do awready <== low)
+         (do rdy <- getSignal awready
+             awv <- getSignal s_axi_awvalid
+             wv  <- getSignal s_axi_wvalid
+             iff (isLow rdy `and` isHigh awv `and` isHigh wv)
+               (do awready <== high)
+               (do awready <== low))
+       
        ----------------------------------------
        -- AXI_AWADDR latching.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           (do awaddr <== zeroes)
-           (do rdy <- getSignal awready
-               awv <- getSignal s_axi_awvalid
-               wv  <- getSignal s_axi_wvalid
-               when (isLow  rdy `and` isHigh awv `and` isHigh wv)
-                 (awaddr <=- s_axi_awaddr)))
+       process s_axi_aclk s_axi_aresetn []
+         (do awaddr <== zeroes)
+         (do rdy <- getSignal awready
+             awv <- getSignal s_axi_awvalid
+             wv  <- getSignal s_axi_wvalid
+             when (isLow  rdy `and` isHigh awv `and` isHigh wv)
+               (awaddr <=- s_axi_awaddr))
 
        ----------------------------------------
        -- AXI_WREADY generation.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           (do wready <== low)
-           (do rdy <- getSignal awready
-               awv <- getSignal s_axi_awvalid
-               wv  <- getSignal s_axi_wvalid
-               iff (isLow  rdy `and` isHigh awv `and` isHigh wv)
-                 (wready <== high)
-                 (wready <== low)))
+       process s_axi_aclk s_axi_aresetn []
+         (do wready <== low)
+         (do rdy <- getSignal awready
+             awv <- getSignal s_axi_awvalid
+             wv  <- getSignal s_axi_wvalid
+             iff (isLow  rdy `and` isHigh awv `and` isHigh wv)
+               (wready <== high)
+               (wready <== low))
 
        ----------------------------------------
        -- Slave register logic.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           mReset
-           mRead)
+       process s_axi_aclk s_axi_aresetn []
+         (mReset)
+         (mRead)
        
        ----------------------------------------
        -- Write response logic.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           (do bvalid <== low
-               bresp  <== zeroes)
-           (do awr <- getSignal awready
-               awv <- getSignal s_axi_awvalid
-               wr  <- getSignal wready
-               wv  <- getSignal s_axi_wvalid
-               bv  <- getSignal bvalid
-               br  <- getSignal s_axi_bready
-               ifE ((isHigh awr `and` isHigh awv
-                                `and` isHigh wr
-                                `and` isHigh wv
-                                `and` isLow bv),
-                     do bvalid <== high
-                        bresp  <== zeroes)
-                   ((isHigh br  `and` isHigh bv),
-                     do bvalid <== low)))
+       process s_axi_aclk s_axi_aresetn []
+         (do bvalid <== low
+             bresp  <== zeroes)
+         (do awr <- getSignal awready
+             awv <- getSignal s_axi_awvalid
+             wr  <- getSignal wready
+             wv  <- getSignal s_axi_wvalid
+             bv  <- getSignal bvalid
+             br  <- getSignal s_axi_bready
+             ifE ((isHigh awr `and` isHigh awv
+                              `and` isHigh wr
+                              `and` isHigh wv
+                              `and` isLow bv),
+                  (do bvalid <== high
+                      bresp  <== zeroes))
+                 ((isHigh br  `and` isHigh bv),
+                  (do bvalid <== low)))
 
        ----------------------------------------
        -- AXI_AWREADY generation.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           (do arready <== low
-               araddr  <== ones)
-           (do arr <- getSignal arready
-               arv <- getSignal s_axi_arvalid
-               iff (isLow arr `and` isHigh arv)
-                 (do arready <== high
-                     araddr  <=- s_axi_araddr)
-                 (do arready <== low)))
+       process s_axi_aclk s_axi_aresetn []
+         (do arready <== low
+             araddr  <== ones)
+         (do arr <- getSignal arready
+             arv <- getSignal s_axi_arvalid
+             iff (isLow arr `and` isHigh arv)
+               (do arready <== high
+                   araddr  <=- s_axi_araddr)
+               (do arready <== low))
 
        ----------------------------------------
        -- AXI_ARVALID generation.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           (do rvalid <== low
-               rresp  <== zeroes)
-           (do arr <- getSignal arready
-               arv <- getSignal s_axi_arvalid
-               rv  <- getSignal rvalid
-               rr  <- getSignal s_axi_rready
-               ifE ((isHigh arr `and` isHigh arv),
-                     do rvalid <== high
-                        rresp  <== zeroes)
-                   ((isHigh rv  `and` isHigh rr),
-                     do rvalid <== low)))
+       process s_axi_aclk s_axi_aresetn []
+         (do rvalid <== low
+             rresp  <== zeroes)
+         (do arr <- getSignal arready
+             arv <- getSignal s_axi_arvalid
+             rv  <- getSignal rvalid
+             rr  <- getSignal s_axi_rready
+             ifE ((isHigh arr `and` isHigh arv),
+                  (do rvalid <== high
+                      rresp  <== zeroes))
+                 ((isHigh rv  `and` isHigh rr),
+                  (do rvalid <== low)))
 
        ----------------------------------------
        -- Memory mapped rigister select and
        -- read logic generaiton.
        --
-       process (araddr .: s_axi_aresetn .: reg_rden .: mInputs) (do
-         mWrite)
+       process s_axi_aclk s_axi_aresetn (araddr .: mInputs)
+         (return ())
+         (mWrite)
 
        ----------------------------------------
        -- Output register of memory read data.
        --
-       process (s_axi_aclk .: []) (do
-         whenRising s_axi_aclk s_axi_aresetn
-           (do rdata <== zeroes)
-           (do rden <- getSignal reg_rden
-               when (isHigh rden)
-                 (do rdata <=- reg_out)))
+       process s_axi_aclk s_axi_aresetn []
+         (do rdata <== zeroes)
+         (do rden <- getSignal reg_rden
+             when (isHigh rden)
+               (do rdata <=- reg_out))
 
        ----------------------------------------
        -- User logic.

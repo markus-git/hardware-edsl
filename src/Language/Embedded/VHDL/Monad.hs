@@ -54,7 +54,7 @@ module Language.Embedded.VHDL.Monad (
 import Language.VHDL
 
 import Language.Embedded.VHDL.Monad.Expression (eq, literal, number, simple, name, function)
-import Language.Embedded.VHDL.Monad.Util (expr, primShift, primSimple, primTerm, primFactor, maybePrimary)
+import Language.Embedded.VHDL.Monad.Util (expr, primExpr, primShift, primSimple, primTerm, primFactor, maybePrimary)
 
 import Control.Applicative    ((<$>))
 import Control.Monad.Identity (Identity)
@@ -474,7 +474,7 @@ inSingleProcess l clk rst is m n =
         (primShift' (literal (number "0")))
       where
         primExpr' :: Relation -> Expression
-        primExpr' = undefined
+        primExpr' = primExpr
         
         primShift' :: Primary -> ShiftExpression
         primShift' = primShift . primSimple . primTerm . primFactor 

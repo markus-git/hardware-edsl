@@ -6,7 +6,7 @@ module Language.Embedded.VHDL.Monad.Util
   , printBits
   --
   , expr
-  , primRelation, primShift, primSimple, primTerm, primFactor
+  , primExpr, primRelation, primShift, primSimple, primTerm, primFactor
   ) where
 
 import Language.VHDL
@@ -109,7 +109,16 @@ uResizeBits exp from to
 
 expr :: Primary -> Expression
 expr (PrimExp e) = e
-expr (primary)   = ENand (primRelation $ primShift $ primSimple $ primTerm $ primFactor primary) Nothing
+expr (primary)   = primExpr
+                 $ primRelation
+                 $ primShift
+                 $ primSimple
+                 $ primTerm
+                 $ primFactor
+                 $ primary
+
+primExpr :: Relation -> Expression
+primExpr relation = ENand relation Nothing
 
 primRelation :: ShiftExpression -> Relation
 primRelation shift = Relation shift Nothing

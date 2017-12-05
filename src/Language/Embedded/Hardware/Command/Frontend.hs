@@ -479,11 +479,11 @@ entity = namedEntity "entity"
 
 -- | Declare a new process listening to some signals by wrapping the given program.
 process :: (StructuralCMD :<: instr)
-  => Signal Bool
-  -> Signal Bool
-  -> Signals
-  -> ProgramT instr (Param2 exp pred) m ()
-  -> ProgramT instr (Param2 exp pred) m ()
+  => Signal Bool -- ^ Clock.
+  -> Signal Bool -- ^ Reset.
+  -> Signals     -- ^ Other triggers.
+  -> ProgramT instr (Param2 exp pred) m () -- ^ Reset program.
+  -> ProgramT instr (Param2 exp pred) m () -- ^ Main program.
   -> ProgramT instr (Param2 exp pred) m ()
 process clk rst is q = singleInj . StructProcess clk rst is q
 

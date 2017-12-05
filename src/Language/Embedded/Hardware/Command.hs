@@ -139,6 +139,6 @@ wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
 wrap sf = void $ component $
   namedInput "clk" $ \c ->
   namedInput "rst" $ \r ->
-  ret $ process (c .: r .: []) $ sf c r
+  ret $ process c r [] (return ()) (sf c r)
 
 --------------------------------------------------------------------------------
