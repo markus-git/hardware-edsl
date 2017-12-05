@@ -402,6 +402,21 @@ portmap pro arg = singleInj $ PortMap pro arg
 
 --------------------------------------------------------------------------------
 
+-- | Empty argument.
+nil :: Argument pred ()
+nil = Nil
+
+-- | Add signal to a argument.
+(.::) :: (pred a, Integral a, PrimType a)
+  => Signal a
+  -> Argument pred b
+  -> Argument pred (Signal a -> b)
+(.::) x xs = ASig x xs
+
+infixr .::
+
+--------------------------------------------------------------------------------
+
 exactInput  :: (pred a, Integral a, PrimType a)
   => String
   -> (Signal a -> Sig instr exp pred m b)
@@ -487,12 +502,6 @@ process :: (StructuralCMD :<: instr)
   -> ProgramT instr (Param2 exp pred) m ()
 process clk rst is q = singleInj . StructProcess clk rst is q
 
--- | Construct the untyped signal list for processes.
-(.:) :: ToIdent a => a -> Signals -> Signals
-(.:) x xs = toIdent x : xs
-
-infixr .:
-
 {-
 -- | Declare a new architecture for some entity by wrapping the given program.
 architecture :: (StructuralCMD :<: instr)
@@ -501,6 +510,14 @@ architecture :: (StructuralCMD :<: instr)
   -> ProgramT instr (Param2 exp pred) m a
 architecture e a = singleInj . StructArchitecture (Exact e) (Exact a)
 -}
+
+--------------------------------------------------------------------------------
+
+-- | Construct the untyped signal list for processes.
+(.:) :: ToIdent a => a -> Signals -> Signals
+(.:) x xs = toIdent x : xs
+
+infixr .:
   
 --------------------------------------------------------------------------------
 -- ** VHDL specific instructions.

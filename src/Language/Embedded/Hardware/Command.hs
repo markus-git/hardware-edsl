@@ -84,7 +84,7 @@ compileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
   , HFunctor instr
   , AXIPred instr exp pred
   )
-  => Sig instr exp pred Identity a
+  => Sig instr exp pred Identity (Signal Bool -> Signal Bool -> a)
   -> String
 compileAXILite sig = compile $
   do cmp <- component sig
@@ -96,7 +96,7 @@ icompileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a 
   , HFunctor instr
   , AXIPred instr exp pred
   )
-  => Sig instr exp pred Identity a
+  => Sig instr exp pred Identity (Signal Bool -> Signal Bool -> a)
   -> IO ()
 icompileAXILite = putStrLn . compileAXILite
 
@@ -111,7 +111,7 @@ compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      , SignalCMD     :<: instr
      , pred Bool
      )
-  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
+  => Program instr (Param2 exp pred) ()
   -> String
 compileWrap = compile . wrap
 
@@ -123,7 +123,7 @@ icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
      , SignalCMD     :<: instr
      , pred Bool
      )
-  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
+  => Program instr (Param2 exp pred) ()
   -> IO ()
 icompileWrap = icompile . wrap
 
@@ -134,11 +134,11 @@ wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      , SignalCMD     :<: instr
      , pred Bool
      )
-  => (Signal Bool -> Signal Bool -> Program instr (Param2 exp pred) ())
+  => Program instr (Param2 exp pred) ()
   -> Program instr (Param2 exp pred) ()
-wrap sf = void $ component $
+wrap body = void $ component $
   namedInput "clk" $ \c ->
   namedInput "rst" $ \r ->
-  ret $ process c r [] (return ()) (sf c r)
+  ret $ process c r [] (return ()) body
 
 --------------------------------------------------------------------------------
