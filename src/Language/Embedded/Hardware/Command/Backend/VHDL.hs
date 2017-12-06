@@ -215,32 +215,6 @@ runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v =<< exp
 runVariable x@(UnsafeFreezeVariable v)      = runVariable (GetVariable v `asTypeOf` x)
 
 --------------------------------------------------------------------------------
--- ** Constants.
---------------------------------------------------------------------------------
-
-instance (CompileExp exp, CompileType ct) => Interp ConstantCMD VHDL (Param2 exp ct)
-  where
-    interp = compileConstant
-
-instance InterpBi ConstantCMD IO (Param1 pred)
-  where
-    interpBi = runConstant
-
-compileConstant :: forall ct exp a. (CompileExp exp, CompileType ct) => ConstantCMD (Param3 VHDL exp ct) a -> VHDL a
-compileConstant (NewConstant base (exp :: exp c)) =
-  do i <- newSym base
-     v <- compE exp
-     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy c)
-     V.constant (ident' i) t v
-     return (ConstantC i)
-compileConstant (GetConstant (ConstantC c)) =
-  do return $ ValC c
-
-runConstant :: ConstantCMD (Param3 IO IO pred) a -> IO a
-runConstant (NewConstant _ exp)           = return . ConstantE =<< exp
-runConstant (GetConstant (ConstantE exp)) = return $ ValE exp
-
---------------------------------------------------------------------------------
 -- ** Arrays.
 --------------------------------------------------------------------------------
 

@@ -149,37 +149,6 @@ instance (VariableCMD :<: instr) => Reexpressible VariableCMD instr env
       lift $ singleInj $ UnsafeFreezeVariable v
 
 --------------------------------------------------------------------------------
--- ** Constants.
-
--- | Constant representation.
-data Constant a = ConstantC VarId | ConstantE a
-
--- | Commands for constants.
-data ConstantCMD fs a
-  where
-    -- ^ Create a new constant.
-    NewConstant :: pred a => Name -> exp a -> ConstantCMD (Param3 prog exp pred) (Constant a)
-    -- ^ Fetch the value of a constant.
-    GetConstant :: pred a => Constant a -> ConstantCMD (Param3 prog exp pred) (Val a)
-
-instance HFunctor ConstantCMD
-  where
-    hfmap _ (NewConstant n e) = NewConstant n e
-    hfmap _ (GetConstant c)   = GetConstant c
-
-instance HBifunctor ConstantCMD
-  where
-    hbimap _ f (NewConstant n e) = NewConstant n (f e)
-    hbimap _ _ (GetConstant c)   = GetConstant c
-
-instance (ConstantCMD :<: instr) => Reexpressible ConstantCMD instr env
-  where
-    reexpressInstrEnv reexp (NewConstant n e) =
-      lift . singleInj . NewConstant n =<< reexp e
-    reexpressInstrEnv reexp (GetConstant c) =
-      lift $ singleInj $ GetConstant c
-
---------------------------------------------------------------------------------
 -- ** Arrays.
 
 -- | Expression types that support compilation of array indexing
@@ -503,7 +472,6 @@ class    ToIdent a            where toIdent :: a -> Ident
 instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
 instance ToIdent (Signal   a) where toIdent (SignalC   i) = Ident i
 instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
-instance ToIdent (Constant a) where toIdent (ConstantC i) = Ident i
 instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
 instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
 
