@@ -514,12 +514,12 @@ traverseSig (Ret  prog)   = return prog
 traverseSig (SSig n m sf) = 
   do i <- newSym n
      t <- compTF (Proxy::Proxy ct) sf
-     V.signal (ident' i) m t Nothing
+     V.port (ident' i) m t Nothing
      traverseSig (sf (SignalC i))
 traverseSig (SArr n m l af) =
   do i <- newSym n
      t <- compTA (Proxy::Proxy ct) (rangePoint l) (proxyF af)
-     V.array (ident' i) m t Nothing
+     V.port (ident' i) m t Nothing
      traverseSig (af (ArrayC i))
 
 applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
