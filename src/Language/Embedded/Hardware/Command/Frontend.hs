@@ -63,10 +63,6 @@ unsafeFreezeSignal :: (SignalCMD :<: instr, pred a, FreeExp exp, PredicateExp ex
   => Signal a -> ProgramT instr (Param2 exp pred) m (exp a)
 unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
 
--- | Concurrent update of a signals value.
-concurrentSetSignal :: (SignalCMD :<: instr, pred a) => Signal a -> exp a -> ProgramT instr (Param2 exp pred) m ()
-concurrentSetSignal s = singleInj . ConcurrentSetSignal s
-
 --------------------------------------------------------------------------------
 -- short-hands.
 

@@ -273,7 +273,7 @@ axi_light_impl comp
        u_wv  <- unsafeFreezeSignal s_axi_wvalid
        u_awr <- unsafeFreezeSignal awready
        u_awv <- unsafeFreezeSignal s_axi_awvalid
-       concurrentSetSignal reg_wren
+       setSignal reg_wren
          (u_wr `and` u_wv `and` u_awr `and` u_awv)
 
        ----------------------------------------
@@ -283,7 +283,7 @@ axi_light_impl comp
        u_arr <- unsafeFreezeSignal arready
        u_arv <- unsafeFreezeSignal s_axi_arvalid
        u_rv  <- unsafeFreezeSignal rvalid
-       concurrentSetSignal reg_rden
+       setSignal reg_rden
          (u_arr `and` u_arv `and` not u_rv)
 
        ----------------------------------------

@@ -70,8 +70,6 @@ data SignalCMD fs a
     SetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
     -- ^ Unsafe version of fetching a signal.
     UnsafeFreezeSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
-    -- *** todo: maybe this should be part of a set for concurrent instructions?
-    ConcurrentSetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
 
 instance HFunctor SignalCMD
   where
@@ -79,8 +77,6 @@ instance HFunctor SignalCMD
     hfmap _ (GetSignal s) = GetSignal s
     hfmap _ (SetSignal s e) = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
-    -- ...
-    hfmap _ (ConcurrentSetSignal s e) = ConcurrentSetSignal s e
 
 instance HBifunctor SignalCMD
   where
@@ -88,8 +84,6 @@ instance HBifunctor SignalCMD
     hbimap _ _ (GetSignal s) = GetSignal s
     hbimap _ f (SetSignal s e) = SetSignal s (f e)
     hbimap _ _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
-    -- ...
-    hbimap _ f (ConcurrentSetSignal s e) = ConcurrentSetSignal s (f e)
 
 instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
   where
@@ -101,9 +95,6 @@ instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
       lift . singleInj . SetSignal s =<< reexp e
     reexpressInstrEnv reexp (UnsafeFreezeSignal s) =
       lift $ singleInj $ UnsafeFreezeSignal s
-    -- ...
-    reexpressInstrEnv reexp (ConcurrentSetSignal s e) =
-      lift . singleInj . ConcurrentSetSignal s =<< reexp e
 
 --------------------------------------------------------------------------------
 -- ** Variables.

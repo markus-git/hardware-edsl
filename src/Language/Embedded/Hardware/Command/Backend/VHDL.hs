@@ -159,9 +159,6 @@ compileSignal (SetSignal (SignalC s) exp) =
      V.assignSignal (simple $ ident s) (V.uType e' t)
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ ValC s
-compileSignal (ConcurrentSetSignal (SignalC s) exp) =
-  do e <- compE exp
-     V.concurrentSignal (simple $ ident s) e
 
 runSignal :: SignalCMD (Param3 IO IO pred) a -> IO a
 runSignal (NewSignal _ Nothing)       =
@@ -170,8 +167,6 @@ runSignal (NewSignal _ (Just a))      = fmap SignalE . IR.newIORef =<< a
 runSignal (GetSignal (SignalE r))     = fmap ValE $ IR.readIORef r
 runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r =<< exp
 runSignal x@(UnsafeFreezeSignal r)    = runSignal (GetSignal r `asTypeOf` x)
-runSignal (ConcurrentSetSignal (SignalE r) exp) =
-  error "hardware-edsl.todo: run concurrent signals."
 
 --------------------------------------------------------------------------------
 -- ** Variables.
