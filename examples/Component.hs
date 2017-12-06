@@ -32,7 +32,7 @@ type CMD =
   :+: LoopCMD
   :+: ConditionalCMD
   :+: ComponentCMD
-  :+: StructuralCMD
+  :+: ProcessCMD
   :+: VHDLCMD
 
 type HProg = Program CMD (Param2 HExp HType)
@@ -47,10 +47,11 @@ type HSig  = Sig CMD HExp HType Identity
 -- Adder program.
 adder :: Signal Bit -> Signal Bit -> Signal Word8 -> Signal Word8 -> Signal Word8 -> HProg ()
 adder clk rst a b c =
-  process clk rst [] (return ()) (do
-    va <- getSignal a
-    vb <- getSignal b
-    setSignal c (va + vb))
+  processR clk rst []
+    (do setSignal c 0)
+    (do va <- getSignal a
+        vb <- getSignal b
+        setSignal c (va + vb))
 
 -- An encoding of the adder's signature.
 adder_sig :: HSig (

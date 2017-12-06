@@ -32,7 +32,8 @@ type CMD =
   :+: LoopCMD
   :+: ConditionalCMD
   :+: ComponentCMD
-  :+: StructuralCMD
+  :+: ProcessCMD
+  :+: VHDLCMD
 
 type HProg = Program CMD (Param2 HExp HType)
 
