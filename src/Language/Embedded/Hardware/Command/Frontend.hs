@@ -169,7 +169,8 @@ initNamedConstant :: (ConstantCMD :<: instr, pred a)
   => String -> exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
 initNamedConstant name = singleInj . NewConstant (Base name)
 
-initConstant :: (ConstantCMD :<: instr, pred a) => exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
+initConstant :: (ConstantCMD :<: instr, pred a)
+  => exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
 initConstant = initNamedConstant "c"
 
 getConstant :: (ConstantCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
@@ -400,8 +401,6 @@ portmap :: (ComponentCMD :<: instr)
   -> ProgramT instr (Param2 exp pred) m ()
 portmap pro arg = singleInj $ PortMap pro arg
 
---------------------------------------------------------------------------------
-
 -- | Empty argument.
 nil :: Argument pred ()
 nil = Nil
@@ -417,7 +416,10 @@ infixr .::
 
 --------------------------------------------------------------------------------
 
-exactInput  :: (pred a, Integral a, PrimType a)
+ret :: ProgramT instr (Param2 exp pred) m () -> Sig instr exp pred m ()
+ret = Ret
+
+exactInput :: (pred a, Integral a, PrimType a)
   => String
   -> (Signal a -> Sig instr exp pred m b)
   -> Sig instr exp pred m (Signal a -> b)
@@ -433,17 +435,6 @@ input :: (pred a, Integral a, PrimType a)
   => (Signal a -> Sig instr exp pred m b)
   -> Sig instr exp pred m (Signal a -> b)
 input = namedInput "in"
-
-{-
-exactInputArr :: (pred a, Inhabited a, Sized a, Integral a, Rep a, Typeable a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
-exactInputArr n l = SArr (Exact n) In l
-
-namedInputArr :: (pred a, Inhabited a, Sized a, Integral a, Rep a, Typeable a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
-namedInputArr n l = SArr (Base n) In l
-
-inputArr :: (pred a, Inhabited a, Sized a, Integral a, Rep a, Typeable a, pred i, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
-inputArr = namedInputArr "in"
--}
 
 exactOutput :: (pred a, Integral a, PrimType a)
   => String
@@ -462,81 +453,35 @@ output :: (pred a, Integral a, PrimType a)
   -> Sig instr exp pred m (Signal a -> b)
 output = namedOutput "out"
 
-{-
-exactOutputArr :: (pred a, Inhabited a, Sized a, Integral a, Rep a, Typeable a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
-exactOutputArr n l = SArr (Exact n) Out l
-
-namedOutputArr :: (pred a, Inhabited a, Sized a, Integral a, Rep a, Typeable a, pred i, Integral i, Ix i) => String -> i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
-namedOutputArr n l = SArr (Base n) Out l
-
-outputArr :: (pred a, Inhabited a, Sized a, Integral a, Rep a, Typeable a, pred i, Integral i, Ix i) => i -> (Array i a -> Sig instr exp pred m b) -> Sig instr exp pred m (Array i a -> b)
-outputArr = namedOutputArr "out"
--}
-
-ret :: ProgramT instr (Param2 exp pred) m () -> Sig instr exp pred m ()
-ret = Ret
-
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
--- | Declare a new and named entity by wrapping the program to declare ports & generics.
-namedEntity :: (StructuralCMD :<: instr)
-  => String
-  -> ProgramT instr (Param2 exp pred) m ()
-  -> ProgramT instr (Param2 exp pred) m ()
-namedEntity e = singleInj . StructEntity (Base e)
-
--- | Declare a new entity by wrapping the program to declare ports & generics.
-entity :: (StructuralCMD :<: instr)
-  => ProgramT instr (Param2 exp pred) m ()
-  -> ProgramT instr (Param2 exp pred) m ()
-entity = namedEntity "entity"
-
 -- | Declare a new process listening to some signals by wrapping the given program.
-process :: (StructuralCMD :<: instr)
+processR :: (ProcessCMD :<: instr)
   => Signal Bool -- ^ Clock.
   -> Signal Bool -- ^ Reset.
   -> Signals     -- ^ Other triggers.
   -> ProgramT instr (Param2 exp pred) m () -- ^ Reset program.
   -> ProgramT instr (Param2 exp pred) m () -- ^ Main program.
   -> ProgramT instr (Param2 exp pred) m ()
-process clk rst is q = singleInj . StructProcess clk rst is q
+processR clk rst is q = singleInj . Process clk (Just (rst, q)) is
 
-{-
--- | Declare a new architecture for some entity by wrapping the given program.
-architecture :: (StructuralCMD :<: instr)
-  => String -> String
-  -> ProgramT instr (Param2 exp pred) m a
-  -> ProgramT instr (Param2 exp pred) m a
-architecture e a = singleInj . StructArchitecture (Exact e) (Exact a)
--}
-
---------------------------------------------------------------------------------
+process :: (ProcessCMD :<: instr)
+  => Signal Bool -- ^ Clock.
+  -> Signals     -- ^ Other triggers.
+  -> ProgramT instr (Param2 exp pred) m () -- ^ Body.
+  -> ProgramT instr (Param2 exp pred) m ()
+process clk is = singleInj . Process clk Nothing is
 
 -- | Construct the untyped signal list for processes.
 (.:) :: ToIdent a => a -> Signals -> Signals
 (.:) x xs = toIdent x : xs
 
 infixr .:
-  
+
 --------------------------------------------------------------------------------
 -- ** VHDL specific instructions.
---
--- todo: these bit operations really do not have to be over just `Bits`, since
---       VHDL treats all of our types as bit vectors anyway.
 
--- | Short-hand that catures the common pattern:
---     "when (risingEdge clk) (if (not rst) then tru else fls)"
---   assuming reset is triggered on low.
-whenRising :: (VHDLCMD :<: instr, pred Bit)
-  => Signal Bit                            -- ^ Clock.
-  -> Signal Bit                            -- ^ Reset.
-  -> ProgramT instr (Param2 exp pred) m () -- ^ Reset  program.
-  -> ProgramT instr (Param2 exp pred) m () -- ^ Normal program.
-  -> ProgramT instr (Param2 exp pred) m ()
-whenRising clk rst tru fls = singleInj (Rising clk rst tru fls)
-
--- | ...
 copyBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
   => (Signal a, exp i)
   -> (Signal b, exp i)
@@ -544,7 +489,6 @@ copyBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
   -> ProgramT instr (Param2 exp pred) m ()
 copyBits a b l = singleInj (CopyBits a b l)
 
--- | ...
 copyVBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
   => (Variable a, exp i)
   -> (Signal   b, exp i)
@@ -552,17 +496,14 @@ copyVBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
   -> ProgramT instr (Param2 exp pred) m ()
 copyVBits a b l = singleInj (CopyVBits a b l)
 
--- | ...
 getBit :: (VHDLCMD :<: instr, pred a, Integral i, Ix i, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
   => Signal a -> exp i -> ProgramT instr (Param2 exp pred) m (exp Bit)
 getBit bits ix = fmap valToExp $ singleInj $ GetBit bits ix
 
--- | ...
 setBit :: (VHDLCMD :<: instr, pred a, Integral i, Ix i, pred Bit)
   => Signal a -> exp i -> exp Bit -> ProgramT instr (Param2 exp pred) m ()
 setBit bits ix bit = singleInj $ SetBit bits ix bit
 
--- | ...
 getBits :: (VHDLCMD :<: instr, pred i, Integral i, Ix i, PredicateExp exp i, FreeExp exp, Monad m)
   => Signal (Bits u)
   -> exp i
@@ -570,4 +511,6 @@ getBits :: (VHDLCMD :<: instr, pred i, Integral i, Ix i, PredicateExp exp i, Fre
   -> ProgramT instr (Param2 exp pred) m (exp i)
 getBits a l u = fmap valToExp $ singleInj $ GetBits a l u
 
+-- todo: these bit operations really do not have to be over just `Bits`, since
+--       VHDL treats all of our types as bit vectors anyway.
 --------------------------------------------------------------------------------

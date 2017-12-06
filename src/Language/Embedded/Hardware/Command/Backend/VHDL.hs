@@ -506,7 +506,9 @@ runComponent = error "hardware-edsl-todo: run components."
 
 --------------------------------------------------------------------------------
 
-traverseSig :: forall ct exp a . (CompileExp exp, CompileType ct) => Signature (Param3 VHDL exp ct) a -> VHDL (VHDL ())
+traverseSig :: forall ct exp a . (CompileExp exp, CompileType ct)
+  => Signature (Param3 VHDL exp ct) a
+  -> VHDL (VHDL ())
 traverseSig (Ret  prog)   = return prog
 traverseSig (SSig n m sf) = 
   do i <- newSym n
@@ -547,37 +549,27 @@ assocSig (SArr n _ _ af) (AArr a@(ArrayC i) v)  =
 -- ** Structural.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp StructuralCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct) => Interp ProcessCMD VHDL (Param2 exp ct)
   where
-    interp = compileStructural
+    interp = compileProcess
 
-instance InterpBi StructuralCMD IO (Param1 pred)
+instance InterpBi ProcessCMD IO (Param1 pred)
   where
-    interpBi = runStructural
+    interpBi = runProcess
 
-compileStructural :: forall ct exp a. (CompileExp exp, CompileType ct) => StructuralCMD (Param3 VHDL exp ct) a -> VHDL a
-compileStructural (StructEntity base prog)  =
-  do i <- newSym base
-     j <- newSym (Exact "behavioural")
-     V.entity (ident' i) (V.architecture (ident' i) (ident' j) prog)
-compileStructural (StructProcess (SignalC clk) (SignalC rst) is q prog) =
-  do label <- V.newLabel
-     V.inSingleProcess label (V.Ident clk) (V.Ident rst) (identifiers is) q prog
+compileProcess :: forall ct exp a. (CompileExp exp, CompileType ct) => ProcessCMD (Param3 VHDL exp ct) a -> VHDL a
+compileProcess (Process (SignalC clk) rst is prog) =
+  do let is'  = identifiers is
+     let rst' = maybe Nothing (\((SignalC r), p) -> Just (V.Ident r, p)) rst
+     label <- V.newLabel
+     V.inSingleProcess label (V.Ident clk) rst' (identifiers is) prog
   where
     identifiers :: Signals -> [V.Identifier]
     identifiers = fmap (\(Ident i) -> V.Ident i)
-{-
-compileStructural (StructArchitecture (Exact e) (Exact a) prog) =
-  do V.architecture (V.Ident e) (V.Ident a) prog
--}
 
-runStructural :: StructuralCMD (Param3 IO IO pred) a -> IO a
-runStructural (StructEntity _ prog) = prog
-runStructural (StructProcess clk rst is q prog) =
+runProcess :: ProcessCMD (Param3 IO IO pred) a -> IO a
+runProcess _ =
   do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
-{-
-runStructural (StructArchitecture _ _ prog) = prog
--}
 
 --------------------------------------------------------------------------------
 -- ** VHDL.
@@ -592,14 +584,6 @@ instance InterpBi VHDLCMD IO (Param1 pred)
     interpBi = runVHDL
 
 compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDLCMD (Param3 VHDL exp ct) a -> VHDL a
-compileVHDL (Rising (SignalC clk) (SignalC rst) tru fls) =
-  do let condC = V.function (simple "rising_edge") [simple' clk]
-         condR = V.eq (unpackShift $ simple' rst) (unpackShift $ literal "'0'")
-     clock <- V.inConditional (lift condC,
-         do reset <- V.inConditional (lift condR, tru) [] (fls)
-            V.addSequential $ V.SIf $ reset
-       ) [] (return ())
-     V.addSequential $ V.SIf $ clock
 compileVHDL (CopyBits ((SignalC a), oa) ((SignalC b), ob) l) =
   do oa' <- compE oa
      ob' <- compE ob

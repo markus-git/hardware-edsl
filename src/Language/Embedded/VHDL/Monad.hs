@@ -17,6 +17,9 @@ module Language.Embedded.VHDL.Monad (
     -- ^ pretty printing
   , prettyVHDL, prettyVHDLT
 
+    -- ^ entity container
+  , wrapMain
+  
     -- ^ name generation
   , freshUnique, newSym, newLabel
 
@@ -39,6 +42,8 @@ module Language.Embedded.VHDL.Monad (
     -- ^ statements
   , inProcess, inFor, inWhile, inConditional, inCase
   , exit, null
+
+    -- ^ specialized statements
   , inSingleProcess
 
     -- ^ structures
@@ -350,6 +355,15 @@ exit label e = addSequential $ SExit $ ExitStatement (Nothing) (Just label) (Jus
 
 --------------------------------------------------------------------------------
 
+-- | Wraps a program in an entity container.
+wrapMain :: MonadV m => m a -> m ()
+wrapMain prog = do
+  let e = Ident "main"
+  let a = Ident "behav"
+  CMS.void $ entity e $ architecture e a prog
+
+--------------------------------------------------------------------------------
+
 -- | Runs the given action inside a process.
 inProcess :: MonadV m => Label -> [Identifier] -> m a -> m (a, ProcessStatement)
 inProcess l is m =
@@ -448,16 +462,22 @@ inCase e choices d =
 -- | Runs the given action, with its corresponding reset, in a process that
 --   triggers on positive clock edges.
 inSingleProcess :: MonadV m
-  => Label
+  => Label        -- ^ Process label.
   -> Identifier   -- ^ Clock.
-  -> Identifier   -- ^ Reset.
+  -> Maybe (Identifier, m ())
+                  -- ^ Reset and program.
   -> [Identifier] -- ^ Sensitivity list.
-  -> m ()         -- ^ Reset program.
   -> m ()         -- ^ Main program.
   -> m ()
-inSingleProcess l clk rst is m n =
-  inProcess' (clk : rst : is) $
-    inConditional' (whenRising' clk, inConditional' (isLow rst, m) n) (return ())
+inSingleProcess l clk rst is n =
+  inProcess' (clk : is) $
+    inConditional'
+      ( whenRising' clk
+      , case rst of
+          Just (r, m) -> inConditional' (isLow r, m) n
+          Nothing     -> n
+      )
+      (return ())
   where
     inProcess' :: MonadV m => [Identifier] -> m () -> m ()
     inProcess' is m = inProcess l is m >>= addConcurrent . ConProcess . snd
@@ -469,15 +489,12 @@ inSingleProcess l clk rst is m n =
     whenRising' i = expr (function (simple "rising_edge") [expr (name (NSimple i))])
 
     isLow :: Identifier -> Condition
-    isLow i = primExpr' $ eq
-        (primShift' (name (NSimple i)))
-        (primShift' (literal (number "0")))
+    isLow i = primExpr $ eq
+       (shift' (name (NSimple i)))
+       (shift' (literal (number "0")))
       where
-        primExpr' :: Relation -> Expression
-        primExpr' = primExpr
-        
-        primShift' :: Primary -> ShiftExpression
-        primShift' = primShift . primSimple . primTerm . primFactor 
+        shift' :: Primary -> ShiftExpression
+        shift' = primShift . primSimple . primTerm . primFactor 
 
 --------------------------------------------------------------------------------
 -- * Design units

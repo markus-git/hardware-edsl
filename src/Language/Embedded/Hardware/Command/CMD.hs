@@ -72,8 +72,6 @@ data SignalCMD fs a
     UnsafeFreezeSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
     -- *** todo: maybe this should be part of a set for concurrent instructions?
     ConcurrentSetSignal :: pred a => Signal a -> exp a -> SignalCMD (Param3 prog exp pred) ()
-    -- *** todo: is this dangerous?
-    ToArray :: (pred a, Integral i, Ix i) => Signal a -> SignalCMD (Param3 prog exp pred) (Array i Bit)
 
 instance HFunctor SignalCMD
   where
@@ -83,7 +81,6 @@ instance HFunctor SignalCMD
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
     -- ...
     hfmap _ (ConcurrentSetSignal s e) = ConcurrentSetSignal s e
-    hfmap _ (ToArray s) = ToArray s
 
 instance HBifunctor SignalCMD
   where
@@ -93,7 +90,6 @@ instance HBifunctor SignalCMD
     hbimap _ _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
     -- ...
     hbimap _ f (ConcurrentSetSignal s e) = ConcurrentSetSignal s (f e)
-    hbimap _ _ (ToArray s) = ToArray s
 
 instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
   where
@@ -103,7 +99,6 @@ instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
     reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s
     -- ...
     reexpressInstrEnv reexp (ConcurrentSetSignal s e) = lift . singleInj . ConcurrentSetSignal s =<< reexp e
-    reexpressInstrEnv reexp (ToArray s) = lift $ singleInj $ ToArray s
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -502,67 +497,38 @@ instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
 instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
 
 -- | Commands for structural entities.
-data StructuralCMD fs (a :: *)
+data ProcessCMD fs (a :: *)
   where
-    -- ^ Wraps the program in an entity.
-    StructEntity
-      :: Name
-      -> prog ()
-      -> StructuralCMD (Param3 prog exp pred) ()
     -- ^ Wraps the program in a process.
-    StructProcess
-      :: Signal Bool -- ^ Clock.
-      -> Signal Bool -- ^ Reset.
+    Process
+      :: Signal Bool -- ^ Clock signal.
+      -> Maybe (Signal Bool, prog ())
+                     -- ^ Reset signal and action.
       -> Signals     -- ^ Inputs.
-      -> prog ()     -- ^ Reset program.
       -> prog ()     -- ^ Main program.
-      -> StructuralCMD (Param3 prog exp pred) ()
-{-
-    -- ^ Wraps the program in an architecture.
-    StructArchitecture
-      :: Name
-      -> Name
-      -> prog a
-      -> StructuralCMD (Param3 prog exp pred) a
--}
+      -> ProcessCMD (Param3 prog exp pred) ()
 
-instance HFunctor StructuralCMD
+instance HFunctor ProcessCMD
   where
-    hfmap f (StructEntity e p) = StructEntity e (f p)
-    hfmap f (StructProcess clk rst xs q p) = StructProcess clk rst xs (f q) (f p)
---  hfmap f (StructArchitecture e a p) = StructArchitecture e a (f p)
+    hfmap f (Process clk rst xs prog) =
+      Process clk (fmap (fmap f) rst) xs (f prog)
 
-instance HBifunctor StructuralCMD
+instance HBifunctor ProcessCMD
   where
-    hbimap g _ (StructEntity e p) = StructEntity e (g p)
-    hbimap g _ (StructProcess clk rst xs q p) = StructProcess clk rst xs (g q) (g p)
---  hbimap g _ (StructArchitecture e a p) = StructArchitecture e a (g p)
+    hbimap g _ (Process clk rst xs prog) =
+      Process clk (fmap (fmap g) rst) xs (g prog)
 
-instance (StructuralCMD :<: instr) => Reexpressible StructuralCMD instr env
+instance (ProcessCMD :<: instr) => Reexpressible ProcessCMD instr env
   where
-    reexpressInstrEnv reexp (StructEntity n p) =
-      ReaderT $ \env -> singleInj $ StructEntity n $ runReaderT p env
-    reexpressInstrEnv reexp (StructProcess clk rst is q p) =
-      ReaderT $ \env -> singleInj $ StructProcess clk rst is
-        (runReaderT q env)
-        (runReaderT p env)
-{-
-    reexpressInstrEnv reexp (StructArchitecture e n p) =
-      ReaderT $ \env -> singleInj $ StructArchitecture e n $ runReaderT p env
--}
+    reexpressInstrEnv reexp (Process clk rst is prog) =
+      ReaderT $ \env -> singleInj $ Process clk
+        (fmap (fmap (flip runReaderT env)) rst) is
+        (runReaderT prog env)
 
 --------------------------------------------------------------------------------
 
 data VHDLCMD fs a
   where
-    -- todo: When we have external function calls we can replace this.
-    --       For now, its a handy short-hand for a common pattern in VHDL.
-    Rising :: pred Bit
-      => Signal Bit -- ^ clock.
-      -> Signal Bit -- ^ reset.
-      -> prog ()    -- ^ program for when clock & reset.
-      -> prog ()    -- ^ program for when clock & not reset.
-      -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: We should allow for base types to be treated as arrays of bits instead.
     -- todo: The second argument should be over a variable.
     CopyBits :: (pred a, pred b, Integral i, Ix i)
@@ -595,7 +561,6 @@ data VHDLCMD fs a
 
 instance HFunctor VHDLCMD
   where
-    hfmap f (Rising clk rst tru fls) = Rising clk rst (f tru) (f fls)
     hfmap _ (CopyBits a b l)         = CopyBits a b l
     hfmap _ (CopyVBits a b l)        = CopyVBits a b l
     hfmap _ (GetBit s i)             = GetBit s i
@@ -604,7 +569,6 @@ instance HFunctor VHDLCMD
 
 instance HBifunctor VHDLCMD
   where
-    hbimap g _ (Rising clk rst tru fls)      = Rising clk rst (g tru) (g fls)
     hbimap _ f (CopyBits (a, oa) (b, ob) l)  = CopyBits (a, f oa) (b, f ob) (f l)
     hbimap _ f (CopyVBits (a, oa) (b, ob) l) = CopyVBits (a, f oa) (b, f ob) (f l)
     hbimap _ f (GetBit s i)                  = GetBit s (f i)
@@ -613,10 +577,6 @@ instance HBifunctor VHDLCMD
 
 instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
   where
-    reexpressInstrEnv reexp (Rising clk rst tru fls) =
-      ReaderT $ \env -> singleInj $ Rising clk rst
-        (runReaderT tru env)
-        (runReaderT fls env)
     reexpressInstrEnv reexp (CopyBits (a, oa) (b, ob) l)
       = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
            lift $ singleInj $ CopyBits (a, oa') (b, ob') l'

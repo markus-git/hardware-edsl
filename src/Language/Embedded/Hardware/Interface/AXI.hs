@@ -72,7 +72,7 @@ type AXIPred instr exp pred = (
      , ArrayCMD       :<: instr
      , VariableCMD    :<: instr
      , ConditionalCMD :<: instr
-     , StructuralCMD  :<: instr
+     , ProcessCMD     :<: instr
      , LoopCMD        :<: instr
      , ComponentCMD   :<: instr
      , VHDLCMD        :<: instr
@@ -289,7 +289,7 @@ axi_light_impl comp
        ----------------------------------------
        -- AXI_AWREADY generation.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (do awready <== low)
          (do rdy <- getSignal awready
              awv <- getSignal s_axi_awvalid
@@ -301,7 +301,7 @@ axi_light_impl comp
        ----------------------------------------
        -- AXI_AWADDR latching.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (do awaddr <== zeroes)
          (do rdy <- getSignal awready
              awv <- getSignal s_axi_awvalid
@@ -312,7 +312,7 @@ axi_light_impl comp
        ----------------------------------------
        -- AXI_WREADY generation.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (do wready <== low)
          (do rdy <- getSignal awready
              awv <- getSignal s_axi_awvalid
@@ -324,14 +324,14 @@ axi_light_impl comp
        ----------------------------------------
        -- Slave register logic.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (mReset)
          (mRead)
        
        ----------------------------------------
        -- Write response logic.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (do bvalid <== low
              bresp  <== zeroes)
          (do awr <- getSignal awready
@@ -352,7 +352,7 @@ axi_light_impl comp
        ----------------------------------------
        -- AXI_AWREADY generation.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (do arready <== low
              araddr  <== ones)
          (do arr <- getSignal arready
@@ -365,7 +365,7 @@ axi_light_impl comp
        ----------------------------------------
        -- AXI_ARVALID generation.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (do rvalid <== low
              rresp  <== zeroes)
          (do arr <- getSignal arready
@@ -382,14 +382,14 @@ axi_light_impl comp
        -- Memory mapped rigister select and
        -- read logic generaiton.
        --
-       process s_axi_aclk s_axi_aresetn (araddr .: mInputs)
+       processR s_axi_aclk s_axi_aresetn (araddr .: mInputs)
          (return ())
          (mWrite)
 
        ----------------------------------------
        -- Output register of memory read data.
        --
-       process s_axi_aclk s_axi_aresetn []
+       processR s_axi_aclk s_axi_aresetn []
          (do rdata <== zeroes)
          (do rden <- getSignal reg_rden
              when (isHigh rden)

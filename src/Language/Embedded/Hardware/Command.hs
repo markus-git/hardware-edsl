@@ -15,11 +15,12 @@ module Language.Embedded.Hardware.Command
   -- AXI compilers.
   , compileAXILite
   , icompileAXILite
-  -- compilers that wraps a program in a dummy entity.
+  --
   , compileWrap
   , icompileWrap
-  
+  --
   , VHDL.Mode(..)
+  --
   , module CMD
   , module Language.Embedded.Hardware.Command.CMD
   , module Language.Embedded.Hardware.Command.Frontend
@@ -50,18 +51,14 @@ import qualified GHC.Exts as GHC (Constraint)
 
 -- | Compile a program to VHDL code represented as a string.
 compile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
-     ( Interp instr VHDL (Param2 exp pred)
-     , HFunctor instr
-     )
+     (Interp instr VHDL (Param2 exp pred), HFunctor instr)
   => Program instr (Param2 exp pred) a
   -> String
-compile = show . prettyVHDL . interpret
+compile = show . VHDL.prettyVHDL . VHDL.wrapMain . interpret
 
 -- | Compile a program to VHDL code and print it on the screen.
 icompile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
-     ( Interp instr VHDL (Param2 exp pred)
-     , HFunctor instr
-     )
+     (Interp instr VHDL (Param2 exp pred), HFunctor instr)
   => Program instr (Param2 exp pred) a
   -> IO ()
 icompile = putStrLn . compile
@@ -101,44 +98,41 @@ icompileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a 
 icompileAXILite = putStrLn . compileAXILite
 
 --------------------------------------------------------------------------------
--- todo: Not sure we need these any more.
 
+-- | Wraps a program in a clocked process and then compiles it.
 compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , ComponentCMD  :<: instr
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr
+     , ProcessCMD :<: instr
+     , SignalCMD  :<: instr
      , pred Bool
      )
   => Program instr (Param2 exp pred) ()
   -> String
 compileWrap = compile . wrap
 
+-- | Wraps a program in a clocked process and then outputs its code.
 icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
-     , ComponentCMD  :<: instr
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr
+     , ProcessCMD :<: instr
+     , SignalCMD  :<: instr
      , pred Bool
      )
   => Program instr (Param2 exp pred) ()
   -> IO ()
 icompileWrap = icompile . wrap
 
--- | Wrap a hardware program in a architecture/entity pair.
+-- | Wrap a program in a process.
 wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
-     ( ComponentCMD  :<: instr
-     , StructuralCMD :<: instr
-     , SignalCMD     :<: instr
+     ( ProcessCMD :<: instr
+     , SignalCMD  :<: instr
      , pred Bool
      )
   => Program instr (Param2 exp pred) ()
   -> Program instr (Param2 exp pred) ()
-wrap body = void $ component $
-  namedInput "clk" $ \c ->
-  namedInput "rst" $ \r ->
-  ret $ process c r [] (return ()) body
+wrap body = do
+  clk <- newNamedPort "clk" VHDL.In
+  process clk [] body
 
 --------------------------------------------------------------------------------
