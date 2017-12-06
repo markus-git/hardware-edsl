@@ -492,7 +492,7 @@ compileComponent (DeclareComponent base sig) =
   do comp <- newSym base
      V.component $
        do p <- V.entity  (ident' comp) (traverseSig sig)
-          V.architecture (ident' comp) (V.Ident "imp") p
+          V.architecture (ident' comp) (V.Ident "behav") p
      return comp
 compileComponent (PortMap (Component name sig) as) =
   do let i = ident' name

@@ -83,7 +83,7 @@ compileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
   )
   => Sig instr exp pred Identity (Signal Bool -> Signal Bool -> a)
   -> String
-compileAXILite sig = compile $
+compileAXILite sig = show $ VHDL.prettyVHDL $ interpret $
   do cmp <- component sig
      axi <- component (axi_light cmp)
      return ()
