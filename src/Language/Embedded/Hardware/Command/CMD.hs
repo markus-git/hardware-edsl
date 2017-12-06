@@ -63,7 +63,7 @@ data Signal a = SignalC VarId | SignalE (IORef a)
 data SignalCMD fs a
   where
     -- ^ Create a new signal.
-    NewSignal :: pred a => Name -> Mode -> Maybe (exp a) -> SignalCMD (Param3 prog exp pred) (Signal a)
+    NewSignal :: pred a => Name -> Maybe (exp a) -> SignalCMD (Param3 prog exp pred) (Signal a)
     -- ^ Fetch the contents of a signal.
     GetSignal :: pred a => Signal a -> SignalCMD (Param3 prog exp pred) (Val a)
     -- ^ Write the value to a signal.
@@ -75,7 +75,7 @@ data SignalCMD fs a
 
 instance HFunctor SignalCMD
   where
-    hfmap _ (NewSignal n m e) = NewSignal n m e
+    hfmap _ (NewSignal n e) = NewSignal n e
     hfmap _ (GetSignal s) = GetSignal s
     hfmap _ (SetSignal s e) = SetSignal s e
     hfmap _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
@@ -84,7 +84,7 @@ instance HFunctor SignalCMD
 
 instance HBifunctor SignalCMD
   where
-    hbimap _ f (NewSignal n m e) = NewSignal n m (fmap f e)
+    hbimap _ f (NewSignal n e) = NewSignal n (fmap f e)
     hbimap _ _ (GetSignal s) = GetSignal s
     hbimap _ f (SetSignal s e) = SetSignal s (f e)
     hbimap _ _ (UnsafeFreezeSignal s) = UnsafeFreezeSignal s
@@ -93,7 +93,7 @@ instance HBifunctor SignalCMD
 
 instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
   where
-    reexpressInstrEnv reexp (NewSignal n m e) = lift . singleInj . NewSignal n m =<< swapM (fmap reexp e)
+    reexpressInstrEnv reexp (NewSignal n e) = lift . singleInj . NewSignal n =<< swapM (fmap reexp e)
     reexpressInstrEnv reexp (GetSignal s) = lift $ singleInj $ GetSignal s
     reexpressInstrEnv reexp (SetSignal s e) = lift . singleInj . SetSignal s =<< reexp e
     reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s

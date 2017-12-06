@@ -213,24 +213,24 @@ axi_light_impl comp
        ----------------------------------------
        -- AXI Light signals.
        --
-       awaddr  <- signal "axi_awaddr"  :: Prog instr exp pred (Signal (Bits 32))
-       awready <- signal "axi_awready" :: Prog instr exp pred (Signal (Bit))
-       wready  <- signal "axi_wready"  :: Prog instr exp pred (Signal (Bit))
-       bresp   <- signal "axi_bresp"   :: Prog instr exp pred (Signal (Bits 2))
-       bvalid  <- signal "axi_bvalid"  :: Prog instr exp pred (Signal (Bit))
-       araddr  <- signal "axi_araddr"  :: Prog instr exp pred (Signal (Bits 32))
-       arready <- signal "axi_arready" :: Prog instr exp pred (Signal (Bit))
-       rdata   <- signal "axi_rdata"   :: Prog instr exp pred (Signal (Bits 32))
-       rresp   <- signal "axi_rresp"   :: Prog instr exp pred (Signal (Bits 2))
-       rvalid  <- signal "axi_rvalid"  :: Prog instr exp pred (Signal (Bit))
+       awaddr  :: Signal (Bits 32) <- newNamedSignal "axi_awaddr"
+       awready :: Signal (Bit)     <- newNamedSignal "axi_awready"
+       wready  :: Signal (Bit)     <- newNamedSignal "axi_wready"
+       bresp   :: Signal (Bits 2)  <- newNamedSignal "axi_bresp"
+       bvalid  :: Signal (Bit)     <- newNamedSignal "axi_bvalid"
+       araddr  :: Signal (Bits 32) <- newNamedSignal "axi_araddr"
+       arready :: Signal (Bit)     <- newNamedSignal "axi_arready"
+       rdata   :: Signal (Bits 32) <- newNamedSignal "axi_rdata"
+       rresp   :: Signal (Bits 2)  <- newNamedSignal "axi_rresp"
+       rvalid  :: Signal (Bit)     <- newNamedSignal "axi_rvalid"
 
        ----------------------------------------
        -- Signals for user logic registers.
        --
-       reg_rden  <- signal "slv_reg_rden" :: Prog instr exp pred (Signal (Bit))
-       reg_wren  <- signal "slv_reg_wren" :: Prog instr exp pred (Signal (Bit))
-       reg_out   <- signal "reg_data_out" :: Prog instr exp pred (Signal (Bits 32))
-       reg_index <- signal "byte_index"   :: Prog instr exp pred (Signal (Integer))
+       reg_rden  :: Signal (Bit)     <- newNamedSignal "slv_reg_rden"
+       reg_wren  :: Signal (Bit)     <- newNamedSignal "slv_reg_wren"
+       reg_out   :: Signal (Bits 32) <- newNamedSignal "reg_data_out"
+       reg_index :: Signal (Integer) <- newNamedSignal "byte_index"
        registers <- declareRegisters (signatureOf comp)
 
        ----------------------------------------

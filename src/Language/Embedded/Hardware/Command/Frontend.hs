@@ -35,7 +35,7 @@ import GHC.TypeLits (KnownNat)
 
 -- | Declare a named signal.
 initNamedSignal :: (SignalCMD :<: instr, pred a) => String -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
-initNamedSignal name = singleInj . NewSignal (Base name) InOut . Just
+initNamedSignal name = singleInj . NewSignal (Base name) . Just
 
 -- | Declare a signal.
 initSignal :: (SignalCMD :<: instr, pred a) => exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
@@ -43,7 +43,7 @@ initSignal  = initNamedSignal "s"
 
 -- | Declare an uninitialized named signal.
 newNamedSignal :: (SignalCMD :<: instr, pred a) => String -> ProgramT instr (Param2 exp pred) m (Signal a)
-newNamedSignal name = singleInj $ NewSignal (Base name) InOut Nothing
+newNamedSignal name = singleInj $ NewSignal (Base name) Nothing
 
 -- | Declare an uninitialized signal.
 newSignal :: (SignalCMD :<: instr, pred a) => ProgramT instr (Param2 exp pred) m (Signal a)
@@ -69,7 +69,7 @@ concurrentSetSignal s = singleInj . ConcurrentSetSignal s
 
 --------------------------------------------------------------------------------
 -- ports.
-
+{-
 -- | Declare port signals of the given mode and assign it initial value.
 initNamedPort, initExactPort :: (SignalCMD :<: instr, pred a)
   => String -> Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
@@ -87,12 +87,9 @@ newExactPort name m = singleInj $ NewSignal (Exact name) m Nothing
 
 newPort :: (SignalCMD :<: instr, pred a) => Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
 newPort = newNamedPort "p"
-
+-}
 --------------------------------------------------------------------------------
 -- short-hands.
-
-signal :: (SignalCMD :<: instr, pred a) => String -> ProgramT instr (Param2 exp pred) m (Signal a)
-signal = newNamedSignal
 
 (<--) :: (SignalCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
   => Signal a

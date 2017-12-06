@@ -143,11 +143,11 @@ instance InterpBi SignalCMD IO (Param1 pred)
 
 -- todo: is concurrent... really necessary? I think the VHDL monad handle that.
 compileSignal :: forall exp ct a. (CompileExp exp, CompileType ct) => SignalCMD (Param3 VHDL exp ct) a -> VHDL a
-compileSignal (NewSignal base mode exp) =
+compileSignal (NewSignal base exp) =
   do i <- newSym base
      v <- compEM exp
      t <- compTM (Proxy::Proxy ct) exp
-     V.signal (ident' i) mode t v
+     V.signal (ident' i) V.InOut t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
   do i <- freshVar (Proxy::Proxy ct) (Base "v")
@@ -164,8 +164,9 @@ compileSignal (ConcurrentSetSignal (SignalC s) exp) =
      V.concurrentSignal (simple $ ident s) e
 
 runSignal :: SignalCMD (Param3 IO IO pred) a -> IO a
-runSignal (NewSignal _ _ Nothing)     = fmap SignalE $ IR.newIORef (error "uninitialized signal")
-runSignal (NewSignal _ _ (Just a))    = fmap SignalE . IR.newIORef =<< a
+runSignal (NewSignal _ Nothing)       =
+  fmap SignalE $ IR.newIORef (error "uninitialized signal")
+runSignal (NewSignal _ (Just a))      = fmap SignalE . IR.newIORef =<< a
 runSignal (GetSignal (SignalE r))     = fmap ValE $ IR.readIORef r
 runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r =<< exp
 runSignal x@(UnsafeFreezeSignal r)    = runSignal (GetSignal r `asTypeOf` x)
