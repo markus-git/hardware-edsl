@@ -163,27 +163,6 @@ variable = newNamedVariable
 (==:) = setVariable
 
 --------------------------------------------------------------------------------
--- ** Constants.
-
-initNamedConstant :: (ConstantCMD :<: instr, pred a)
-  => String -> exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
-initNamedConstant name = singleInj . NewConstant (Base name)
-
-initConstant :: (ConstantCMD :<: instr, pred a)
-  => exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
-initConstant = initNamedConstant "c"
-
-getConstant :: (ConstantCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
-  => Constant a -> ProgramT instr (Param2 exp pred) m (exp a)
-getConstant = fmap valToExp . singleInj . GetConstant
-
---------------------------------------------------------------------------------
--- short-hands.
-
-constant :: (ConstantCMD :<: instr, pred a) => String -> exp a -> ProgramT instr (Param2 exp pred) m (Constant a)
-constant = initNamedConstant
-
---------------------------------------------------------------------------------
 -- ** Arrays.
 
 -- | Create an initialized named virtual array.
