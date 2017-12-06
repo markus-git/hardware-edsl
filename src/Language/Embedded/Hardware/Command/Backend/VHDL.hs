@@ -585,6 +585,12 @@ instance InterpBi VHDLCMD IO (Param1 pred)
     interpBi = runVHDL
 
 compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDLCMD (Param3 VHDL exp ct) a -> VHDL a
+compileVHDL (DeclarePort base exp mode) =
+  do i <- newSym base
+     v <- compEM exp
+     t <- compTM (Proxy::Proxy ct) exp
+     V.port (ident' i) mode t v
+     return (SignalC i)
 compileVHDL (CopyBits ((SignalC a), oa) ((SignalC b), ob) l) =
   do oa' <- compE oa
      ob' <- compE ob

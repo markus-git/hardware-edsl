@@ -68,27 +68,6 @@ concurrentSetSignal :: (SignalCMD :<: instr, pred a) => Signal a -> exp a -> Pro
 concurrentSetSignal s = singleInj . ConcurrentSetSignal s
 
 --------------------------------------------------------------------------------
--- ports.
-{-
--- | Declare port signals of the given mode and assign it initial value.
-initNamedPort, initExactPort :: (SignalCMD :<: instr, pred a)
-  => String -> Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
-initNamedPort name m = singleInj . NewSignal (Base  name) m . Just
-initExactPort name m = singleInj . NewSignal (Exact name) m . Just
-
-initPort :: (SignalCMD :<: instr, pred a) => Mode -> exp a -> ProgramT instr (Param2 exp pred) m (Signal a)
-initPort = initNamedPort "p"
-
--- | Declare port signals of the given mode.
-newNamedPort, newExactPort :: (SignalCMD :<: instr, pred a)
-  => String -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
-newNamedPort name m = singleInj $ NewSignal (Base  name) m Nothing
-newExactPort name m = singleInj $ NewSignal (Exact name) m Nothing
-
-newPort :: (SignalCMD :<: instr, pred a) => Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
-newPort = newNamedPort "p"
--}
---------------------------------------------------------------------------------
 -- short-hands.
 
 (<--) :: (SignalCMD :<: instr, pred a, PredicateExp exp a, FreeExp exp, Monad m)
@@ -457,6 +436,33 @@ infixr .:
 
 --------------------------------------------------------------------------------
 -- ** VHDL specific instructions.
+--------------------------------------------------------------------------------
+  
+--------------------------------------------------------------------------------
+-- *** ports.
+
+-- | Declare port signals of the given mode and assign it initial value.
+initNamedPort, initExactPort :: (VHDLCMD :<: instr, pred a)
+  => String -> exp a -> Mode  -> ProgramT instr (Param2 exp pred) m (Signal a)
+initNamedPort name e = singleInj . DeclarePort (Base  name) (Just e)
+initExactPort name e = singleInj . DeclarePort (Exact name) (Just e)
+
+initPort :: (VHDLCMD :<: instr, pred a)
+  => exp a -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
+initPort = initNamedPort "port"
+
+-- | Declare port signals of the given mode.
+newNamedPort, newExactPort :: (VHDLCMD :<: instr, pred a)
+  => String -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
+newNamedPort name = singleInj . DeclarePort (Base  name) Nothing
+newExactPort name = singleInj . DeclarePort (Exact name) Nothing
+
+newPort :: (VHDLCMD :<: instr, pred a)
+  => Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
+newPort = newNamedPort "port"
+
+--------------------------------------------------------------------------------
+-- *** Bit operations.
 
 copyBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
   => (Signal a, exp i)

@@ -93,12 +93,17 @@ instance HBifunctor SignalCMD
 
 instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
   where
-    reexpressInstrEnv reexp (NewSignal n e) = lift . singleInj . NewSignal n =<< swapM (fmap reexp e)
-    reexpressInstrEnv reexp (GetSignal s) = lift $ singleInj $ GetSignal s
-    reexpressInstrEnv reexp (SetSignal s e) = lift . singleInj . SetSignal s =<< reexp e
-    reexpressInstrEnv reexp (UnsafeFreezeSignal s) = lift $ singleInj $ UnsafeFreezeSignal s
+    reexpressInstrEnv reexp (NewSignal n e) =
+      lift . singleInj . NewSignal n =<< swapM (fmap reexp e)
+    reexpressInstrEnv reexp (GetSignal s) =
+      lift $ singleInj $ GetSignal s
+    reexpressInstrEnv reexp (SetSignal s e) =
+      lift . singleInj . SetSignal s =<< reexp e
+    reexpressInstrEnv reexp (UnsafeFreezeSignal s) =
+      lift $ singleInj $ UnsafeFreezeSignal s
     -- ...
-    reexpressInstrEnv reexp (ConcurrentSetSignal s e) = lift . singleInj . ConcurrentSetSignal s =<< reexp e
+    reexpressInstrEnv reexp (ConcurrentSetSignal s e) =
+      lift . singleInj . ConcurrentSetSignal s =<< reexp e
 
 --------------------------------------------------------------------------------
 -- ** Variables.
@@ -134,10 +139,14 @@ instance HBifunctor VariableCMD
 
 instance (VariableCMD :<: instr) => Reexpressible VariableCMD instr env
   where
-    reexpressInstrEnv reexp (NewVariable n e) = lift . singleInj . NewVariable n =<< swapM (fmap reexp e)
-    reexpressInstrEnv reexp (GetVariable v) = lift $ singleInj $ GetVariable v
-    reexpressInstrEnv reexp (SetVariable v e) = lift . singleInj . SetVariable v =<< reexp e
-    reexpressInstrEnv reexp (UnsafeFreezeVariable v) = lift $ singleInj $ UnsafeFreezeVariable v
+    reexpressInstrEnv reexp (NewVariable n e) =
+      lift . singleInj . NewVariable n =<< swapM (fmap reexp e)
+    reexpressInstrEnv reexp (GetVariable v) =
+      lift $ singleInj $ GetVariable v
+    reexpressInstrEnv reexp (SetVariable v e) =
+      lift . singleInj . SetVariable v =<< reexp e
+    reexpressInstrEnv reexp (UnsafeFreezeVariable v) =
+      lift $ singleInj $ UnsafeFreezeVariable v
 
 --------------------------------------------------------------------------------
 -- ** Constants.
@@ -165,8 +174,10 @@ instance HBifunctor ConstantCMD
 
 instance (ConstantCMD :<: instr) => Reexpressible ConstantCMD instr env
   where
-    reexpressInstrEnv reexp (NewConstant n e) = lift . singleInj . NewConstant n =<< reexp e
-    reexpressInstrEnv reexp (GetConstant c) = lift $ singleInj $ GetConstant c
+    reexpressInstrEnv reexp (NewConstant n e) =
+      lift . singleInj . NewConstant n =<< reexp e
+    reexpressInstrEnv reexp (GetConstant c) =
+      lift $ singleInj $ GetConstant c
 
 --------------------------------------------------------------------------------
 -- ** Arrays.
@@ -529,7 +540,13 @@ instance (ProcessCMD :<: instr) => Reexpressible ProcessCMD instr env
 
 data VHDLCMD fs a
   where
-    -- todo: We should allow for base types to be treated as arrays of bits instead.
+    DeclarePort :: pred a
+      => Name          -- ^ Port name.
+      -> Maybe (exp a) -- ^ Initial value (if any).
+      -> Mode          -- ^ Direction.
+      -> VHDLCMD (Param3 prog exp pred) (Signal a)
+    -- todo: We should allow for base types to be treated as arrays of bits
+    --       instead of having to explicitly convert them.
     -- todo: The second argument should be over a variable.
     CopyBits :: (pred a, pred b, Integral i, Ix i)
       => (Signal a, exp i)
@@ -561,14 +578,16 @@ data VHDLCMD fs a
 
 instance HFunctor VHDLCMD
   where
-    hfmap _ (CopyBits a b l)         = CopyBits a b l
-    hfmap _ (CopyVBits a b l)        = CopyVBits a b l
-    hfmap _ (GetBit s i)             = GetBit s i
-    hfmap _ (SetBit s i b)           = SetBit s i b
-    hfmap _ (GetBits s l u)          = GetBits s l u
+    hfmap _ (DeclarePort n e m) = DeclarePort n e m
+    hfmap _ (CopyBits a b l)    = CopyBits a b l
+    hfmap _ (CopyVBits a b l)   = CopyVBits a b l
+    hfmap _ (GetBit s i)        = GetBit s i
+    hfmap _ (SetBit s i b)      = SetBit s i b
+    hfmap _ (GetBits s l u)     = GetBits s l u
 
 instance HBifunctor VHDLCMD
   where
+    hbimap _ f (DeclarePort n e m)           = DeclarePort n (fmap f e) m
     hbimap _ f (CopyBits (a, oa) (b, ob) l)  = CopyBits (a, f oa) (b, f ob) (f l)
     hbimap _ f (CopyVBits (a, oa) (b, ob) l) = CopyVBits (a, f oa) (b, f ob) (f l)
     hbimap _ f (GetBit s i)                  = GetBit s (f i)
@@ -577,6 +596,9 @@ instance HBifunctor VHDLCMD
 
 instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
   where
+    reexpressInstrEnv reexp (DeclarePort n e m)
+      = do e' <- swapM (fmap reexp e)
+           lift $ singleInj $ DeclarePort n e' m
     reexpressInstrEnv reexp (CopyBits (a, oa) (b, ob) l)
       = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
            lift $ singleInj $ CopyBits (a, oa') (b, ob') l'

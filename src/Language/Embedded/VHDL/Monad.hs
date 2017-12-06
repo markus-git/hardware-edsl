@@ -27,7 +27,7 @@ module Language.Embedded.VHDL.Monad (
   , newLibrary, newImport
 
     -- ^ ...
---, addPort,       addGeneric
+  , addPort
   , addConstant,   addSignal,     addVariable
   , addConcurrent, addSequential
   , addType,       addComponent
@@ -50,7 +50,7 @@ module Language.Embedded.VHDL.Monad (
   , entity, architecture, package, component
 
     -- ^ common things
-  , constant, signal, variable, array
+  , port, constant, signal, variable, array
   , assignSignal, assignVariable, assignArray
   , concurrentSignal, concurrentArray
   , portMap
@@ -97,6 +97,7 @@ data VHDLEnv = VHDLEnv
   , _context       :: Set ContextItem
   , _types         :: Set TypeDeclaration
   , _components    :: Set ComponentDeclaration
+  , _ports         :: [InterfaceDeclaration]
   , _constants     :: [InterfaceDeclaration]
   , _signals       :: [InterfaceDeclaration]
   , _variables     :: [InterfaceDeclaration]
@@ -112,6 +113,7 @@ emptyVHDLEnv = VHDLEnv
   , _context       = Set.empty
   , _types         = Set.empty
   , _components    = Set.empty
+  , _ports         = []
   , _constants     = []
   , _signals       = []
   , _variables     = []
@@ -195,6 +197,10 @@ addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
 -- | Adds a component declaration.
 addComponent :: MonadV m => ComponentDeclaration -> m ()
 addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
+
+-- | Adds a port declaration.
+addPort :: MonadV m => InterfaceDeclaration -> m ()
+addPort p = CMS.modify $ \s -> s { _ports = p : (_ports s) }
 
 -- | ...
 addConstant :: MonadV m => InterfaceDeclaration -> m ()
@@ -575,31 +581,25 @@ architecture entity@(Ident n) name@(Ident e) m =
 entity :: MonadV m => Identifier -> m a -> m a
 entity name@(Ident n) m =
   do oldTypes    <- CMS.gets _types
-     oldPorts    <- CMS.gets _signals
-     oldGenerics <- CMS.gets _variables
-     CMS.modify $ \e -> e { _types     = Set.empty
-                          , _signals   = []
-                          , _variables = [] }
+     oldPorts    <- CMS.gets _ports
+     CMS.modify $ \e -> e { _types = Set.empty
+                          , _ports = [] }
      result      <- m
-     types       <- CMS.gets _types
-     newPorts    <- reverse <$> CMS.gets _signals
-     newGenerics <- reverse <$> CMS.gets _variables
-     CMS.when (P.not $ Set.null types) $
+     newTypes    <- CMS.gets _types
+     newPorts    <- reverse <$> CMS.gets _ports
+     CMS.when (P.not $ Set.null newTypes) $
        do let packageName = n ++ "_types"
           ctxt <- CMS.gets _context
-          addUnit    $ packageTypes packageName types
+          addUnit    $ packageTypes packageName newTypes
           CMS.modify $ \s -> s { _context = ctxt }
           newImport  $ "WORK." ++ packageName
      addUnit $ LibraryPrimary $ PrimaryEntity $
            EntityDeclaration name
-             (EntityHeader
-               (GenericClause <$> maybeNull newGenerics)
-               (PortClause    <$> maybeNull newPorts))
+             (EntityHeader (Nothing) (PortClause <$> maybeNull newPorts))
              ([])
              (Nothing)
-     CMS.modify $ \e -> e { _types     = oldTypes
-                          , _signals   = oldPorts
-                          , _variables = oldGenerics }
+     CMS.modify $ \e -> e { _types = oldTypes
+                          , _ports = oldPorts }
      return result
 
 maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
@@ -659,8 +659,8 @@ prettyVEnv :: VHDLEnv -> Doc
 prettyVEnv env = Text.vcat (pp main : fmap pp files)
   where
     main  = DesignFile units
-    units = reverse $ _units env
-    files = reverse $ map reorderDesign $ _designs env
+    units = _units env
+    files = map reorderDesign $ _designs env
 
 --------------------------------------------------------------------------------
 
@@ -691,7 +691,10 @@ reorderContext (ContextClause items) = ContextClause (reorder items [])
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
--- ** Ports/Generic declarations
+-- ** Common declarations.
+
+port :: MonadV m => Identifier -> Mode -> SubtypeIndication -> Maybe Expression -> m ()
+port i m t e = addPort $ InterfaceSignalDeclaration [i] (Just m) t False e
 
 constant :: MonadV m => Identifier -> SubtypeIndication -> Expression -> m ()
 constant i t e = addConstant $ InterfaceConstantDeclaration [i] t (Just e)

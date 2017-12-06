@@ -104,7 +104,7 @@ compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
      , ProcessCMD :<: instr
-     , SignalCMD  :<: instr
+     , VHDLCMD    :<: instr
      , pred Bool
      )
   => Program instr (Param2 exp pred) ()
@@ -116,7 +116,7 @@ icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
      ( Interp instr VHDL (Param2 exp pred)
      , HFunctor instr
      , ProcessCMD :<: instr
-     , SignalCMD  :<: instr
+     , VHDLCMD    :<: instr
      , pred Bool
      )
   => Program instr (Param2 exp pred) ()
@@ -126,7 +126,7 @@ icompileWrap = icompile . wrap
 -- | Wrap a program in a process.
 wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
      ( ProcessCMD :<: instr
-     , SignalCMD  :<: instr
+     , VHDLCMD    :<: instr
      , pred Bool
      )
   => Program instr (Param2 exp pred) ()
