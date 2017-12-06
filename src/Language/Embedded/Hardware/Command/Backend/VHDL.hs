@@ -487,7 +487,7 @@ instance InterpBi ComponentCMD IO (Param1 pred)
     interpBi = runComponent
 
 compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct) => ComponentCMD (Param3 VHDL exp ct) a -> VHDL a
-compileComponent (StructComponent base sig) =
+compileComponent (DeclareComponent base sig) =
   do comp <- newSym base
      V.component $
        do p <- V.entity  (ident' comp) (traverseSig sig)
@@ -502,7 +502,7 @@ compileComponent (PortMap (Component name sig) as) =
      V.portMap l i (assocSig sig as)
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
-runComponent = error "hardware-edsl-todo: run components."
+runComponent _ = error "hardware-edsl-todo: run components."
 
 --------------------------------------------------------------------------------
 

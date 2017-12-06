@@ -454,7 +454,7 @@ data Component fs a = Component String (Signature fs a)
 data ComponentCMD fs a
   where
     -- ^ Wraps the given signature in a named component.
-    StructComponent
+    DeclareComponent
       :: Name
       -> Signature (Param3 prog exp pred) a
       -> ComponentCMD (Param3 prog exp pred) String
@@ -466,18 +466,18 @@ data ComponentCMD fs a
 
 instance HFunctor ComponentCMD
   where
-    hfmap f (StructComponent n sig)        = StructComponent n (hfmap f sig)
+    hfmap f (DeclareComponent n sig) = DeclareComponent n (hfmap f sig)
     hfmap f (PortMap (Component m sig) as) = PortMap (Component m (hfmap f sig)) as
 
 instance HBifunctor ComponentCMD
   where
-    hbimap g f (StructComponent n sig)        = StructComponent n (hbimap g f sig)
+    hbimap g f (DeclareComponent n sig) = DeclareComponent n (hbimap g f sig)
     hbimap g f (PortMap (Component m sig) as) = PortMap (Component m (hbimap g f sig)) as
 
 instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
   where
-    reexpressInstrEnv reexp (StructComponent n sig) = ReaderT $ \env ->
-      singleInj $ StructComponent n (reexpressSignature env sig)
+    reexpressInstrEnv reexp (DeclareComponent n sig) = ReaderT $ \env ->
+      singleInj $ DeclareComponent n (reexpressSignature env sig)
     reexpressInstrEnv reexp (PortMap (Component m sig) as) = ReaderT $ \env ->
       singleInj $ PortMap (Component m (reexpressSignature env sig)) as
 

@@ -364,7 +364,7 @@ namedComponent :: (ComponentCMD :<: instr, Monad m)
   => String -> Sig instr exp pred m a
   -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
 namedComponent name sig =
-  do n <- singleInj $ StructComponent (Base name) sig
+  do n <- singleInj $ DeclareComponent (Base name) sig
      return $ Component n sig
 
 -- | Declare a component.
