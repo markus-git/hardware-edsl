@@ -13,11 +13,8 @@ module Language.Embedded.Hardware.Command
   , icompile
   , runIO
   -- AXI compilers.
-  , compileAXILite
-  , icompileAXILite
-  --
-  , compileWrap
-  , icompileWrap
+--  , compileAXILite
+--  , icompileAXILite
   --
   , VHDL.Mode(..)
   --
@@ -51,15 +48,36 @@ import qualified GHC.Exts as GHC (Constraint)
 
 -- | Compile a program to VHDL code represented as a string.
 compile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
-     (Interp instr VHDL (Param2 exp pred), HFunctor instr)
-  => Program instr (Param2 exp pred) a
+     ( Interp instr VHDLGen (Param2 exp pred)
+     , HFunctor instr
+     , ProcessCMD :<: instr
+     , VHDLCMD :<: instr
+     , pred Bool
+     )
+  => Program instr (Param2 exp pred) ()
   -> String
-compile = show . VHDL.prettyVHDL . VHDL.wrapMain . interpret
+compile = show
+        . VHDL.prettyVHDL
+        . VHDL.wrapMain
+        . flip runVHDLGen env
+        . interpret
+        . process []
+  where
+    env :: VHDLEnv
+    env  = VHDLEnv {
+        _clock = SignalC "clock"
+      , _reset = SignalC "reset" }    
+    -- todo: 'wrapMain' will add these ports.
 
 -- | Compile a program to VHDL code and print it on the screen.
 icompile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
-     (Interp instr VHDL (Param2 exp pred), HFunctor instr)
-  => Program instr (Param2 exp pred) a
+     ( Interp instr VHDLGen (Param2 exp pred)
+     , HFunctor instr
+     , ProcessCMD :<: instr
+     , VHDLCMD :<: instr
+     , pred Bool
+     )
+  => Program instr (Param2 exp pred) ()
   -> IO ()
 icompile = putStrLn . compile
 
@@ -75,13 +93,16 @@ runIO = interpretBi (return . evalE)
 
 --------------------------------------------------------------------------------
 -- Some extra compilers that might be handy to have.
-
+{-
 compileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
-  ( Interp instr VHDL (Param2 exp pred)
+  ( Interp instr VHDLGen (Param2 exp pred)
   , HFunctor instr
   , AXIPred instr exp pred
   )
-  => Sig instr exp pred Identity (Signal Bool -> Signal Bool -> a)
+  => Sig instr exp pred Identity (
+          Signal Bool -- ^ Clock signal.
+       -> Signal Bool -- ^ Reset signal.
+       -> a )
   -> String
 compileAXILite sig = show $ VHDL.prettyVHDL $ interpret $
   do cmp <- component sig
@@ -96,43 +117,5 @@ icompileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a 
   => Sig instr exp pred Identity (Signal Bool -> Signal Bool -> a)
   -> IO ()
 icompileAXILite = putStrLn . compileAXILite
-
---------------------------------------------------------------------------------
-
--- | Wraps a program in a clocked process and then compiles it.
-compileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
-     ( Interp instr VHDL (Param2 exp pred)
-     , HFunctor instr
-     , ProcessCMD :<: instr
-     , VHDLCMD    :<: instr
-     , pred Bool
-     )
-  => Program instr (Param2 exp pred) ()
-  -> String
-compileWrap = compile . wrap
-
--- | Wraps a program in a clocked process and then outputs its code.
-icompileWrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
-     ( Interp instr VHDL (Param2 exp pred)
-     , HFunctor instr
-     , ProcessCMD :<: instr
-     , VHDLCMD    :<: instr
-     , pred Bool
-     )
-  => Program instr (Param2 exp pred) ()
-  -> IO ()
-icompileWrap = icompile . wrap
-
--- | Wrap a program in a process.
-wrap :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
-     ( ProcessCMD :<: instr
-     , VHDLCMD    :<: instr
-     , pred Bool
-     )
-  => Program instr (Param2 exp pred) ()
-  -> Program instr (Param2 exp pred) ()
-wrap body = do
-  clk <- newNamedPort "clk" VHDL.In
-  process clk [] body
-
+-}
 --------------------------------------------------------------------------------

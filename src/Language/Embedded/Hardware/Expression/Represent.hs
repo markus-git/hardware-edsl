@@ -3,12 +3,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE StandaloneDeriving   #-}
+{-# LANGUAGE FlexibleContexts     #-}
 
 module Language.Embedded.Hardware.Expression.Represent where
 
 import Language.Embedded.Hardware.Expression.Represent.Bit
 
-import Language.Embedded.VHDL (VHDL)
+import Language.Embedded.VHDL (VHDL, MonadV)
 import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport)
 import Language.Embedded.VHDL.Monad.Type
 import Language.Embedded.VHDL.Monad.Util (printBits)
@@ -177,12 +178,12 @@ primTypeRep _ = case typeRep :: TypeRep a of
   DoubleT  -> double
   BitsT    -> primTypeRepBits (Proxy :: Proxy a)
 
-primTypeRepBits :: forall n . KnownNat n => Proxy (Bits n) -> Type
+primTypeRepBits :: forall n. KnownNat n => Proxy (Bits n) -> Type
 primTypeRepBits _ = std_logic_vector size
   where size = fromInteger (ni (undefined :: Bits n))
 
 -- | Declare the necessary imports/packages to support a primitive type.
-primTypeDeclare :: forall a . PrimType a => Proxy a -> VHDL ()
+primTypeDeclare :: forall m a. (MonadV m, PrimType a) => Proxy a -> m ()
 primTypeDeclare p = case typeRep :: TypeRep a of
   BoolT    -> declareBoolean
   Int8T    -> declareNumeric
@@ -200,24 +201,24 @@ primTypeDeclare p = case typeRep :: TypeRep a of
   BitsT    -> declareBoolean
 
 -- | Declare a primitive hardware type and get back its representation.
-declareType :: PrimType a => Proxy a -> VHDL Type
+declareType :: (MonadV m, PrimType a) => Proxy a -> m Type
 declareType proxy = primTypeDeclare proxy >> return (primTypeRep proxy)
 
 -- | Declare the necessary libraries to support boolean operations.
-declareBoolean :: VHDL ()
+declareBoolean :: MonadV m => m ()
 declareBoolean =
   do newLibrary "IEEE"
      newImport  "IEEE.std_logic_1164"
 
 -- | Declare the necessary libraries to support numerical operations.
-declareNumeric :: VHDL ()
+declareNumeric :: MonadV m => m ()
 declareNumeric =
   do newLibrary "IEEE"
      newImport  "IEEE.std_logic_1164"
      newImport  "IEEE.numeric_std"
 
 -- | Declare the necessary libraries to support floating point operations.
-declareFloating :: VHDL ()
+declareFloating :: MonadV m => m ()
 declareFloating =
   do newLibrary "IEEE"
      newImport  "IEEE.float_pkg"

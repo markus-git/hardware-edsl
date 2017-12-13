@@ -407,22 +407,18 @@ output = namedOutput "out"
 --------------------------------------------------------------------------------
 -- ** Structural entities.
 
--- | Declare a new process listening to some signals by wrapping the given program.
 processR :: (ProcessCMD :<: instr)
-  => Signal Bool -- ^ Clock.
-  -> Signal Bool -- ^ Reset.
-  -> Signals     -- ^ Other triggers.
+  => Signals                               -- ^ Other triggers.
   -> ProgramT instr (Param2 exp pred) m () -- ^ Reset program.
   -> ProgramT instr (Param2 exp pred) m () -- ^ Main program.
   -> ProgramT instr (Param2 exp pred) m ()
-processR clk rst is q = singleInj . Process clk (Just (rst, q)) is
+processR is rst prog = singleInj $ Process is rst (Just prog)
 
 process :: (ProcessCMD :<: instr)
-  => Signal Bool -- ^ Clock.
-  -> Signals     -- ^ Other triggers.
-  -> ProgramT instr (Param2 exp pred) m () -- ^ Body.
+  => Signals                               -- ^ Other triggers.
+  -> ProgramT instr (Param2 exp pred) m () -- ^ Main program.
   -> ProgramT instr (Param2 exp pred) m ()
-process clk is = singleInj . Process clk Nothing is
+process is prog = singleInj $ Process is prog Nothing
 
 -- | Construct the untyped signal list for processes.
 (.:) :: ToIdent a => a -> Signals -> Signals

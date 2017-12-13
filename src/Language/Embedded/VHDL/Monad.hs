@@ -9,6 +9,7 @@ module Language.Embedded.VHDL.Monad (
     VHDL
   , VHDLT
   , VHDLEnv
+  , MonadV
   , emptyVHDLEnv
     
     -- ^ run
@@ -58,8 +59,12 @@ module Language.Embedded.VHDL.Monad (
 
 import Language.VHDL
 
-import Language.Embedded.VHDL.Monad.Expression (eq, literal, number, simple, name, function)
-import Language.Embedded.VHDL.Monad.Util (expr, primExpr, primShift, primSimple, primTerm, primFactor, maybePrimary)
+import Language.Embedded.VHDL.Monad.Expression
+  (eq, literal, number, simple, name, function)
+import Language.Embedded.VHDL.Monad.Type
+  (std_logic)
+import Language.Embedded.VHDL.Monad.Util
+  (expr, primExpr, primShift, primSimple, primTerm, primFactor, maybePrimary)
 
 import Control.Applicative    ((<$>))
 import Control.Monad.Identity (Identity)
@@ -127,9 +132,6 @@ emptyVHDLEnv = VHDLEnv
 -- | Type constraints for the VHDL monads
 type MonadV m = (Functor m, Applicative m, Monad m, MonadState VHDLEnv m)
 
--- | VHDL code generation monad
-type VHDL = VHDLT Identity
-
 -- | VHDL code genreation monad transformer.
 newtype VHDLT m a = VHDLT { unVGenT :: StateT VHDLEnv m a }
   deriving ( Functor
@@ -139,11 +141,14 @@ newtype VHDLT m a = VHDLT { unVGenT :: StateT VHDLEnv m a }
            , MonadIO
            )
 
+-- | VHDL code generation monad
+type VHDL = VHDLT Identity
+
 -- | Run the VHDL code generation monad transformer.
 runVHDLT :: Monad m => VHDLT m a -> VHDLEnv -> m (a, VHDLEnv)
 runVHDLT m = CMS.runStateT (unVGenT m)
 
--- | -- | Executes the VHDL code generation monad transformer, returning only its final state.
+-- | Executes the VHDL code generation monad transformer, returning only its final state.
 execVHDLT :: Monad m => VHDLT m a -> VHDLEnv -> m VHDLEnv
 execVHDLT m = CMS.execStateT (unVGenT m)
 
@@ -364,9 +369,13 @@ exit label e = addSequential $ SExit $ ExitStatement (Nothing) (Just label) (Jus
 -- | Wraps a program in an entity container.
 wrapMain :: MonadV m => m a -> m ()
 wrapMain prog = do
-  let e = Ident "main"
-  let a = Ident "behav"
-  CMS.void $ entity e $ architecture e a prog
+  let eName = Ident "main"
+  let aName = Ident "behav"
+  CMS.void $ entity eName $ do
+    port (Ident "clock") (In) (std_logic) (Nothing)
+    port (Ident "reset") (In) (std_logic) (Nothing)
+    architecture eName aName prog
+-- todo: take clock and reset names as parameters?
 
 --------------------------------------------------------------------------------
 

@@ -9,8 +9,18 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE PolyKinds             #-}
 {-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleContexts #-}
 
-module Language.Embedded.Hardware.Command.Backend.VHDL (CompileType(..)) where
+module Language.Embedded.Hardware.Command.Backend.VHDL
+  ( VHDLEnv(..)
+  , VHDLGenT
+  , VHDLGen
+  , runVHDLGenT
+  , runVHDLGen
+  , CompileType(..)
+  )
+  where
 
 import Control.Monad.Operational.Higher
 
@@ -20,9 +30,16 @@ import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit (Bits, ni)
 import Language.Embedded.Hardware.Command.CMD
 
-import Language.Embedded.VHDL (VHDL)
+import Language.Embedded.VHDL (VHDLT, VHDL)
 import qualified Language.VHDL          as V
 import qualified Language.Embedded.VHDL as V
+
+import Control.Monad.Identity (Identity)
+import Control.Monad.Reader   (ReaderT, MonadReader)
+import Control.Monad.State    (StateT,  MonadState, MonadIO)
+import qualified Control.Monad.Identity as CMI
+import qualified Control.Monad.Reader   as CMR
+import qualified Control.Monad.State    as CMS
 
 import Data.Array.IO (freeze)
 import Data.List     (genericTake)
@@ -34,14 +51,49 @@ import qualified Data.Array.IO as IA
 import GHC.TypeLits (KnownNat)
 
 --------------------------------------------------------------------------------
--- * Translation of hardware commands into VHDL.
+-- * VHDL code generation.
+--------------------------------------------------------------------------------
+
+data VHDLEnv = VHDLEnv
+  { _clock :: Signal Bool
+  , _reset :: Signal Bool
+  }
+
+type MonadV m = (Functor m, Applicative m, Monad m, MonadReader VHDLEnv m)
+
+newtype VHDLGenT m a = VHDLGenT { unVHDLGenT :: ReaderT VHDLEnv (VHDLT m) a }
+  deriving ( Functor
+           , Applicative
+           , Monad
+           , MonadReader VHDLEnv
+           , MonadState  V.VHDLEnv
+           )
+
+type VHDLGen = VHDLGenT Identity
+
+runVHDLGenT :: Monad m => VHDLGenT m a -> VHDLEnv -> VHDLT m a
+runVHDLGenT m = CMR.runReaderT (unVHDLGenT m)
+
+runVHDLGen :: VHDLGen a -> VHDLEnv -> VHDL a
+runVHDLGen = runVHDLGenT
+
+--------------------------------------------------------------------------------
+
+readClock :: MonadV m => m (V.Identifier)
+readClock = CMR.asks (\e -> let (SignalC clk) = _clock e in ident' clk)
+
+readReset :: MonadV m => m (V.Identifier)
+readReset = CMR.asks (\e -> let (SignalC clk) = _reset e in ident' clk)
+
+--------------------------------------------------------------------------------
+-- ** Translation of hardware types and expressions into VHDL.
 --------------------------------------------------------------------------------
 
 class CompileType ct
   where
-    compileType :: ct a => proxy1 ct -> proxy2 a -> VHDL V.Type
-    compileLit  :: ct a => proxy1 ct ->        a -> VHDL V.Expression
-    compileBits :: ct a => proxy1 ct ->        a -> VHDL V.Expression
+    compileType :: ct a => proxy1 ct -> proxy2 a -> VHDLGen V.Type
+    compileLit  :: ct a => proxy1 ct ->        a -> VHDLGen V.Expression
+    compileBits :: ct a => proxy1 ct ->        a -> VHDLGen V.Expression
 
 instance CompileType PrimType
   where
@@ -51,19 +103,19 @@ instance CompileType PrimType
 
 --------------------------------------------------------------------------------
 
-compT :: forall proxy a . PrimType a => proxy a -> VHDL V.Type
+compT :: forall proxy a . PrimType a => proxy a -> VHDLGen V.Type
 compT _ = declareType (Proxy :: Proxy a)
 
 compTM :: forall proxy ct exp a . (CompileType ct, ct a)
-  => proxy ct -> Maybe (exp a) -> VHDL V.Type
+  => proxy ct -> Maybe (exp a) -> VHDLGen V.Type
 compTM _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 
 compTF :: forall proxy ct exp a b . (CompileType ct, ct a)
-  => proxy ct -> (exp a -> b) -> VHDL V.Type
+  => proxy ct -> (exp a -> b) -> VHDLGen V.Type
 compTF _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
 
 compTA :: forall proxy ct array i a . (CompileType ct, ct a)
-  => proxy ct -> V.Range -> array a -> VHDL V.Type
+  => proxy ct -> V.Range -> array a -> VHDLGen V.Type
 compTA _ range _ =
   do i <- newSym (Base "array")
      t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
@@ -87,9 +139,13 @@ evalEM :: forall exp a . EvaluateExp exp
   => Maybe (exp a) -> a
 evalEM e = maybe (error "empty value") id $ fmap evalE e
 
+compER :: forall exp a . CompileExp exp
+  => exp a -> VHDLGen (V.Expression)
+compER e = VHDLGenT $ CMS.lift $ compE e
+
 compEM :: forall exp a . CompileExp exp
-  => Maybe (exp a) -> VHDL (Maybe V.Expression)
-compEM e = maybe (return Nothing) (>>= return . Just) $ fmap compE e
+  => Maybe (exp a) -> VHDLGen (Maybe V.Expression)
+compEM e = maybe (return Nothing) (>>= return . Just) (fmap compER e)
 
 --------------------------------------------------------------------------------
 
@@ -103,37 +159,11 @@ proxyF :: (exp a -> b) -> Proxy a
 proxyF _ = Proxy
 
 --------------------------------------------------------------------------------
-
-freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
-  => proxy ct -> Name -> VHDL (Val a)
-freshVar _ prefix =
-  do i <- newSym prefix
-     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
-     V.variable (ident' i) t Nothing
-     return (ValC i)
-
-newSym :: Name -> VHDL String
-newSym (Base  n) = V.newSym n
-newSym (Exact n) = return   n
-
-ident :: ToIdent a => a -> String
-ident a = let (Ident s) = toIdent a in s
-
-ident' :: ToIdent a => a -> V.Identifier
-ident' a = V.Ident $ ident a
-
--- todo: this... why does this work?
-instance ToIdent String where toIdent = Ident
-instance ToIdent Ident  where toIdent = id
-instance ToIdent Name   where
-  toIdent (Base s)  = Ident s
-  toIdent (Exact s) = Ident s
-
---------------------------------------------------------------------------------
 -- ** Signals.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp SignalCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp SignalCMD VHDLGen (Param2 exp ct)
   where
     interp = compileSignal
 
@@ -141,8 +171,9 @@ instance InterpBi SignalCMD IO (Param1 pred)
   where
     interpBi = runSignal
 
--- todo: is concurrent... really necessary? I think the VHDL monad handle that.
-compileSignal :: forall exp ct a. (CompileExp exp, CompileType ct) => SignalCMD (Param3 VHDL exp ct) a -> VHDL a
+compileSignal :: forall exp ct a. (CompileExp exp, CompileType ct)
+  => SignalCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileSignal (NewSignal base exp) =
   do i <- newSym base
      v <- compEM exp
@@ -154,25 +185,22 @@ compileSignal (GetSignal (SignalC s)) =
      V.assignVariable (simple $ ident i) (simple' s)
      return i
 compileSignal (SetSignal (SignalC s) exp) =
-  do e' <- compE exp
+  do e' <- compER exp
      t  <- compileType (Proxy::Proxy ct) (proxyE exp)
      V.assignSignal (simple $ ident s) (V.uType e' t)
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ ValC s
 
 runSignal :: SignalCMD (Param3 IO IO pred) a -> IO a
-runSignal (NewSignal _ Nothing)       =
-  fmap SignalE $ IR.newIORef (error "uninitialized signal")
-runSignal (NewSignal _ (Just a))      = fmap SignalE . IR.newIORef =<< a
-runSignal (GetSignal (SignalE r))     = fmap ValE $ IR.readIORef r
-runSignal (SetSignal (SignalE r) exp) = IR.writeIORef r =<< exp
-runSignal x@(UnsafeFreezeSignal r)    = runSignal (GetSignal r `asTypeOf` x)
+runSignal x@(UnsafeFreezeSignal r) = runSignal (GetSignal r `asTypeOf` x)
+runSignal _ = error "hardware-edsl.todo: run signals."
 
 --------------------------------------------------------------------------------
 -- ** Variables.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp VariableCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp VariableCMD VHDLGen (Param2 exp ct)
   where
     interp = compileVariable
 
@@ -181,7 +209,9 @@ instance InterpBi VariableCMD IO (Param1 pred)
     interpBi = runVariable
 
 -- todo: why not initialize variable?
-compileVariable :: forall ct exp a. (CompileExp exp, CompileType ct) => VariableCMD (Param3 VHDL exp ct) a -> VHDL a
+compileVariable :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => VariableCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileVariable (NewVariable base exp) =
   do i <- newSym base
      v <- compEM exp
@@ -196,24 +226,25 @@ compileVariable (GetVariable (VariableC var)) =
      V.assignVariable (simple $ ident i) (simple' var)
      return i
 compileVariable (SetVariable (VariableC var) exp) =
-  do e' <- compE exp
+  do e' <- compER exp
      t  <- compileType (Proxy::Proxy ct) (proxyE exp)
      V.assignVariable (simple var) (V.uType e' t)
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ ValC v
 
 runVariable :: VariableCMD (Param3 IO IO pred) a -> IO a
+runVariable x@(UnsafeFreezeVariable v)      = runVariable (GetVariable v `asTypeOf` x)
 runVariable (NewVariable _ Nothing)         = fmap VariableE $ IR.newIORef (error "uninitialized variable")
 runVariable (NewVariable _ (Just a))        = fmap VariableE . IR.newIORef =<< a
 runVariable (GetVariable (VariableE v))     = fmap ValE $ IR.readIORef v
 runVariable (SetVariable (VariableE v) exp) = IR.writeIORef v =<< exp
-runVariable x@(UnsafeFreezeVariable v)      = runVariable (GetVariable v `asTypeOf` x)
 
 --------------------------------------------------------------------------------
 -- ** Arrays.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp ArrayCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp ArrayCMD VHDLGen (Param2 exp ct)
   where
     interp = compileArray
 
@@ -221,10 +252,12 @@ instance InterpBi ArrayCMD IO (Param1 pred)
   where
     interpBi = runArray
 
-compileArray :: forall ct exp a. (CompileExp exp, CompileType ct) => ArrayCMD (Param3 VHDL exp ct) a -> VHDL a
+compileArray :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => ArrayCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileArray (NewArray base len) =
   do i <- newSym base
-     l <- compE len
+     l <- compER len
      t <- compTA (Proxy::Proxy ct) (rangeZero l) (undefined :: a)
      V.array (ident' i) V.InOut t Nothing
      return (ArrayC i)
@@ -237,25 +270,25 @@ compileArray (InitArray base is) =
      return (ArrayC i)
 compileArray (GetArray (ArrayC s) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
-     e <- compE ix
+     e <- compER ix
      V.assignVariable (simple $ ident i) (indexed' s e)
      return i
 compileArray (SetArray (ArrayC s) ix e) =
-  do ix' <- compE ix
-     e'  <- compE e
+  do ix' <- compER ix
+     e'  <- compER e
      t   <- compileType (Proxy::Proxy ct) (proxyE e)
      V.assignArray (indexed s ix') (V.uType e' t)
 compileArray (CopyArray (ArrayC a, oa) (ArrayC b, ob) l) =
-  do oa' <- compE oa
-     ob' <- compE ob
-     len <- compE l
+  do oa' <- compER oa
+     ob' <- compER ob
+     len <- compER l
      let lower_a = V.add [unpackTerm len, unpackTerm oa']
          lower_b = V.add [unpackTerm len, unpackTerm ob']
          dest    = slice  a $ range oa' V.downto $ lift $ lower_a
          src     = slice' b $ range ob' V.downto $ lift $ lower_b
      V.assignSignal dest src
 compileArray (ResetArray (ArrayC a) rst) =
-  do rst' <- compE rst
+  do rst' <- compER rst
      t    <- compileType (Proxy::Proxy ct) (proxyE rst)
      let others = V.aggregate $ V.others (V.uType rst' t)
      V.assignArray (simple a) (lift others)
@@ -267,7 +300,8 @@ runArray = error "hardware-edsl.todo: run arrays"
 -- ** Virtual Arrays.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp VArrayCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp VArrayCMD VHDLGen (Param2 exp ct)
   where
     interp = compileVArray
 
@@ -275,9 +309,11 @@ instance InterpBi VArrayCMD IO (Param1 pred)
   where
     interpBi = runVArray
 
-compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct) => VArrayCMD (Param3 VHDL exp ct) a -> VHDL a
+compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => VArrayCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileVArray (NewVArray base len) =
-  do l <- compE len
+  do l <- compER len
      t <- compTA (Proxy::Proxy ct) (rangeZero l) (undefined :: a)
      i <- newSym base
      V.variable (ident' i) t Nothing
@@ -292,18 +328,18 @@ compileVArray (InitVArray base is) =
      return (VArrayC i)
 compileVArray (GetVArray (VArrayC arr) ix) =
   do i <- freshVar (Proxy::Proxy ct) (Base "a")
-     e <- compE ix
+     e <- compER ix
      V.assignVariable (simple $ ident i) (indexed' arr e)
      return i
 compileVArray (SetVArray a@(VArrayC arr) i e) =
-  do i' <- compE i
-     e' <- compE e
+  do i' <- compER i
+     e' <- compER e
      t  <- compileType (Proxy::Proxy ct) (proxyE e)
      V.assignVariable (indexed arr i') (V.uType e' t)
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
-  do oa' <- compE oa
-     ob' <- compE ob
-     len <- compE l
+  do oa' <- compER oa
+     ob' <- compER ob
+     len <- compER l
      let lower_a = V.add [unpackTerm len, unpackTerm oa']
          lower_b = V.add [unpackTerm len, unpackTerm ob']
          dest    = slice  a $ range oa' V.downto $ lift $ lower_a
@@ -351,7 +387,8 @@ runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw   arr >>= return . VArray
 -- ** Loops.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp LoopCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp LoopCMD VHDLGen (Param2 exp ct)
   where
     interp = compileLoop
 
@@ -359,19 +396,21 @@ instance InterpBi LoopCMD IO (Param1 pred)
   where
     interpBi = runLoop
 
-compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct) => LoopCMD (Param3 VHDL exp ct) a -> VHDL a
+compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => LoopCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileLoop (For l u step) =
   do -- *** todo: temp solution, should check if signed and size.
      i    <- newSym (Base "l")
-     l'   <- compE l
-     u'   <- compE u
+     l'   <- compER l
+     u'   <- compER u
      loop <- V.inFor (ident' i) (range l' V.to u') (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel
      loop <- V.inWhile l Nothing $
        do b    <- cont
-          exit <- compE b
+          exit <- compER b
           V.exit l exit
           step
      V.addSequential $ V.SLoop $ loop
@@ -393,7 +432,8 @@ runLoop (While b step) = loop
 -- ** Conditional.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp ConditionalCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp ConditionalCMD VHDLGen (Param2 exp ct)
   where
     interp = compileConditional
 
@@ -401,22 +441,24 @@ instance InterpBi ConditionalCMD IO (Param1 pred)
   where
     interpBi = runConditional
 
-compileConditional :: forall ct exp a. (CompileExp exp, CompileType ct) => ConditionalCMD (Param3 VHDL exp ct) a -> VHDL a
+compileConditional :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => ConditionalCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileConditional (If (a, b) cs em) =
   do let (es, ds) = unzip cs
          el = maybe (return ()) id em
-     ae  <- compE a
-     ese <- mapM compE es
+     ae  <- compER a
+     ese <- mapM compER es
      s   <- V.inConditional (ae, b) (zip ese ds) el
      V.addSequential $ V.SIf s
 compileConditional (Case e cs d) =
   do let el = maybe (return ()) id d
-     ae  <- compE e
+     ae  <- compER e
      ce  <- mapM compC cs
      s   <- V.inCase ae ce el
      V.addSequential $ V.SCase s
   where
-    compC :: ct b => When b VHDL -> VHDL (V.Choices, VHDL ())
+    compC :: ct b => When b VHDLGen -> VHDLGen (V.Choices, VHDLGen ())
     compC (When (Is e) p)   = do
       e' <- compileLit (Proxy::Proxy ct) e
       return $ (V.Choices [V.is $ unpackSimple e'], p)
@@ -448,7 +490,8 @@ runConditional (Null) = return ()
 -- ** Components.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp ComponentCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp ComponentCMD VHDLGen (Param2 exp ct)
   where
     interp = compileComponent
 
@@ -456,7 +499,9 @@ instance InterpBi ComponentCMD IO (Param1 pred)
   where
     interpBi = runComponent
 
-compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct) => ComponentCMD (Param3 VHDL exp ct) a -> VHDL a
+compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => ComponentCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileComponent (DeclareComponent base sig) =
   do comp <- newSym base
      V.component $
@@ -477,8 +522,8 @@ runComponent _ = error "hardware-edsl-todo: run components."
 --------------------------------------------------------------------------------
 
 traverseSig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDL exp ct) a
-  -> VHDL (VHDL ())
+  => Signature (Param3 VHDLGen exp ct) a
+  -> VHDLGen (VHDLGen ())
 traverseSig (Ret  prog)   = return prog
 traverseSig (SSig n m sf) = 
   do i <- newSym n
@@ -492,8 +537,8 @@ traverseSig (SArr n m l af) =
      traverseSig (af (ArrayC i))
 
 applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDL exp ct) a -> Argument ct a
-  -> VHDL [V.InterfaceDeclaration]
+  => Signature (Param3 VHDLGen exp ct) a -> Argument ct a
+  -> VHDLGen [V.InterfaceDeclaration]
 applySig (Ret _)       (Nil)                  = return []
 applySig (SSig n m sf) (ASig s@(SignalC i) v) =
   do t  <- compTF (Proxy::Proxy ct) sf
@@ -507,7 +552,7 @@ applySig (SArr n m l af) (AArr a@(ArrayC i) v) =
      return (i : is)
 
 assocSig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDL exp ct) a -> Argument ct a
+  => Signature (Param3 VHDLGen exp ct) a -> Argument ct a
   -> [(V.Identifier, V.Identifier)]
 assocSig (Ret _)         (Nil)                  = []
 assocSig (SSig n _ sf)   (ASig s@(SignalC i) v) =
@@ -519,7 +564,8 @@ assocSig (SArr n _ _ af) (AArr a@(ArrayC i) v)  =
 -- ** Structural.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp ProcessCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp ProcessCMD VHDLGen (Param2 exp ct)
   where
     interp = compileProcess
 
@@ -527,12 +573,16 @@ instance InterpBi ProcessCMD IO (Param1 pred)
   where
     interpBi = runProcess
 
-compileProcess :: forall ct exp a. (CompileExp exp, CompileType ct) => ProcessCMD (Param3 VHDL exp ct) a -> VHDL a
-compileProcess (Process (SignalC clk) rst is prog) =
-  do let is'  = identifiers is
-     let rst' = maybe Nothing (\((SignalC r), p) -> Just (V.Ident r, p)) rst
+compileProcess :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => ProcessCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
+compileProcess (Process is prog rst) =
+  do clock <- readClock
+     reset <- readReset
      label <- V.newLabel
-     V.inSingleProcess label (V.Ident clk) rst' (identifiers is) prog
+     let is'  = identifiers is
+     let rst' = fmap ((,) reset) rst
+     V.inSingleProcess label clock rst' (identifiers is) prog
   where
     identifiers :: Signals -> [V.Identifier]
     identifiers = fmap (\(Ident i) -> V.Ident i)
@@ -545,7 +595,8 @@ runProcess _ =
 -- ** VHDL.
 --------------------------------------------------------------------------------
 
-instance (CompileExp exp, CompileType ct) => Interp VHDLCMD VHDL (Param2 exp ct)
+instance (CompileExp exp, CompileType ct)
+    => Interp VHDLCMD VHDLGen (Param2 exp ct)
   where
     interp = compileVHDL
 
@@ -553,7 +604,9 @@ instance InterpBi VHDLCMD IO (Param1 pred)
   where
     interpBi = runVHDL
 
-compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct) => VHDLCMD (Param3 VHDL exp ct) a -> VHDL a
+compileVHDL :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => VHDLCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
 compileVHDL (DeclarePort base exp mode) =
   do i <- newSym base
      v <- compEM exp
@@ -561,18 +614,18 @@ compileVHDL (DeclarePort base exp mode) =
      V.port (ident' i) mode t v
      return (SignalC i)
 compileVHDL (CopyBits ((SignalC a), oa) ((SignalC b), ob) l) =
-  do oa' <- compE oa
-     ob' <- compE ob
-     len <- compE l
+  do oa' <- compER oa
+     ob' <- compER ob
+     len <- compER l
      let lower_a = V.add [unpackTerm len, unpackTerm oa']
          lower_b = V.add [unpackTerm len, unpackTerm ob']
          dest    = slice  a $ range oa' V.downto $ lift $ lower_a
          src     = slice' b $ range ob' V.downto $ lift $ lower_b
      V.assignSignal dest src
 compileVHDL (CopyVBits ((VariableC a), oa) ((SignalC b), ob) l) =
-  do oa' <- compE oa
-     ob' <- compE ob
-     len <- compE l
+  do oa' <- compER oa
+     ob' <- compER ob
+     len <- compER l
      let lower_a = V.add [unpackTerm len, unpackTerm oa']
          lower_b = V.add [unpackTerm len, unpackTerm ob']
          dest    = slice  a $ range oa' V.downto $ lift $ lower_a
@@ -580,20 +633,20 @@ compileVHDL (CopyVBits ((VariableC a), oa) ((SignalC b), ob) l) =
      V.assignVariable dest src
 compileVHDL (GetBit (SignalC bits) ix) =
   do i   <- freshVar (Proxy::Proxy ct) (Base "b")
-     ix' <- compE ix
+     ix' <- compER ix
      V.assignVariable (simple $ ident i) (indexed' bits ix')
      return i
 compileVHDL (SetBit s@(SignalC bits) ix bit) =
-  do ix'  <- compE ix
-     bit' <- compE bit
+  do ix'  <- compER ix
+     bit' <- compER bit
      t    <- compileType (Proxy::Proxy ct) (proxyE s)
      case V.isBit t of
        True  -> V.assignSignal (simple bits)      (bit')
        False -> V.assignArray  (indexed bits ix') (bit')
 compileVHDL (GetBits (SignalC bits) l u) =
   do i  <- freshVar (Proxy::Proxy ct) (Base "b")
-     l' <- compE l
-     u' <- compE u
+     l' <- compER l
+     u' <- compER u
      -- todo: this wrap around.
      V.assignVariable (simple $ ident i)
        ( lift $ V.toInteger $
@@ -604,6 +657,35 @@ compileVHDL (GetBits (SignalC bits) l u) =
 
 runVHDL :: VHDLCMD (Param3 IO IO pred) a -> IO a
 runVHDL = error "hardware-edsl.runVHDL: todo."
+
+--------------------------------------------------------------------------------
+--
+--------------------------------------------------------------------------------
+
+freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
+  => proxy ct -> Name -> VHDLGen (Val a)
+freshVar _ prefix =
+  do i <- newSym prefix
+     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
+     V.variable (ident' i) t Nothing
+     return (ValC i)
+
+newSym :: Name -> VHDLGen String
+newSym (Base  n) = V.newSym n
+newSym (Exact n) = return   n
+
+ident :: ToIdent a => a -> String
+ident a = let (Ident s) = toIdent a in s
+
+ident' :: ToIdent a => a -> V.Identifier
+ident' a = V.Ident $ ident a
+
+-- todo: this... why does this work?
+instance ToIdent String where toIdent = Ident
+instance ToIdent Ident  where toIdent = id
+instance ToIdent Name   where
+  toIdent (Base s)  = Ident s
+  toIdent (Exact s) = Ident s
 
 --------------------------------------------------------------------------------
 

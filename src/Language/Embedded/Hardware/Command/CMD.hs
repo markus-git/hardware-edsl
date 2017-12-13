@@ -469,31 +469,29 @@ instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
 -- | Commands for structural entities.
 data ProcessCMD fs (a :: *)
   where
-    -- ^ Wraps the program in a process.
+    -- ^ Wraps the program in a process, triggered by the global clock.
     Process
-      :: Signal Bool -- ^ Clock signal.
-      -> Maybe (Signal Bool, prog ())
-                     -- ^ Reset signal and action.
-      -> Signals     -- ^ Inputs.
-      -> prog ()     -- ^ Main program.
+      :: Signals         -- ^ Inputs.
+      -> prog ()         -- ^ Main program.
+      -> Maybe (prog ()) -- ^ Reset program.
       -> ProcessCMD (Param3 prog exp pred) ()
 
 instance HFunctor ProcessCMD
   where
-    hfmap f (Process clk rst xs prog) =
-      Process clk (fmap (fmap f) rst) xs (f prog)
+    hfmap f (Process is prog rst) =
+      Process is (f prog) (fmap f rst)
 
 instance HBifunctor ProcessCMD
   where
-    hbimap g _ (Process clk rst xs prog) =
-      Process clk (fmap (fmap g) rst) xs (g prog)
+    hbimap g _ (Process is prog rst) =
+      Process is (g prog) (fmap g rst)
 
 instance (ProcessCMD :<: instr) => Reexpressible ProcessCMD instr env
   where
-    reexpressInstrEnv reexp (Process clk rst is prog) =
-      ReaderT $ \env -> singleInj $ Process clk
-        (fmap (fmap (flip runReaderT env)) rst) is
+    reexpressInstrEnv reexp (Process is prog rst) =
+      ReaderT $ \env -> singleInj $ Process is
         (runReaderT prog env)
+        (fmap (flip runReaderT env) rst)
 
 --------------------------------------------------------------------------------
 
