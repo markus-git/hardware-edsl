@@ -357,13 +357,13 @@ nil :: Argument pred ()
 nil = Nil
 
 -- | Add signal to a argument.
-(.::) :: (pred a, Integral a, PrimType a)
+(+:) :: (pred a, Integral a, PrimType a)
   => Signal a
   -> Argument pred b
   -> Argument pred (Signal a -> b)
-(.::) x xs = ASig x xs
+(+:) x xs = ASig x xs
 
-infixr .::
+infixr +:
 
 --------------------------------------------------------------------------------
 

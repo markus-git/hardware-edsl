@@ -399,7 +399,7 @@ axi_light_impl comp
        ----------------------------------------
        -- User logic.
        --
-       portmap comp (s_axi_aclk .:: s_axi_aresetn .:: registers)
+       portmap comp (s_axi_aclk +: s_axi_aresetn +: registers)
        --
        -- The end.
        ----------------------------------------

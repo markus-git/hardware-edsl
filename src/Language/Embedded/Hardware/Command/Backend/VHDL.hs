@@ -85,6 +85,12 @@ readClock = CMR.asks (\e -> let (SignalC clk) = _clock e in ident' clk)
 readReset :: MonadV m => m (V.Identifier)
 readReset = CMR.asks (\e -> let (SignalC clk) = _reset e in ident' clk)
 
+localClock :: MonadV m => String -> m () -> m ()
+localClock clk = CMR.local $ \e -> e { _clock = SignalC clk }
+
+localReset :: MonadV m => String -> m () -> m ()
+localReset rst = CMR.local $ \e -> e { _reset = SignalC rst }
+
 --------------------------------------------------------------------------------
 -- ** Translation of hardware types and expressions into VHDL.
 --------------------------------------------------------------------------------
@@ -524,7 +530,12 @@ runComponent _ = error "hardware-edsl-todo: run components."
 traverseSig :: forall ct exp a . (CompileExp exp, CompileType ct)
   => Signature (Param3 VHDLGen exp ct) a
   -> VHDLGen (VHDLGen ())
-traverseSig (Ret  prog)   = return prog
+traverseSig (Ret  prog) =
+  do clk <- newSym (Base "clk")
+     rst <- newSym (Base "rst")
+     V.port (ident' clk) V.In V.std_logic Nothing
+     V.port (ident' rst) V.In V.std_logic Nothing
+     return $ localClock clk $ localReset rst $ prog
 traverseSig (SSig n m sf) = 
   do i <- newSym n
      t <- compTF (Proxy::Proxy ct) sf
@@ -537,9 +548,14 @@ traverseSig (SArr n m l af) =
      traverseSig (af (ArrayC i))
 
 applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDLGen exp ct) a -> Argument ct a
+  => Signature (Param3 VHDLGen exp ct) a
+  -> Argument ct a
   -> VHDLGen [V.InterfaceDeclaration]
-applySig (Ret _)       (Nil)                  = return []
+applySig (Ret _) (Nil) =
+  do clk <- readClock
+     rst <- readReset
+     let cr = V.InterfaceSignalDeclaration [clk, rst] (Just V.In) V.std_logic False Nothing
+     return [cr]
 applySig (SSig n m sf) (ASig s@(SignalC i) v) =
   do t  <- compTF (Proxy::Proxy ct) sf
      is <- applySig (sf s) v

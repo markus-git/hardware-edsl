@@ -44,6 +44,7 @@ swapM = maybe (return Nothing) (>>= return . Just)
 
 --------------------------------------------------------------------------------
 -- ** Values.
+--------------------------------------------------------------------------------
 
 -- | Value representation.
 data Val a = ValC String | ValE a
@@ -55,6 +56,7 @@ valToExp (ValE a) = litE a
 
 --------------------------------------------------------------------------------
 -- ** Signals.
+--------------------------------------------------------------------------------
 
 -- | Signal representation.
 data Signal a = SignalC VarId | SignalE (IORef a)
@@ -98,6 +100,7 @@ instance (SignalCMD :<: instr) => Reexpressible SignalCMD instr env
 
 --------------------------------------------------------------------------------
 -- ** Variables.
+--------------------------------------------------------------------------------
 
 -- | Variable representation.
 data Variable a = VariableC VarId | VariableE (IORef a)
@@ -141,6 +144,7 @@ instance (VariableCMD :<: instr) => Reexpressible VariableCMD instr env
 
 --------------------------------------------------------------------------------
 -- ** Arrays.
+--------------------------------------------------------------------------------
 
 -- | Expression types that support compilation of array indexing
 class CompArrayIx exp
@@ -207,6 +211,7 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
 
 --------------------------------------------------------------------------------
 -- ** Virtual arrays.
+--------------------------------------------------------------------------------
 
 -- | Virtual array reprensentation.
 data VArray i a = VArrayC VarId | VArrayE (IOArray i a)
@@ -274,6 +279,7 @@ instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
 
 --------------------------------------------------------------------------------
 -- ** Looping.
+--------------------------------------------------------------------------------
 
 -- | Commands for looping constructs.
 data LoopCMD fs a
@@ -307,6 +313,7 @@ instance (LoopCMD :<: instr) => Reexpressible LoopCMD instr env
 
 --------------------------------------------------------------------------------
 -- ** Conditional statements.
+--------------------------------------------------------------------------------
 
 -- | ...
 data When a prog = When (Constraint a) (prog ())
@@ -372,6 +379,7 @@ zipWhen x y = fmap (\(a, p) -> When a p) $ zip x y
 
 --------------------------------------------------------------------------------
 -- ** Components.
+--------------------------------------------------------------------------------
 
 -- | Signature description.
 data Signature fs a
@@ -454,6 +462,7 @@ instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
+--------------------------------------------------------------------------------
 
 type Signals = [Ident]
 
