@@ -582,7 +582,7 @@ signatureOf
        -> sig
      )
   -> Sig instr exp pred m sig
-signatureOf (Component _ (SSig _ _ sf)) =
+signatureOf (Component _ _ _ (SSig _ _ sf)) =
   case sf dummy of
     (SSig _ _ sf') -> sf' dummy
 

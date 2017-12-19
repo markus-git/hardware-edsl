@@ -489,7 +489,7 @@ inSingleProcess l clk rst is n =
     inConditional'
       ( whenRising' clk
       , case rst of
-          Just (r, m) -> inConditional' (isLow r, m) n
+          Just (r, m) -> inConditional' (isLow r, n) m
           Nothing     -> n
       )
       (return ())

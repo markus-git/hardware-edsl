@@ -427,7 +427,11 @@ data Argument pred a
       -> Argument pred (Array i a -> b)
 
 -- | Named components.
-data Component fs a = Component String (Signature fs a)
+data Component fs a = Component String String String (Signature fs a)
+-- todo: the second and third strings are used to hold the names of its clock and
+--       reset signals, respectively. I'm 99% sure that it would have been better
+--       to instead keep track of the clock/reset signals of components in the
+--       compilers environment instead. Might fix this later.
 
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD fs a
@@ -436,7 +440,7 @@ data ComponentCMD fs a
     DeclareComponent
       :: Name
       -> Signature (Param3 prog exp pred) a
-      -> ComponentCMD (Param3 prog exp pred) String
+      -> ComponentCMD (Param3 prog exp pred) (String, String, String)
     -- ^ Call for interfacing with a component.
     PortMap
       :: Component (Param3 prog exp pred) a
@@ -445,20 +449,26 @@ data ComponentCMD fs a
 
 instance HFunctor ComponentCMD
   where
-    hfmap f (DeclareComponent n sig) = DeclareComponent n (hfmap f sig)
-    hfmap f (PortMap (Component m sig) as) = PortMap (Component m (hfmap f sig)) as
+    hfmap f (DeclareComponent n sig) =
+      DeclareComponent n (hfmap f sig)
+    hfmap f (PortMap (Component m clk rst sig) as) =
+      PortMap (Component m clk rst (hfmap f sig)) as
 
 instance HBifunctor ComponentCMD
   where
-    hbimap g f (DeclareComponent n sig) = DeclareComponent n (hbimap g f sig)
-    hbimap g f (PortMap (Component m sig) as) = PortMap (Component m (hbimap g f sig)) as
+    hbimap g f (DeclareComponent n sig) =
+      DeclareComponent n (hbimap g f sig)
+    hbimap g f (PortMap (Component m clk rst sig) as) =
+      PortMap (Component m clk rst (hbimap g f sig)) as
 
 instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
   where
-    reexpressInstrEnv reexp (DeclareComponent n sig) = ReaderT $ \env ->
-      singleInj $ DeclareComponent n (reexpressSignature env sig)
-    reexpressInstrEnv reexp (PortMap (Component m sig) as) = ReaderT $ \env ->
-      singleInj $ PortMap (Component m (reexpressSignature env sig)) as
+    reexpressInstrEnv reexp (DeclareComponent n sig) =
+      ReaderT $ \env -> singleInj $
+        DeclareComponent n (reexpressSignature env sig)
+    reexpressInstrEnv reexp (PortMap (Component m clk rst sig) as) =
+      ReaderT $ \env -> singleInj $
+        PortMap (Component m clk rst (reexpressSignature env sig)) as
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.

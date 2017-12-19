@@ -510,17 +510,22 @@ compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct)
   -> VHDLGen a
 compileComponent (DeclareComponent base sig) =
   do comp <- newSym base
+     clk  <- newSym (Base "clk")
+     rst  <- newSym (Base "rst")
      V.component $
-       do p <- V.entity  (ident' comp) (traverseSig sig)
+       do p <- V.entity  (ident' comp) (traverseSig clk rst sig)
           V.architecture (ident' comp) (V.Ident "behav") p
-     return comp
-compileComponent (PortMap (Component name sig) as) =
+     return (comp, clk, rst)
+compileComponent (PortMap (Component name clk rst sig) as) =
   do let i = ident' name
      l  <- V.newLabel
      vs <- applySig sig as
      V.inheritContext i
      V.declareComponent i vs
-     V.portMap l i (assocSig sig as)
+     clk' <- readClock
+     rst' <- readReset
+     let sys = [(ident' clk, clk'), (ident' rst, rst')]
+     V.portMap l i (assocSig sig as ++ sys)
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
 runComponent _ = error "hardware-edsl-todo: run components."
@@ -528,24 +533,24 @@ runComponent _ = error "hardware-edsl-todo: run components."
 --------------------------------------------------------------------------------
 
 traverseSig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDLGen exp ct) a
+  => String
+  -> String
+  -> Signature (Param3 VHDLGen exp ct) a
   -> VHDLGen (VHDLGen ())
-traverseSig (Ret  prog) =
-  do clk <- newSym (Base "clk")
-     rst <- newSym (Base "rst")
-     V.port (ident' clk) V.In V.std_logic Nothing
+traverseSig clk rst (Ret  prog) =
+  do V.port (ident' clk) V.In V.std_logic Nothing
      V.port (ident' rst) V.In V.std_logic Nothing
      return $ localClock clk $ localReset rst $ prog
-traverseSig (SSig n m sf) = 
+traverseSig clk rst (SSig n m sf) = 
   do i <- newSym n
      t <- compTF (Proxy::Proxy ct) sf
      V.port (ident' i) m t Nothing
-     traverseSig (sf (SignalC i))
-traverseSig (SArr n m l af) =
+     traverseSig clk rst (sf (SignalC i))
+traverseSig clk rst (SArr n m l af) =
   do i <- newSym n
      t <- compTA (Proxy::Proxy ct) (rangePoint l) (proxyF af)
      V.port (ident' i) m t Nothing
-     traverseSig (af (ArrayC i))
+     traverseSig clk rst (af (ArrayC i))
 
 applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
   => Signature (Param3 VHDLGen exp ct) a
@@ -554,8 +559,9 @@ applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
 applySig (Ret _) (Nil) =
   do clk <- readClock
      rst <- readReset
-     let cr = V.InterfaceSignalDeclaration [clk, rst] (Just V.In) V.std_logic False Nothing
-     return [cr]
+     let c = V.InterfaceSignalDeclaration [clk] (Just V.In) V.std_logic False Nothing
+     let r = V.InterfaceSignalDeclaration [rst] (Just V.In) V.std_logic False Nothing
+     return [c, r]
 applySig (SSig n m sf) (ASig s@(SignalC i) v) =
   do t  <- compTF (Proxy::Proxy ct) sf
      is <- applySig (sf s) v
@@ -570,8 +576,8 @@ applySig (SArr n m l af) (AArr a@(ArrayC i) v) =
 assocSig :: forall ct exp a . (CompileExp exp, CompileType ct)
   => Signature (Param3 VHDLGen exp ct) a -> Argument ct a
   -> [(V.Identifier, V.Identifier)]
-assocSig (Ret _)         (Nil)                  = []
-assocSig (SSig n _ sf)   (ASig s@(SignalC i) v) =
+assocSig (Ret _) (Nil) = []
+assocSig (SSig n _ sf) (ASig s@(SignalC i) v) =
   (ident' n, ident' i) : assocSig (sf s) v
 assocSig (SArr n _ _ af) (AArr a@(ArrayC i) v)  =
   (ident' n, ident' i) : assocSig (af a) v
