@@ -45,9 +45,9 @@ type HSig  = Sig CMD HExp HType Identity
 -- ** Addition of two 8-bit words.
 
 -- Adder program.
-adder :: Signal Bit -> Signal Bit -> Signal Word8 -> Signal Word8 -> Signal Word8 -> HProg ()
-adder clk rst a b c =
-  processR clk rst []
+adder :: Signal Word8 -> Signal Word8 -> Signal Word8 -> HProg ()
+adder a b c =
+  processR []
     (do setSignal c 0)
     (do va <- getSignal a
         vb <- getSignal b
@@ -55,32 +55,37 @@ adder clk rst a b c =
 
 -- An encoding of the adder's signature.
 adder_sig :: HSig (
-     Signal Bit
-  -> Signal Bit
-  -> Signal Word8
+     Signal Word8
   -> Signal Word8
   -> Signal Word8
   -> ())
 adder_sig =
-  namedInput  "clk" $ \clk ->
-  namedInput  "rst" $ \rst ->
   namedInput  "a"   $ \a ->
   namedInput  "b"   $ \b ->
   namedOutput "c"   $ \c ->
-  ret (adder clk rst a b c)
-
--- An adder component given by its signature.
-adder_comp :: HProg (HComp (
-     Signal Bit
-  -> Signal Bit
-  -> Signal Word8
-  -> Signal Word8
-  -> Signal Word8
-  -> ()))
-adder_comp = namedComponent "adder" adder_sig
+  ret (adder a b c)
 
 --------------------------------------------------------------------------------
 
-test = icompile adder_comp
+-- An adder component given by its signature.
+mult4 :: HProg ()
+mult4 =
+  do adder <- namedComponent "adder" adder_sig
+
+     a :: Signal Word8 <- newNamedPort "a" In
+     b :: Signal Word8 <- newNamedPort "b" In
+     c :: Signal Word8 <- newNamedPort "c" Out
+
+     tmp :: Signal Word8 <- initSignal 0
+
+     portmap adder (a   +: b   +: tmp +: nil)
+     portmap adder (tmp +: tmp +: tmp +: nil)
+
+     val <- getSignal tmp
+     setSignal c val
+
+--------------------------------------------------------------------------------
+
+test = icompile mult4
 
 --------------------------------------------------------------------------------
