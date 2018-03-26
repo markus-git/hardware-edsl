@@ -13,8 +13,8 @@ module Language.Embedded.Hardware.Command
   , icompile
   , runIO
   -- AXI compilers.
---  , compileAXILite
---  , icompileAXILite
+  , compileAXILite
+  , icompileAXILite
   --
   , VHDL.Mode(..)
   --
@@ -93,29 +93,36 @@ runIO = interpretBi (return . evalE)
 
 --------------------------------------------------------------------------------
 -- Some extra compilers that might be handy to have.
-{-
+
 compileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
   ( Interp instr VHDLGen (Param2 exp pred)
   , HFunctor instr
   , AXIPred instr exp pred
   )
-  => Sig instr exp pred Identity (
-          Signal Bool -- ^ Clock signal.
-       -> Signal Bool -- ^ Reset signal.
-       -> a )
+  => Sig instr exp pred Identity a
   -> String
-compileAXILite sig = show $ VHDL.prettyVHDL $ interpret $
-  do cmp <- component sig
-     axi <- component (axi_light cmp)
-     return ()
+compileAXILite sig =
+    show
+  . VHDL.prettyVHDL
+  . flip runVHDLGen env
+  . interpret
+  $ do a <- component sig
+       b <- component (axi_light a)
+       return ()
+  where
+    env :: VHDLEnv
+    env  = VHDLEnv {
+        _clock = SignalC "clock"
+      , _reset = SignalC "reset" }    
+    -- todo: 'wrapMain' will add these ports.
 
 icompileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
-  ( Interp instr VHDL (Param2 exp pred)
+  ( Interp instr VHDLGen (Param2 exp pred)
   , HFunctor instr
   , AXIPred instr exp pred
   )
-  => Sig instr exp pred Identity (Signal Bool -> Signal Bool -> a)
+  => Sig instr exp pred Identity a
   -> IO ()
 icompileAXILite = putStrLn . compileAXILite
--}
+
 --------------------------------------------------------------------------------

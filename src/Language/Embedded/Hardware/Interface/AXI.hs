@@ -108,11 +108,7 @@ type AXIPred instr exp pred = (
 
 axi_light
   :: forall instr exp pred sig . AXIPred instr exp pred
-  => Comp instr exp pred Identity (
-          Signal Bit       -- ^ Clock signal.
-       -> Signal Bit       -- ^ Reset signal.
-       -> sig
-     )
+  => Comp instr exp pred Identity sig
   -> Sig  instr exp pred Identity (
           Signal Bit       -- ^ Global clock signal.
        -> Signal Bit       -- ^ Global reset signal.
@@ -174,11 +170,7 @@ axi_light comp =
 axi_light_impl
   :: forall instr exp pred sig . AXIPred instr exp pred
   -- Component to connect:
-  => Comp instr exp pred Identity (
-          Signal Bit  -- ^ Clock signal.
-       -> Signal Bit  -- ^ Reset signal
-       -> sig
-     )
+  => Comp instr exp pred Identity sig
   -- AXI signals:
   -> Signal Bit       -- ^ Global clock signal.
   -> Signal Bit       -- ^ Global reset signal.
@@ -399,7 +391,7 @@ axi_light_impl comp
        ----------------------------------------
        -- User logic.
        --
-       portmap comp (s_axi_aclk +: s_axi_aresetn +: registers)
+       portmap comp registers
        --
        -- The end.
        ----------------------------------------
@@ -576,22 +568,12 @@ identInputs (SArr _ _  _ af) (AArr a arg) = identInputs (af a) arg
 --------------------------------------------------------------------------------
 
 signatureOf
-  :: Comp instr exp pred m (
-          Signal Bit
-       -> Signal Bit
-       -> sig
-     )
-  -> Sig instr exp pred m sig
-signatureOf (Component _ _ _ (SSig _ _ sf)) =
-  case sf dummy of
-    (SSig _ _ sf') -> sf' dummy
+  :: Comp instr exp pred m sig
+  -> Sig  instr exp pred m sig
+signatureOf (Component _ _ _ sig) = sig
 
 widthOf
-  :: Comp instr exp pred m (
-          Signal Bit
-       -> Signal Bit
-       -> sig
-     )
+  :: Comp instr exp pred m sig
   -> Integer
 widthOf = go . signatureOf
   where
