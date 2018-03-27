@@ -63,8 +63,8 @@ compile = show
         . interpret
         . process []
   where
-    env :: VHDLEnv
-    env  = VHDLEnv {
+    env :: SignalEnv
+    env  = SignalEnv {
         _clock = SignalC "clock"
       , _reset = SignalC "reset" }    
     -- todo: 'wrapMain' will add these ports.
@@ -110,8 +110,8 @@ compileAXILite sig =
        b <- component (axi_light a)
        return ()
   where
-    env :: VHDLEnv
-    env  = VHDLEnv {
+    env :: SignalEnv
+    env  = SignalEnv {
         _clock = SignalC "clock"
       , _reset = SignalC "reset" }    
     -- todo: 'wrapMain' will add these ports.

@@ -146,6 +146,17 @@ compBC ct a = VHDLGenT $ CMS.lift $ compileBits ct a
 
 --------------------------------------------------------------------------------
 
+evalEM :: forall exp a . EvaluateExp exp => Maybe (exp a) -> a
+evalEM e = maybe (error "empty value") id $ fmap evalE e
+
+compER :: forall exp a . CompileExp exp => exp a -> VHDLGen (V.Expression)
+compER e = VHDLGenT $ CMS.lift $ compE e
+
+compEM :: forall exp a . CompileExp exp => Maybe (exp a) -> VHDLGen (Maybe V.Expression)
+compEM e = maybe (return Nothing) (>>= return . Just) (fmap compER e)
+
+--------------------------------------------------------------------------------
+
 proxyE :: exp a -> Proxy a
 proxyE _ = Proxy
 
@@ -156,15 +167,20 @@ proxyF :: (exp a -> b) -> Proxy a
 proxyF _ = Proxy
 
 --------------------------------------------------------------------------------
+-- Names.
+--------------------------------------------------------------------------------
 
-evalEM :: forall exp a . EvaluateExp exp => Maybe (exp a) -> a
-evalEM e = maybe (error "empty value") id $ fmap evalE e
+freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
+  => proxy ct -> Name -> VHDLGen (Val a)
+freshVar _ prefix =
+  do i <- newSym prefix
+     t <- compTC (Proxy::Proxy ct) (Proxy::Proxy a)
+     V.variable (ident' i) t Nothing
+     return (ValC i)
 
-compER :: forall exp a . CompileExp exp => exp a -> VHDLGen (V.Expression)
-compER e = VHDLGenT $ CMS.lift $ compE e
-
-compEM :: forall exp a . CompileExp exp => Maybe (exp a) -> VHDLGen (Maybe V.Expression)
-compEM e = maybe (return Nothing) (>>= return . Just) (fmap compER e)
+newSym :: Name -> VHDLGen String
+newSym (Base  n) = V.newSym n
+newSym (Exact n) = return   n
 
 --------------------------------------------------------------------------------
 -- ** Signals.
@@ -683,26 +699,8 @@ runVHDL :: VHDLCMD (Param3 IO IO pred) a -> IO a
 runVHDL = error "hardware-edsl.runVHDL: todo."
 
 --------------------------------------------------------------------------------
---
+-- Helpers.
 --------------------------------------------------------------------------------
-
-freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
-  => proxy ct -> Name -> VHDLGen (Val a)
-freshVar _ prefix =
-  do i <- newSym prefix
-     t <- compTC (Proxy::Proxy ct) (Proxy::Proxy a)
-     V.variable (ident' i) t Nothing
-     return (ValC i)
-
-newSym :: Name -> VHDLGen String
-newSym (Base  n) = V.newSym n
-newSym (Exact n) = return   n
-
-ident :: ToIdent a => a -> String
-ident a = let (Ident s) = toIdent a in s
-
-ident' :: ToIdent a => a -> V.Identifier
-ident' a = V.Ident $ ident a
 
 -- todo: this... why does this work?
 instance ToIdent String where toIdent = Ident
@@ -710,6 +708,12 @@ instance ToIdent Ident  where toIdent = id
 instance ToIdent Name   where
   toIdent (Base s)  = Ident s
   toIdent (Exact s) = Ident s
+
+ident :: ToIdent a => a -> String
+ident a = let (Ident s) = toIdent a in s
+
+ident' :: ToIdent a => a -> V.Identifier
+ident' a = V.Ident $ ident a
 
 --------------------------------------------------------------------------------
 
@@ -736,6 +740,8 @@ literal  s = lift $ V.literal $ V.number s
 
 range    :: V.Expression -> V.Direction -> V.Expression -> V.Range
 range    l dir r = V.range (unpackSimple l) dir (unpackSimple r)
+
+--------------------------------------------------------------------------------
 
 rangeZero :: V.Expression -> V.Range
 rangeZero l = V.range (unpackSimple l) V.downto (V.point 0)
