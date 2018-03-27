@@ -13,7 +13,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Language.Embedded.Hardware.Command.Backend.VHDL
-  ( VHDLEnv(..)
+  ( SignalEnv(..)
   , VHDLGenT
   , VHDLGen
   , runVHDLGenT
@@ -54,41 +54,41 @@ import GHC.TypeLits (KnownNat)
 -- * VHDL code generation.
 --------------------------------------------------------------------------------
 
-data VHDLEnv = VHDLEnv
+data SignalEnv = SignalEnv
   { _clock :: Signal Bool
   , _reset :: Signal Bool
   }
 
-type MonadV m = (Functor m, Applicative m, Monad m, MonadReader VHDLEnv m)
+type MonadGen m = (Functor m, Applicative m, Monad m, MonadReader SignalEnv m)
 
-newtype VHDLGenT m a = VHDLGenT { unVHDLGenT :: ReaderT VHDLEnv (VHDLT m) a }
+newtype VHDLGenT m a = VHDLGenT { unVHDLGenT :: ReaderT SignalEnv (VHDLT m) a }
   deriving ( Functor
            , Applicative
            , Monad
-           , MonadReader VHDLEnv
+           , MonadReader SignalEnv
            , MonadState  V.VHDLEnv
            )
 
 type VHDLGen = VHDLGenT Identity
 
-runVHDLGenT :: Monad m => VHDLGenT m a -> VHDLEnv -> VHDLT m a
+runVHDLGenT :: Monad m => VHDLGenT m a -> SignalEnv -> VHDLT m a
 runVHDLGenT m = CMR.runReaderT (unVHDLGenT m)
 
-runVHDLGen :: VHDLGen a -> VHDLEnv -> VHDL a
+runVHDLGen :: VHDLGen a -> SignalEnv -> VHDL a
 runVHDLGen = runVHDLGenT
 
 --------------------------------------------------------------------------------
 
-readClock :: MonadV m => m (V.Identifier)
+readClock :: MonadGen m => m (V.Identifier)
 readClock = CMR.asks (\e -> let (SignalC clk) = _clock e in ident' clk)
 
-readReset :: MonadV m => m (V.Identifier)
+readReset :: MonadGen m => m (V.Identifier)
 readReset = CMR.asks (\e -> let (SignalC clk) = _reset e in ident' clk)
 
-localClock :: MonadV m => String -> m () -> m ()
+localClock :: MonadGen m => String -> m () -> m ()
 localClock clk = CMR.local $ \e -> e { _clock = SignalC clk }
 
-localReset :: MonadV m => String -> m () -> m ()
+localReset :: MonadGen m => String -> m () -> m ()
 localReset rst = CMR.local $ \e -> e { _reset = SignalC rst }
 
 --------------------------------------------------------------------------------
@@ -97,34 +97,31 @@ localReset rst = CMR.local $ \e -> e { _reset = SignalC rst }
 
 class CompileType ct
   where
-    compileType :: ct a => proxy1 ct -> proxy2 a -> VHDLGen V.Type
-    compileLit  :: ct a => proxy1 ct ->        a -> VHDLGen V.Expression
-    compileBits :: ct a => proxy1 ct ->        a -> VHDLGen V.Expression
+    compileType :: ct a => proxy1 ct -> proxy2 a -> VHDL V.Type
+    compileLit  :: ct a => proxy1 ct ->        a -> VHDL V.Expression
+    compileBits :: ct a => proxy1 ct ->        a -> VHDL V.Expression
 
 instance CompileType PrimType
   where
-    compileType _ = compT
-    compileLit  _ = return . literal . primTypeVal
-    compileBits _ = return . literal . primTypeBits
+    compileType _ x = declareType $ proxyE x
+    compileLit  _   = return . literal . primTypeVal
+    compileBits _   = return . literal . primTypeBits
 
 --------------------------------------------------------------------------------
 
-compT :: forall proxy a . PrimType a => proxy a -> VHDLGen V.Type
-compT _ = declareType (Proxy :: Proxy a)
+compTC :: forall proxy ct exp a . (CompileType ct, ct a) => Proxy ct -> Proxy a -> VHDLGen V.Type
+compTC ct p = VHDLGenT $ CMS.lift $ compileType ct p
 
-compTM :: forall proxy ct exp a . (CompileType ct, ct a)
-  => proxy ct -> Maybe (exp a) -> VHDLGen V.Type
-compTM _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
+compTM :: forall proxy ct exp a . (CompileType ct, ct a) => Proxy ct -> Maybe (exp a) -> VHDLGen V.Type
+compTM ct m = compTC ct (proxyM m)
 
-compTF :: forall proxy ct exp a b . (CompileType ct, ct a)
-  => proxy ct -> (exp a -> b) -> VHDLGen V.Type
-compTF _ _ = compileType (Proxy::Proxy ct) (Proxy::Proxy a)
+compTF :: forall proxy ct exp a b . (CompileType ct, ct a) => Proxy ct -> (exp a -> b) -> VHDLGen V.Type
+compTF ct f = compTC ct (proxyF f)
 
-compTA :: forall proxy ct array i a . (CompileType ct, ct a)
-  => proxy ct -> V.Range -> array a -> VHDLGen V.Type
-compTA _ range _ =
+compTA :: forall proxy ct arr i a . (CompileType ct, ct a) => Proxy ct -> V.Range -> arr a -> VHDLGen V.Type
+compTA ct range a =
   do i <- newSym (Base "array")
-     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
+     t <- compTC ct (proxyE a)
      let array = V.constrainedArray (ident' i) t range
      s <- V.findType array
      case s of
@@ -141,17 +138,11 @@ compTA _ range _ =
 
 --------------------------------------------------------------------------------
 
-evalEM :: forall exp a . EvaluateExp exp
-  => Maybe (exp a) -> a
-evalEM e = maybe (error "empty value") id $ fmap evalE e
+compLC :: forall proxy ct a . (CompileType ct, ct a) => Proxy ct -> a -> VHDLGen V.Expression
+compLC ct a = VHDLGenT $ CMS.lift $ compileLit ct a
 
-compER :: forall exp a . CompileExp exp
-  => exp a -> VHDLGen (V.Expression)
-compER e = VHDLGenT $ CMS.lift $ compE e
-
-compEM :: forall exp a . CompileExp exp
-  => Maybe (exp a) -> VHDLGen (Maybe V.Expression)
-compEM e = maybe (return Nothing) (>>= return . Just) (fmap compER e)
+compBC :: forall proxy ct a . (CompileType ct, ct a) => Proxy ct -> a -> VHDLGen V.Expression
+compBC ct a = VHDLGenT $ CMS.lift $ compileBits ct a
 
 --------------------------------------------------------------------------------
 
@@ -163,6 +154,17 @@ proxyM _ = Proxy
 
 proxyF :: (exp a -> b) -> Proxy a
 proxyF _ = Proxy
+
+--------------------------------------------------------------------------------
+
+evalEM :: forall exp a . EvaluateExp exp => Maybe (exp a) -> a
+evalEM e = maybe (error "empty value") id $ fmap evalE e
+
+compER :: forall exp a . CompileExp exp => exp a -> VHDLGen (V.Expression)
+compER e = VHDLGenT $ CMS.lift $ compE e
+
+compEM :: forall exp a . CompileExp exp => Maybe (exp a) -> VHDLGen (Maybe V.Expression)
+compEM e = maybe (return Nothing) (>>= return . Just) (fmap compER e)
 
 --------------------------------------------------------------------------------
 -- ** Signals.
@@ -183,16 +185,16 @@ compileSignal :: forall exp ct a. (CompileExp exp, CompileType ct)
 compileSignal (NewSignal base exp) =
   do i <- newSym base
      v <- compEM exp
-     t <- compTM (Proxy::Proxy ct) exp
+     t <- compTM (Proxy :: Proxy ct) exp
      V.signal (ident' i) V.InOut t v
      return (SignalC i)
 compileSignal (GetSignal (SignalC s)) =
-  do i <- freshVar (Proxy::Proxy ct) (Base "v")
+  do i <- freshVar (Proxy :: Proxy ct) (Base "v")
      V.assignVariable (simple $ ident i) (simple' s)
      return i
 compileSignal (SetSignal (SignalC s) exp) =
   do e' <- compER exp
-     t  <- compileType (Proxy::Proxy ct) (proxyE exp)
+     t  <- compTC (Proxy :: Proxy ct) (proxyE exp)
      V.assignSignal (simple $ ident s) (V.uType e' t)
 compileSignal (UnsafeFreezeSignal (SignalC s)) =
   do return $ ValC s
@@ -228,12 +230,12 @@ compileVariable (NewVariable base exp) =
        Just v' -> V.assignVariable (simple $ ident i) (V.uType v' t)
      return (VariableC i)
 compileVariable (GetVariable (VariableC var)) =
-  do i <- freshVar (Proxy::Proxy ct) (Base "v")
+  do i <- freshVar (Proxy :: Proxy ct) (Base "v")
      V.assignVariable (simple $ ident i) (simple' var)
      return i
 compileVariable (SetVariable (VariableC var) exp) =
   do e' <- compER exp
-     t  <- compileType (Proxy::Proxy ct) (proxyE exp)
+     t  <- compTC (Proxy :: Proxy ct) (proxyE exp)
      V.assignVariable (simple var) (V.uType e' t)
 compileVariable (UnsafeFreezeVariable (VariableC v)) =
   do return $ ValC v
@@ -264,25 +266,25 @@ compileArray :: forall ct exp a. (CompileExp exp, CompileType ct)
 compileArray (NewArray base len) =
   do i <- newSym base
      l <- compER len
-     t <- compTA (Proxy::Proxy ct) (rangeZero l) (undefined :: a)
+     t <- compTA (Proxy :: Proxy ct) (rangeZero l) (undefined :: a)
      V.array (ident' i) V.InOut t Nothing
      return (ArrayC i)
 compileArray (InitArray base is) =
   do i <- newSym base
-     t <- compTA (Proxy::Proxy ct) (rangePoint (length is - 1)) (undefined :: a)
-     x <- mapM (compileBits (Proxy::Proxy ct)) is
+     t <- compTA (Proxy :: Proxy ct) (rangePoint (length is - 1)) (undefined :: a)
+     x <- mapM (compBC (Proxy::Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
      V.array (ident' i) V.InOut t (Just $ lift v)
      return (ArrayC i)
 compileArray (GetArray (ArrayC s) ix) =
-  do i <- freshVar (Proxy::Proxy ct) (Base "a")
+  do i <- freshVar (Proxy :: Proxy ct) (Base "a")
      e <- compER ix
      V.assignVariable (simple $ ident i) (indexed' s e)
      return i
 compileArray (SetArray (ArrayC s) ix e) =
   do ix' <- compER ix
      e'  <- compER e
-     t   <- compileType (Proxy::Proxy ct) (proxyE e)
+     t   <- compTC (Proxy :: Proxy ct) (proxyE e)
      V.assignArray (indexed s ix') (V.uType e' t)
 compileArray (CopyArray (ArrayC a, oa) (ArrayC b, ob) l) =
   do oa' <- compER oa
@@ -295,7 +297,7 @@ compileArray (CopyArray (ArrayC a, oa) (ArrayC b, ob) l) =
      V.assignSignal dest src
 compileArray (ResetArray (ArrayC a) rst) =
   do rst' <- compER rst
-     t    <- compileType (Proxy::Proxy ct) (proxyE rst)
+     t    <- compTC (Proxy :: Proxy ct) (proxyE rst)
      let others = V.aggregate $ V.others (V.uType rst' t)
      V.assignArray (simple a) (lift others)
 
@@ -320,27 +322,27 @@ compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct)
   -> VHDLGen a
 compileVArray (NewVArray base len) =
   do l <- compER len
-     t <- compTA (Proxy::Proxy ct) (rangeZero l) (undefined :: a)
+     t <- compTA (Proxy :: Proxy ct) (rangeZero l) (undefined :: a)
      i <- newSym base
      V.variable (ident' i) t Nothing
      return (VArrayC i)
 compileVArray (InitVArray base is) =
   do let r = rangePoint (length is - 1)
-     t <- compTA (Proxy::Proxy ct) r (undefined :: a)
+     t <- compTA (Proxy :: Proxy ct) r (undefined :: a)
      i <- newSym base
-     x <- mapM (compileBits (Proxy::Proxy ct)) is
+     x <- mapM (compBC (Proxy :: Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
      V.variable (ident' i) t (Just $ lift v)
      return (VArrayC i)
 compileVArray (GetVArray (VArrayC arr) ix) =
-  do i <- freshVar (Proxy::Proxy ct) (Base "a")
+  do i <- freshVar (Proxy :: Proxy ct) (Base "a")
      e <- compER ix
      V.assignVariable (simple $ ident i) (indexed' arr e)
      return i
 compileVArray (SetVArray a@(VArrayC arr) i e) =
   do i' <- compER i
      e' <- compER e
-     t  <- compileType (Proxy::Proxy ct) (proxyE e)
+     t  <- compTC (Proxy::Proxy ct) (proxyE e)
      V.assignVariable (indexed arr i') (V.uType e' t)
 compileVArray (CopyVArray (VArrayC a, oa) (VArrayC b, ob) l) =
   do oa' <- compER oa
@@ -466,11 +468,11 @@ compileConditional (Case e cs d) =
   where
     compC :: ct b => When b VHDLGen -> VHDLGen (V.Choices, VHDLGen ())
     compC (When (Is e) p)   = do
-      e' <- compileLit (Proxy::Proxy ct) e
+      e' <- compLC (Proxy :: Proxy ct) e
       return $ (V.Choices [V.is $ unpackSimple e'], p)
     compC (When (To l h) p) = do
-      l' <- compileLit (Proxy::Proxy ct) l
-      h' <- compileLit (Proxy::Proxy ct) h
+      l' <- compLC (Proxy :: Proxy ct) l
+      h' <- compLC (Proxy :: Proxy ct) h
       return $ (V.Choices [V.between $ range l' V.to h'], p)
 compileConditional (Null) = V.null
 
@@ -543,12 +545,12 @@ traverseSig clk rst (Ret  prog) =
      return $ localClock clk $ localReset rst $ prog
 traverseSig clk rst (SSig n m sf) = 
   do i <- newSym n
-     t <- compTF (Proxy::Proxy ct) sf
+     t <- compTF (Proxy :: Proxy ct) sf
      V.port (ident' i) m t Nothing
      traverseSig clk rst (sf (SignalC i))
 traverseSig clk rst (SArr n m l af) =
   do i <- newSym n
-     t <- compTA (Proxy::Proxy ct) (rangePoint l) (proxyF af)
+     t <- compTA (Proxy :: Proxy ct) (rangePoint l) (proxyF af)
      V.port (ident' i) m t Nothing
      traverseSig clk rst (af (ArrayC i))
 
@@ -563,12 +565,12 @@ applySig (Ret _) (Nil) =
      let r = V.InterfaceSignalDeclaration [rst] (Just V.In) V.std_logic False Nothing
      return [c, r]
 applySig (SSig n m sf) (ASig s@(SignalC i) v) =
-  do t  <- compTF (Proxy::Proxy ct) sf
+  do t  <- compTF (Proxy :: Proxy ct) sf
      is <- applySig (sf s) v
      let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
      return (i : is)
 applySig (SArr n m l af) (AArr a@(ArrayC i) v) =
-  do t  <- compTA (Proxy::Proxy ct) (rangePoint l) (proxyF af)
+  do t  <- compTA (Proxy :: Proxy ct) (rangePoint l) (proxyF af)
      is <- applySig (af a) v
      let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
      return (i : is)
@@ -654,19 +656,19 @@ compileVHDL (CopyVBits ((VariableC a), oa) ((SignalC b), ob) l) =
          src     = slice' b $ range ob' V.downto $ lift $ lower_b
      V.assignVariable dest src
 compileVHDL (GetBit (SignalC bits) ix) =
-  do i   <- freshVar (Proxy::Proxy ct) (Base "b")
+  do i   <- freshVar (Proxy :: Proxy ct) (Base "b")
      ix' <- compER ix
      V.assignVariable (simple $ ident i) (indexed' bits ix')
      return i
 compileVHDL (SetBit s@(SignalC bits) ix bit) =
   do ix'  <- compER ix
      bit' <- compER bit
-     t    <- compileType (Proxy::Proxy ct) (proxyE s)
+     t    <- compTC (Proxy :: Proxy ct) (proxyE s)
      case V.isBit t of
        True  -> V.assignSignal (simple bits)      (bit')
        False -> V.assignArray  (indexed bits ix') (bit')
 compileVHDL (GetBits (SignalC bits) l u) =
-  do i  <- freshVar (Proxy::Proxy ct) (Base "b")
+  do i  <- freshVar (Proxy :: Proxy ct) (Base "b")
      l' <- compER l
      u' <- compER u
      -- todo: this wrap around.
@@ -688,7 +690,7 @@ freshVar :: forall proxy ct exp a . (CompileType ct, ct a)
   => proxy ct -> Name -> VHDLGen (Val a)
 freshVar _ prefix =
   do i <- newSym prefix
-     t <- compileType (Proxy::Proxy ct) (Proxy::Proxy a)
+     t <- compTC (Proxy::Proxy ct) (Proxy::Proxy a)
      V.variable (ident' i) t Nothing
      return (ValC i)
 
@@ -729,11 +731,11 @@ slice    s = V.slice $ V.simple s
 slice'   :: String -> V.Range -> V.Expression
 slice'   s = lift . V.name . slice s
 
-literal :: String -> V.Expression
-literal s = lift $ V.literal $ V.number s
+literal  :: String -> V.Expression
+literal  s = lift $ V.literal $ V.number s
 
-range  :: V.Expression -> V.Direction -> V.Expression -> V.Range
-range l dir r = V.range (unpackSimple l) dir (unpackSimple r)
+range    :: V.Expression -> V.Direction -> V.Expression -> V.Range
+range    l dir r = V.range (unpackSimple l) dir (unpackSimple r)
 
 rangeZero :: V.Expression -> V.Range
 rangeZero l = V.range (unpackSimple l) V.downto (V.point 0)
