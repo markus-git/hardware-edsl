@@ -331,13 +331,23 @@ to l h = When (To l h)
 type Sig  instr exp pred m = Signature (Param3 (ProgramT instr (Param2 exp pred) m) exp pred)
 type Comp instr exp pred m = Component (Param3 (ProgramT instr (Param2 exp pred) m) exp pred)
 
+-- | Declare a named component with named clock and reset signals.
+clockedComponent :: (ComponentCMD :<: instr, Monad m)
+  => String
+  -> String
+  -> String
+  -> Sig instr exp pred m a
+  -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
+clockedComponent name clock reset sig =
+  do n <- singleInj $ DeclareComponent (Base name) (Exact clock) (Exact reset) sig
+     return $ Component n sig
+
 -- | Declare a named component.
 namedComponent :: (ComponentCMD :<: instr, Monad m)
-  => String -> Sig instr exp pred m a
+  => String
+  -> Sig instr exp pred m a
   -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
-namedComponent name sig =
-  do (n, clk, rst) <- singleInj $ DeclareComponent (Base name) sig
-     return $ Component n clk rst sig
+namedComponent name = clockedComponent name "clk" "rst"
 
 -- | Declare a component.
 component :: (ComponentCMD :<: instr, Monad m)

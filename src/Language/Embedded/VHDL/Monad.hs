@@ -752,12 +752,14 @@ concurrentArray = concurrentSignal
 --------------------------------------------------------------------------------
 -- Portmap.
 
-portMap :: MonadV m => Label -> Identifier -> [(Identifier, Identifier)] -> m ()
+portMap :: MonadV m => Label -> Identifier -> [(Maybe Identifier, Identifier)] -> m ()
 portMap l c is = addConcurrent $ ConComponent $ ComponentInstantiationStatement l
   (IUComponent $ NSimple c)
   (Nothing)
   (Just $ PortMapAspect $ AssociationList $ flip fmap is $ \(i, j) ->
-    AssociationElement (Just $ FPDesignator $ FDPort $ NSimple i) $ APDesignator $ ADSignal $ NSimple j)
+    AssociationElement
+      (fmap (FPDesignator . FDPort . NSimple) i)
+      (APDesignator $ ADSignal $ NSimple j))
 
 declareComponent :: MonadV m => Identifier -> [InterfaceDeclaration] -> m ()
 declareComponent name is = addComponent $ ComponentDeclaration name Nothing

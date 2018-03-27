@@ -14,6 +14,7 @@
 
 module Language.Embedded.Hardware.Command.Backend.VHDL
   ( SignalEnv(..)
+  , emptyEnv
   , VHDLGenT
   , VHDLGen
   , runVHDLGenT
@@ -58,6 +59,12 @@ data SignalEnv = SignalEnv
   { _clock :: Signal Bool
   , _reset :: Signal Bool
   }
+
+-- todo: 'wrapMain' will add these ports.
+emptyEnv :: SignalEnv
+emptyEnv  = SignalEnv {
+    _clock = SignalC "clock"
+  , _reset = SignalC "reset" }
 
 type MonadGen m = (Functor m, Applicative m, Monad m, MonadReader SignalEnv m)
 
@@ -526,24 +533,22 @@ instance InterpBi ComponentCMD IO (Param1 pred)
 compileComponent :: forall ct exp a. (CompileExp exp, CompileType ct)
   => ComponentCMD (Param3 VHDLGen exp ct) a
   -> VHDLGen a
-compileComponent (DeclareComponent base sig) =
+compileComponent (DeclareComponent base clock reset sig) =
   do comp <- newSym base
-     clk  <- newSym (Base "clk")
-     rst  <- newSym (Base "rst")
+     clk  <- newSym clock
+     rst  <- newSym reset
      V.component $
        do p <- V.entity  (ident' comp) (traverseSig clk rst sig)
           V.architecture (ident' comp) (V.Ident "behav") p
-     return (comp, clk, rst)
-compileComponent (PortMap (Component name clk rst sig) as) =
+     return comp
+compileComponent (PortMap (Component name sig) as) =
   do let i = ident' name
      l  <- V.newLabel
      vs <- applySig sig as
+     ac <- assocSig sig as
      V.inheritContext i
      V.declareComponent i vs
-     clk' <- readClock
-     rst' <- readReset
-     let sys = [(ident' clk, clk'), (ident' rst, rst')]
-     V.portMap l i (assocSig sig as ++ sys)
+     V.portMap l i ac
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
 runComponent _ = error "hardware-edsl-todo: run components."
@@ -575,11 +580,12 @@ applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
   -> Argument ct a
   -> VHDLGen [V.InterfaceDeclaration]
 applySig (Ret _) (Nil) =
-  do clk <- readClock
+  do let decl x = V.InterfaceSignalDeclaration [x]
+                    (Just V.In) (V.std_logic)
+                    (False) (Nothing)
+     clk <- readClock
      rst <- readReset
-     let c = V.InterfaceSignalDeclaration [clk] (Just V.In) V.std_logic False Nothing
-     let r = V.InterfaceSignalDeclaration [rst] (Just V.In) V.std_logic False Nothing
-     return [c, r]
+     return [decl clk, decl rst]
 applySig (SSig n m sf) (ASig s@(SignalC i) v) =
   do t  <- compTF (Proxy :: Proxy ct) sf
      is <- applySig (sf s) v
@@ -592,13 +598,17 @@ applySig (SArr n m l af) (AArr a@(ArrayC i) v) =
      return (i : is)
 
 assocSig :: forall ct exp a . (CompileExp exp, CompileType ct)
-  => Signature (Param3 VHDLGen exp ct) a -> Argument ct a
-  -> [(V.Identifier, V.Identifier)]
-assocSig (Ret _) (Nil) = []
+  => Signature (Param3 VHDLGen exp ct) a
+  -> Argument ct a
+  -> VHDLGen [(Maybe V.Identifier, V.Identifier)]
+assocSig (Ret _) (Nil) =
+  do clk <- readClock
+     rst <- readReset
+     return [(Nothing, clk), (Nothing, rst)]
 assocSig (SSig n _ sf) (ASig s@(SignalC i) v) =
-  (ident' n, ident' i) : assocSig (sf s) v
+  ((Just (ident' n), ident' i) :) <$> assocSig (sf s) v
 assocSig (SArr n _ _ af) (AArr a@(ArrayC i) v)  =
-  (ident' n, ident' i) : assocSig (af a) v
+  ((Just (ident' n), ident' i) :) <$> assocSig (af a) v
 
 --------------------------------------------------------------------------------
 -- ** Structural.

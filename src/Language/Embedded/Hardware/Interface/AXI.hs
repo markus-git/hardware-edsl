@@ -110,9 +110,9 @@ axi_light
   :: forall instr exp pred sig . AXIPred instr exp pred
   => Comp instr exp pred Identity sig
   -> Sig  instr exp pred Identity (
-          Signal Bit       -- ^ Global clock signal.
-       -> Signal Bit       -- ^ Global reset signal.
-       -> Signal (Bits 32) -- ^ Write address.
+--          Signal Bit       -- ^ Global clock signal.
+--       -> Signal Bit       -- ^ Global reset signal.
+          Signal (Bits 32) -- ^ Write address.
        -> Signal (Bits 3)  -- ^ Write channel protection type.
        -> Signal Bit       -- ^ Write address valid.
        -> Signal Bit       -- ^ Write address ready.
@@ -134,34 +134,34 @@ axi_light
        -> ()
      )
 axi_light comp =
-  exactInput  "S_AXI_ACLK"    $ \s_axi_aclk    ->       
-  exactInput  "S_AXI_ARESETN" $ \s_axi_aresetn -> 
+--  exactInput  "S_AXI_ACLK"    $ \s_axi_aclk    ->
+--  exactInput  "S_AXI_ARESETN" $ \s_axi_aresetn ->
   exactInput  "S_AXI_AWADDR"  $ \s_axi_awaddr  ->
   exactInput  "S_AXI_AWPROT"  $ \s_axi_awprot  ->
-  exactInput  "S_AXI_AWVALID" $ \s_axi_awvalid -> 
+  exactInput  "S_AXI_AWVALID" $ \s_axi_awvalid ->
   exactOutput "S_AXI_AWREADY" $ \s_axi_awready ->
   exactInput  "S_AXI_WDATA"   $ \s_axi_wdata   ->
   exactInput  "S_AXI_WSTRB"   $ \s_axi_wstrb   ->
-  exactInput  "S_AXI_WVALID"  $ \s_axi_wvalid  ->   
-  exactOutput "S_AXI_WREADY"  $ \s_axi_wready  ->   
-  exactOutput "S_AXI_BRESP"   $ \s_axi_bresp   ->     
-  exactOutput "S_AXI_BVALID"  $ \s_axi_bvalid  ->   
-  exactInput  "S_AXI_BREADY"  $ \s_axi_bready  ->   
+  exactInput  "S_AXI_WVALID"  $ \s_axi_wvalid  ->
+  exactOutput "S_AXI_WREADY"  $ \s_axi_wready  ->
+  exactOutput "S_AXI_BRESP"   $ \s_axi_bresp   ->
+  exactOutput "S_AXI_BVALID"  $ \s_axi_bvalid  ->
+  exactInput  "S_AXI_BREADY"  $ \s_axi_bready  ->
   exactInput  "S_AXI_ARADDR"  $ \s_axi_araddr  ->
   exactInput  "S_AXI_ARPROT"  $ \s_axi_arprot  ->
-  exactInput  "S_AXI_ARVALID" $ \s_axi_arvalid ->   
+  exactInput  "S_AXI_ARVALID" $ \s_axi_arvalid ->
   exactOutput "S_AXI_ARREADY" $ \s_axi_arready ->
-  exactOutput "S_AXI_RDATA"   $ \s_axi_rdata   ->     
-  exactOutput "S_AXI_RRESP"   $ \s_axi_rresp   ->     
+  exactOutput "S_AXI_RDATA"   $ \s_axi_rdata   ->
+  exactOutput "S_AXI_RRESP"   $ \s_axi_rresp   ->
   exactOutput "S_AXI_RVALID"  $ \s_axi_rvalid  ->
-  exactInput  "S_AXI_RREADY"  $ \s_axi_rready  ->   
+  exactInput  "S_AXI_RREADY"  $ \s_axi_rready  ->
   ret $ axi_light_impl comp
-    s_axi_aclk s_axi_aresetn
+--    s_axi_aclk s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
     s_axi_bresp  s_axi_bvalid s_axi_bready
     s_axi_araddr s_axi_arprot s_axi_arvalid s_axi_arready s_axi_rdata
-    s_axi_rresp  s_axi_rvalid s_axi_rready     
+    s_axi_rresp  s_axi_rvalid s_axi_rready
 
 --------------------------------------------------------------------------------
 -- ** Implementation.
@@ -172,8 +172,8 @@ axi_light_impl
   -- Component to connect:
   => Comp instr exp pred Identity sig
   -- AXI signals:
-  -> Signal Bit       -- ^ Global clock signal.
-  -> Signal Bit       -- ^ Global reset signal.
+--  -> Signal Bit       -- ^ Global clock signal.
+--  -> Signal Bit       -- ^ Global reset signal.
   -> Signal (Bits 32) -- ^ Write address.
   -> Signal (Bits 3)  -- ^ Write channel protection type.
   -> Signal Bit       -- ^ Write address valid.
@@ -195,7 +195,7 @@ axi_light_impl
   -> Signal Bit       -- ^ Read ready.    
   -> Prog instr exp pred ()
 axi_light_impl comp
-    s_axi_aclk   s_axi_aresetn
+--    s_axi_aclk   s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
     s_axi_bresp  s_axi_bvalid s_axi_bready
@@ -570,7 +570,7 @@ identInputs (SArr _ _  _ af) (AArr a arg) = identInputs (af a) arg
 signatureOf
   :: Comp instr exp pred m sig
   -> Sig  instr exp pred m sig
-signatureOf (Component _ _ _ sig) = sig
+signatureOf (Component _ sig) = sig
 
 widthOf
   :: Comp instr exp pred m sig

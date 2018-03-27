@@ -44,7 +44,7 @@ type HSig  = Sig CMD HExp HType Identity
 --------------------------------------------------------------------------------
 
 -- Simple adder.
-ex ::Signal Word32 -> Signal Word32 -> Signal Word32 -> HProg ()
+ex :: Signal Word32 -> Signal Word32 -> Signal Word32 -> HProg ()
 ex a b c =
   processR []
     (do setSignal c 0)

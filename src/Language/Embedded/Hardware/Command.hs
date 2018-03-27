@@ -59,15 +59,9 @@ compile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
 compile = show
         . VHDL.prettyVHDL
         . VHDL.wrapMain
-        . flip runVHDLGen env
+        . flip runVHDLGen emptyEnv
         . interpret
         . process []
-  where
-    env :: SignalEnv
-    env  = SignalEnv {
-        _clock = SignalC "clock"
-      , _reset = SignalC "reset" }    
-    -- todo: 'wrapMain' will add these ports.
 
 -- | Compile a program to VHDL code and print it on the screen.
 icompile :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a.
@@ -104,17 +98,10 @@ compileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
 compileAXILite sig =
     show
   . VHDL.prettyVHDL
-  . flip runVHDLGen env
+  . flip runVHDLGen emptyEnv
   . interpret
-  $ do a <- component sig
-       b <- component (axi_light a)
-       return ()
-  where
-    env :: SignalEnv
-    env  = SignalEnv {
-        _clock = SignalC "clock"
-      , _reset = SignalC "reset" }    
-    -- todo: 'wrapMain' will add these ports.
+  $ do comp <- component sig
+       clockedComponent "AXI" "S_AXI_ACLK" "S_AXI_ARESETN" (axi_light comp)
 
 icompileAXILite :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
   ( Interp instr VHDLGen (Param2 exp pred)
