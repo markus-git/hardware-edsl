@@ -12,6 +12,9 @@ module Language.Embedded.Hardware.Command
     compile
   , icompile
   , runIO
+  -- hardware compilers without process wrapping.
+  , compileSig
+  , icompileSig
   -- AXI compilers.
   , compileAXILite
   , icompileAXILite
@@ -84,6 +87,31 @@ runIO :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a
   => Program instr (Param2 exp pred) a
   -> IO a
 runIO = interpretBi (return . evalE)
+
+--------------------------------------------------------------------------------
+
+compileSig :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
+  ( Interp instr VHDLGen (Param2 exp pred)
+  , HFunctor instr
+  , ComponentCMD :<: instr
+  )
+  => Sig instr exp pred Identity a
+  -> String
+compileSig =
+    show
+  . VHDL.prettyVHDL
+  . flip runVHDLGen emptyEnv
+  . interpret
+  . component
+
+icompileSig :: forall instr (exp :: * -> *) (pred :: * -> GHC.Constraint) a .
+  ( Interp instr VHDLGen (Param2 exp pred)
+  , HFunctor instr
+  , ComponentCMD :<: instr
+  )
+  => Sig instr exp pred Identity a
+  -> IO ()
+icompileSig = putStrLn . compileSig
 
 --------------------------------------------------------------------------------
 -- Some extra compilers that might be handy to have.
