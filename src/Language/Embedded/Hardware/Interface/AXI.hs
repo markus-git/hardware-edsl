@@ -284,9 +284,9 @@ axi_light_impl comp
        -- processR s_axi_aclk s_axi_aresetn []
        processR []
          (do awready <== low)
-         (do rdy <- getSignal awready
-             awv <- getSignal s_axi_awvalid
-             wv  <- getSignal s_axi_wvalid
+         (do rdy <- unsafeFreezeSignal awready
+             awv <- unsafeFreezeSignal s_axi_awvalid
+             wv  <- unsafeFreezeSignal s_axi_wvalid
              iff (isLow rdy `and` isHigh awv `and` isHigh wv)
                (do awready <== high)
                (do awready <== low))
@@ -296,30 +296,28 @@ axi_light_impl comp
        --
        processR []
          (do awaddr <== zeroes)
-         (do rdy <- getSignal awready
-             awv <- getSignal s_axi_awvalid
-             wv  <- getSignal s_axi_wvalid
+         (do rdy <- unsafeFreezeSignal awready
+             awv <- unsafeFreezeSignal s_axi_awvalid
+             wv  <- unsafeFreezeSignal s_axi_wvalid
              when (isLow  rdy `and` isHigh awv `and` isHigh wv)
-               (awaddr <=- s_axi_awaddr))
+               (do awaddr <=- s_axi_awaddr))
 
        ----------------------------------------
        -- AXI_WREADY generation.
        --
        processR []
          (do wready <== low)
-         (do rdy <- getSignal awready
-             awv <- getSignal s_axi_awvalid
-             wv  <- getSignal s_axi_wvalid
+         (do rdy <- unsafeFreezeSignal awready
+             awv <- unsafeFreezeSignal s_axi_awvalid
+             wv  <- unsafeFreezeSignal s_axi_wvalid
              iff (isLow  rdy `and` isHigh awv `and` isHigh wv)
-               (wready <== high)
-               (wready <== low))
+               (do wready <== high)
+               (do wready <== low))
 
        ----------------------------------------
        -- Slave register logic.
        --
-       processR []
-         (mReset)
-         (mRead)
+       processR [] (mReset) (mRead)
        
        ----------------------------------------
        -- Write response logic.
@@ -327,20 +325,22 @@ axi_light_impl comp
        processR []
          (do bvalid <== low
              bresp  <== zeroes)
-         (do awr <- getSignal awready
-             awv <- getSignal s_axi_awvalid
-             wr  <- getSignal wready
-             wv  <- getSignal s_axi_wvalid
-             bv  <- getSignal bvalid
-             br  <- getSignal s_axi_bready
-             ifE ((isHigh awr `and` isHigh awv
-                              `and` isHigh wr
-                              `and` isHigh wv
-                              `and` isLow bv),
-                  (do bvalid <== high
-                      bresp  <== zeroes))
-                 ((isHigh br  `and` isHigh bv),
-                  (do bvalid <== low)))
+         (do awr <- unsafeFreezeSignal awready
+             awv <- unsafeFreezeSignal s_axi_awvalid
+             wr  <- unsafeFreezeSignal wready
+             wv  <- unsafeFreezeSignal s_axi_wvalid
+             bv  <- unsafeFreezeSignal bvalid
+             br  <- unsafeFreezeSignal s_axi_bready
+             ifE ( isHigh awr `and`
+                   isHigh awv `and`
+                   isHigh wr  `and`
+                   isHigh wv  `and`
+                   isLow bv
+                 , do bvalid <== high
+                      bresp  <== zeroes)
+                 ( isHigh br  `and`
+                   isHigh bv
+                 , do bvalid <== low))
 
        ----------------------------------------
        -- AXI_AWREADY generation.
@@ -348,8 +348,8 @@ axi_light_impl comp
        processR []
          (do arready <== low
              araddr  <== ones)
-         (do arr <- getSignal arready
-             arv <- getSignal s_axi_arvalid
+         (do arr <- unsafeFreezeSignal arready
+             arv <- unsafeFreezeSignal s_axi_arvalid
              iff (isLow arr `and` isHigh arv)
                (do arready <== high
                    araddr  <=- s_axi_araddr)
@@ -361,23 +361,21 @@ axi_light_impl comp
        processR []
          (do rvalid <== low
              rresp  <== zeroes)
-         (do arr <- getSignal arready
-             arv <- getSignal s_axi_arvalid
-             rv  <- getSignal rvalid
-             rr  <- getSignal s_axi_rready
-             ifE ((isHigh arr `and` isHigh arv),
-                  (do rvalid <== high
-                      rresp  <== zeroes))
-                 ((isHigh rv  `and` isHigh rr),
-                  (do rvalid <== low)))
+         (do arr <- unsafeFreezeSignal arready
+             arv <- unsafeFreezeSignal s_axi_arvalid
+             rv  <- unsafeFreezeSignal rvalid
+             rr  <- unsafeFreezeSignal s_axi_rready
+             ifE ( isHigh arr `and` isHigh arv
+                 , do rvalid <== high
+                      rresp  <== zeroes)
+                 ( isHigh rv `and` isHigh rr
+                 , do rvalid <== low))
 
        ----------------------------------------
        -- Memory mapped rigister select and
        -- read logic generaiton.
        --
-       processR (araddr .: mInputs)
-         (return ())
-         (mWrite)
+       processR (araddr .: mInputs) (return ()) (mWrite)
 
        ----------------------------------------
        -- Output register of memory read data.
@@ -399,8 +397,8 @@ axi_light_impl comp
     -- Application-specific design signals.
     addr_lsb, addr_bits :: Integer
     addr_lsb  = 2
-    addr_bits = 2 + 1
-      --addr_lsb + (widthOf comp)
+    addr_bits = 2        + 1
+             -- addr_lsb + widthOf comp
 
 --------------------------------------------------------------------------------
 -- ** Helpers.
