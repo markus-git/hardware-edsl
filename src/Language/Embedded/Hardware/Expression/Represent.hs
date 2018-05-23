@@ -141,7 +141,8 @@ instance forall n . KnownNat n => PrimType (Bits n)
 primTypeVal :: forall a . PrimType a => a -> String
 primTypeVal a = case typeRep :: TypeRep a of
   BoolT    -> if a then "\'1\'" else "\'0\'"
-  _        -> show a
+  Word8T   -> show a
+  t        -> error $ show t --show a
 
 -- | Print a value as its bit representation.
 primTypeBits :: forall a . PrimType a => a -> String

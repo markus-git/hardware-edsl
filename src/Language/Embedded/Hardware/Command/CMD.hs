@@ -427,7 +427,11 @@ data Argument pred a
       -> Argument pred (Array i a -> b)
 
 -- | Named components.
-data Component fs a = Component String (Signature fs a)
+--
+-- todo: I use the second param pass along the generated names for the
+--       signature's parameters. It would be better to simply pass along the
+--       updated signature in some way.
+data Component fs a = Component String [String] (Signature fs a)
 
 -- | Commands for generating stand-alone components and calling them.
 data ComponentCMD fs a
@@ -438,7 +442,7 @@ data ComponentCMD fs a
       -> Name
       -> Name
       -> Signature (Param3 prog exp pred) a
-      -> ComponentCMD (Param3 prog exp pred) String
+      -> ComponentCMD (Param3 prog exp pred) (String, [String])
     -- ^ Call for interfacing with a component.
     PortMap
       :: Component (Param3 prog exp pred) a
@@ -449,24 +453,24 @@ instance HFunctor ComponentCMD
   where
     hfmap f (DeclareComponent n c r sig) =
       DeclareComponent n c r (hfmap f sig)
-    hfmap f (PortMap (Component m sig) as) =
-      PortMap (Component m (hfmap f sig)) as
+    hfmap f (PortMap (Component m is sig) as) =
+      PortMap (Component m is (hfmap f sig)) as
 
 instance HBifunctor ComponentCMD
   where
     hbimap g f (DeclareComponent n c r sig) =
       DeclareComponent n c r (hbimap g f sig)
-    hbimap g f (PortMap (Component m sig) as) =
-      PortMap (Component m (hbimap g f sig)) as
+    hbimap g f (PortMap (Component m is sig) as) =
+      PortMap (Component m is (hbimap g f sig)) as
 
 instance (ComponentCMD :<: instr) => Reexpressible ComponentCMD instr env
   where
     reexpressInstrEnv reexp (DeclareComponent n c r sig) =
       ReaderT $ \env -> singleInj $
         DeclareComponent n c r (reexpressSignature env sig)
-    reexpressInstrEnv reexp (PortMap (Component m sig) as) =
+    reexpressInstrEnv reexp (PortMap (Component m is sig) as) =
       ReaderT $ \env -> singleInj $
-        PortMap (Component m (reexpressSignature env sig)) as
+        PortMap (Component m is (reexpressSignature env sig)) as
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.

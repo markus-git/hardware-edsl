@@ -60,32 +60,33 @@ adder_sig :: HSig (
   -> Signal Word8
   -> ())
 adder_sig =
-  namedInput  "a"   $ \a ->
-  namedInput  "b"   $ \b ->
-  namedOutput "c"   $ \c ->
+  namedInput  "a" $ \a ->
+  namedInput  "b" $ \b ->
+  namedOutput "c" $ \c ->
   ret (adder a b c)
 
 --------------------------------------------------------------------------------
 
--- An adder component given by its signature.
-mult4 :: HProg ()
-mult4 =
-  do adder <- namedComponent "adder" adder_sig
-
-     a :: Signal Word8 <- newNamedPort "a" In
-     b :: Signal Word8 <- newNamedPort "b" In
-     c :: Signal Word8 <- newNamedPort "c" Out
-
-     tmp :: Signal Word8 <- initSignal 0
-
-     portmap adder (a   +: b   +: tmp +: nil)
-     portmap adder (tmp +: tmp +: tmp +: nil)
-
-     val <- getSignal tmp
-     setSignal c val
+test = icompileSig adder_sig
 
 --------------------------------------------------------------------------------
 
-test = icompile mult4
+-- An adder component given by its signature.
+mult4_sig :: HSig (Signal Word8 -> Signal Word8 -> Signal Word8 -> ())
+mult4_sig =
+  input  $ \a ->
+  input  $ \b ->
+  output $ \c ->
+  ret $ do
+    adder <- namedComponent "adder" adder_sig
+    tmp :: Signal Word8 <- initSignal 0
+    portmap adder (a   +: b   +: tmp +: nil)
+    portmap adder (tmp +: tmp +: tmp +: nil)
+    val <- unsafeFreezeSignal tmp
+    setSignal c val
+
+--------------------------------------------------------------------------------
+
+test2 = icompileSig mult4_sig
 
 --------------------------------------------------------------------------------

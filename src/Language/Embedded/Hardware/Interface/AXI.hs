@@ -570,7 +570,7 @@ identInputs (SArr _ _  _ af) (AArr a arg) = identInputs (af a) arg
 signatureOf
   :: Comp instr exp pred m sig
   -> Sig  instr exp pred m sig
-signatureOf (Component _ sig) = sig
+signatureOf (Component _ _ sig) = sig
 
 widthOf
   :: Comp instr exp pred m sig

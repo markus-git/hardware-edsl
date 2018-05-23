@@ -505,11 +505,11 @@ inSingleProcess l clk rst is n =
 
     isLow :: Identifier -> Condition
     isLow i = primExpr $ eq
-       (shift' (name (NSimple i)))
-       (shift' (literal (number "0")))
+        (shift' (name (NSimple i)))
+        (shift' (literal (number "\'0\'")))
       where
         shift' :: Primary -> ShiftExpression
-        shift' = primShift . primSimple . primTerm . primFactor 
+        shift' = primShift . primSimple . primTerm . primFactor
 
 --------------------------------------------------------------------------------
 -- * Design units
@@ -638,16 +638,17 @@ package name m =
 -- ** Component.
 
 -- | Declares an entire component, with entity declaration and a body.
-component :: MonadV m => m () -> m ()
+component :: MonadV m => m a -> m a
 component m =
   do oldEnv   <- CMS.get
      oldFiles <- CMS.gets _designs
      CMS.put (emptyVHDLEnv { _designs = oldFiles })
-     m
+     result <- m
      newUnits <- CMS.gets _units
      newFiles <- CMS.gets _designs
      CMS.put (oldEnv { _designs = newFiles })
      addDesign $ DesignFile newUnits
+     return result
 
 --------------------------------------------------------------------------------
 -- * Pretty printing VHDL programs

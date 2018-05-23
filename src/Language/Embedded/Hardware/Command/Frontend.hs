@@ -339,8 +339,9 @@ clockedComponent :: (ComponentCMD :<: instr, Monad m)
   -> Sig instr exp pred m a
   -> ProgramT instr (Param2 exp pred) m (Comp instr exp pred m a)
 clockedComponent name clock reset sig =
-  do n <- singleInj $ DeclareComponent (Base name) (Exact clock) (Exact reset) sig
-     return $ Component n sig
+  do (name, args) <- singleInj $
+       DeclareComponent (Base name) (Exact clock) (Exact reset) sig
+     return $ Component name args sig
 
 -- | Declare a named component.
 namedComponent :: (ComponentCMD :<: instr, Monad m)
@@ -439,10 +440,8 @@ infixr .:
 --------------------------------------------------------------------------------
 -- ** VHDL specific instructions.
 --------------------------------------------------------------------------------
-  
---------------------------------------------------------------------------------
--- *** ports.
 
+{-
 -- | Declare port signals of the given mode and assign it initial value.
 initNamedPort, initExactPort :: (VHDLCMD :<: instr, pred a)
   => String -> exp a -> Mode  -> ProgramT instr (Param2 exp pred) m (Signal a)
@@ -462,6 +461,7 @@ newExactPort name = singleInj . DeclarePort (Exact name) Nothing
 newPort :: (VHDLCMD :<: instr, pred a)
   => Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
 newPort = newNamedPort "port"
+-}
 
 --------------------------------------------------------------------------------
 -- *** Bit operations.
