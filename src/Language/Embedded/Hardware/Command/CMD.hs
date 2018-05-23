@@ -548,7 +548,7 @@ data VHDLCMD fs a
       -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: same as above two?...
     -- todo: result should be i?...
-    GetBits :: (pred i, Integral i, Ix i)
+    GetBits :: (pred i, pred (Bits n), Integral i, Ix i)
       => Signal (Bits n)
       -> exp i
       -> exp i

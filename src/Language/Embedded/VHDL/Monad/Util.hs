@@ -76,16 +76,19 @@ uCoerce exp from to | isUnsigned from = go
     go | isUnsigned to = exp
        | isSigned   to = expr $ asSigned exp
        | isBits     to = expr $ asBits exp
+       | isInteger  to = expr $ toInteger exp
 uCoerce exp from to | isSigned from = go
   where
     go | isUnsigned to = expr $ asUnsigned exp
        | isSigned   to = exp
        | isBits     to = expr $ asBits exp
+       | isInteger  to = expr $ toInteger exp
 uCoerce exp from to | isBits from = go
   where
     go | isUnsigned to = expr $ asUnsigned exp
        | isSigned   to = expr $ asSigned exp
        | isBits     to = exp
+       | isInteger  to = expr $ toInteger $ expr $ asSigned exp
 uCoerce exp from to =
   error $ "hardware-edsl.uCoerce: missing coercion from ("
             ++ show (typeName from) ++ ") to ("

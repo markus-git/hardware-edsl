@@ -488,7 +488,7 @@ setBit :: (VHDLCMD :<: instr, pred a, Integral i, Ix i, pred Bit)
   => Signal a -> exp i -> exp Bit -> ProgramT instr (Param2 exp pred) m ()
 setBit bits ix bit = singleInj $ SetBit bits ix bit
 
-getBits :: (VHDLCMD :<: instr, pred i, Integral i, Ix i, PredicateExp exp i, FreeExp exp, Monad m)
+getBits :: (VHDLCMD :<: instr, pred i, pred (Bits u), Integral i, Ix i, PredicateExp exp i, FreeExp exp, Monad m)
   => Signal (Bits u)
   -> exp i
   -> exp i

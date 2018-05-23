@@ -692,10 +692,10 @@ compileVHDL (CopyVBits (av@(VariableC a), oa) (bs@(SignalC b), ob) l) =
      len <- compER l
      ta  <- compTC (Proxy :: Proxy ct) (proxyV av)
      tb  <- compTC (Proxy :: Proxy ct) (proxyS bs)
-     let lower_a = V.add [unpackTerm len, unpackTerm oa']
-         lower_b = V.add [unpackTerm len, unpackTerm ob']
-         dest    = slice  a $ range oa' V.downto $ lift $ lower_a
-         src     = slice' b $ range ob' V.downto $ lift $ lower_b
+     let upper_oa' = V.add [unpackTerm len, unpackTerm oa']
+         upper_ob' = V.add [unpackTerm len, unpackTerm ob']
+     let dest = slice  a $ range (lift upper_oa') V.downto oa'
+         src  = slice' b $ range (lift upper_ob') V.downto ob'
      V.assignVariable dest (V.uCoerce src tb ta)
 compileVHDL (GetBit (SignalC bits) ix) =
   do i   <- freshVar (Proxy :: Proxy ct) (Base "b")
@@ -709,16 +709,14 @@ compileVHDL (SetBit s@(SignalC bits) ix bit) =
      case V.isBit t of
        True  -> V.assignSignal (simple bits)      (bit')
        False -> V.assignArray  (indexed bits ix') (bit')
-compileVHDL (GetBits (SignalC bits) l u) =
-  do i  <- freshVar (Proxy :: Proxy ct) (Base "b")
-     l' <- compER l
-     u' <- compER u
-     -- todo: this wrap around.
-     V.assignVariable (simple $ ident i)
-       ( lift $ V.toInteger $
-         lift $ V.asSigned  $
-         slice' bits $
-         range l' V.downto u')
+compileVHDL (GetBits s@(SignalC bits) start len) =
+  do i      <- freshVar (Proxy :: Proxy ct) (Base "b")
+     start' <- compER start
+     len'   <- compER len
+     typ    <- compTC (Proxy :: Proxy ct) (proxyS s)
+     let upper = V.add [unpackTerm len', unpackTerm start']
+         exp   = slice' bits $ range (lift upper) V.downto start'
+     V.assignVariable (simple $ ident i) (V.uCoerce exp typ $ V.integer Nothing)
      return i
 
 runVHDL :: VHDLCMD (Param3 IO IO pred) a -> IO a

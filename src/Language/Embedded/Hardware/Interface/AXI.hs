@@ -8,8 +8,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances     #-}
-
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE Rank2Types            #-}
 
 module Language.Embedded.Hardware.Interface.AXI (axi_light, AXIPred, FreePrim(..)) where
 
@@ -110,8 +109,6 @@ axi_light
   :: forall instr exp pred sig . AXIPred instr exp pred
   => Comp instr exp pred Identity sig
   -> Sig  instr exp pred Identity (
---          Signal Bit       -- ^ Global clock signal.
---       -> Signal Bit       -- ^ Global reset signal.
           Signal (Bits 32) -- ^ Write address.
        -> Signal (Bits 3)  -- ^ Write channel protection type.
        -> Signal Bit       -- ^ Write address valid.
@@ -134,8 +131,6 @@ axi_light
        -> ()
      )
 axi_light comp =
---  exactInput  "S_AXI_ACLK"    $ \s_axi_aclk    ->
---  exactInput  "S_AXI_ARESETN" $ \s_axi_aresetn ->
   exactInput  "S_AXI_AWADDR"  $ \s_axi_awaddr  ->
   exactInput  "S_AXI_AWPROT"  $ \s_axi_awprot  ->
   exactInput  "S_AXI_AWVALID" $ \s_axi_awvalid ->
@@ -156,7 +151,6 @@ axi_light comp =
   exactOutput "S_AXI_RVALID"  $ \s_axi_rvalid  ->
   exactInput  "S_AXI_RREADY"  $ \s_axi_rready  ->
   ret $ axi_light_impl comp
---    s_axi_aclk s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
     s_axi_bresp  s_axi_bvalid s_axi_bready
@@ -172,8 +166,6 @@ axi_light_impl
   -- Component to connect:
   => Comp instr exp pred Identity sig
   -- AXI signals:
---  -> Signal Bit       -- ^ Global clock signal.
---  -> Signal Bit       -- ^ Global reset signal.
   -> Signal (Bits 32) -- ^ Write address.
   -> Signal (Bits 3)  -- ^ Write channel protection type.
   -> Signal Bit       -- ^ Write address valid.
@@ -195,7 +187,6 @@ axi_light_impl
   -> Signal Bit       -- ^ Read ready.    
   -> Prog instr exp pred ()
 axi_light_impl comp
---    s_axi_aclk   s_axi_aresetn
     s_axi_awaddr s_axi_awprot s_axi_awvalid s_axi_awready
     s_axi_wdata  s_axi_wstrb  s_axi_wvalid  s_axi_wready
     s_axi_bresp  s_axi_bvalid s_axi_bready
@@ -237,13 +228,13 @@ axi_light_impl comp
        -- > write to output.
        let mWrite :: Prog instr exp pred ()
            mWrite = loadOutputs araddr reg_out
-             (signatureOf comp)
-             (registers)
+             (addr_lsb) (addr_bits)         -- sizes.
+             (signatureOf comp) (registers) -- sig and args.
        -- > read from input.
        let mRead :: Prog instr exp pred ()
            mRead = loadInputs awaddr reg_wren s_axi_wdata s_axi_wstrb
-             (signatureOf comp)
-             (registers)
+             (addr_lsb) (addr_bits)         -- sizes.
+             (signatureOf comp) (registers) -- sig and args.
        
        ----------------------------------------
        -- I/O Connections.
@@ -365,7 +356,7 @@ axi_light_impl comp
              arv <- unsafeFreezeSignal s_axi_arvalid
              rv  <- unsafeFreezeSignal rvalid
              rr  <- unsafeFreezeSignal s_axi_rready
-             ifE ( isHigh arr `and` isHigh arv
+             ifE ( isHigh arr `and` isHigh arv `and` isLow rv
                  , do rvalid <== high
                       rresp  <== zeroes)
                  ( isHigh rv `and` isHigh rr
@@ -382,7 +373,7 @@ axi_light_impl comp
        --
        processR []
          (do rdata <== zeroes)
-         (do rden <- getSignal reg_rden
+         (do rden <- unsafeFreezeSignal reg_rden
              when (isHigh rden)
                (do rdata <=- reg_out))
 
@@ -394,11 +385,18 @@ axi_light_impl comp
        -- The end.
        ----------------------------------------
   where
-    -- Application-specific design signals.
+    -- Application-specific design signals. The first depends on the bus width,
+    -- the second on the number of bits needed to store an address. There's no
+    -- '+ 1' on 'addr_bits' since the ranges add that by default (i.e. '0 to 0'
+    -- contains one element).
     addr_lsb, addr_bits :: Integer
-    addr_lsb  = 2
-    addr_bits = 2        + 1
-             -- addr_lsb + widthOf comp
+    addr_lsb  = 2 -- always '2' for a 32-bit bus.
+    addr_bits = floor $ logBase 2.0 $ fromIntegral $ widthOf comp
+
+    -- AXI-lite constants.
+    axi_data_width, axi_addr_width :: Integer
+    axi_data_width = 32 -- always use 32-bit wide busses for AXI-lite.
+    axi_addr_width = addr_lsb + addr_bits + 1 -- added one for consistency.
 
 --------------------------------------------------------------------------------
 -- ** Helpers.
@@ -467,11 +465,13 @@ loadInputs :: forall instr (exp :: * -> *) pred a . AXIPred instr exp pred
   -> Signal   (Bit)     -- ^ Ready.
   -> Signal   (Bits 32) -- ^ Input.
   -> Signal   (Bits 4)  -- ^ Protected bits.
+  -> Integer            -- ^ Address lsb.
+  -> Integer            -- ^ Address width.
   -> Sig instr exp pred Identity a
   -> Argument pred a
   -> Prog instr exp pred ()
-loadInputs waddr rwren wdata wren sig arg =
-  do loc   <- getBits waddr addr_lsb addr_msb
+loadInputs waddr rwren wdata wren addr_lsb addr_bits sig arg =
+  do loc   <- getBits waddr (lit addr_lsb) (lit addr_bits)
      ready <- getSignal rwren
      when (isHigh ready) $
        switched loc
@@ -488,9 +488,8 @@ loadInputs waddr rwren wdata wren sig arg =
     cases ix (SSig _ In  sf) (ASig s arg) =
       is (ix) (loadInputSignal wdata wren s) : cases (ix+1) (sf s) arg
 
-    addr_lsb, addr_msb :: exp Integer
-    addr_lsb = litP (Proxy :: Proxy pred) 2
-    addr_msb = litP (Proxy :: Proxy pred) 3
+    lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
+    lit = litP (Proxy :: Proxy pred)
 
 loadInputSignal :: forall instr (exp :: * -> *) pred a .
      (AXIPred instr exp pred, pred a, Sized a)
@@ -505,11 +504,10 @@ loadInputSignal wdata wren reg = for 0 size $ \byte_index ->
   where
     size :: exp Integer
     size = lit $ (P.div (bits reg) 8) - 1
+    -- todo: I assume that `a` has a type \width\ that is some multiple of eight.
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
     lit = litP (Proxy :: Proxy pred)
--- todo: I assume that `a` has a type \width\ that is some multiple of eight,
---       hence the hard-coded seven when copying.
 
 --------------------------------------------------------------------------------
 
@@ -517,11 +515,13 @@ loadInputSignal wdata wren reg = for 0 size $ \byte_index ->
 loadOutputs :: forall instr (exp :: * -> *) pred a . AXIPred instr exp pred
   => Signal (Bits 32) -- ^ Address.
   -> Signal (Bits 32) -- ^ Output.
+  -> Integer          -- ^ Address lsb.
+  -> Integer          -- ^ Address width.
   -> Sig instr exp pred Identity a
   -> Argument pred a
   -> Prog instr exp pred ()
-loadOutputs araddr rout sig arg =
-  do loc <- getBits araddr addr_lsb addr_msb
+loadOutputs araddr rout addr_lsb addr_bits sig arg =
+  do loc <- getBits araddr (lit addr_lsb) (lit addr_bits)
      switched loc
        (cases 0 sig arg)
        (setSignal rout (litP (Proxy :: Proxy pred) reset))
@@ -536,9 +536,8 @@ loadOutputs araddr rout sig arg =
     cases ix (SSig _ In  sf) (ASig s arg) =
       is (ix) (loadOutputSignal rout s) : cases (ix+1) (sf s) arg
 
-    addr_lsb, addr_msb :: exp Integer
-    addr_lsb = litP (Proxy :: Proxy pred) 2
-    addr_msb = litP (Proxy :: Proxy pred) 3
+    lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
+    lit = litP (Proxy :: Proxy pred)
 
 loadOutputSignal :: forall instr (exp :: * -> *) pred a .
      (AXIPred instr exp pred, pred a, PrimType a, Integral a)
@@ -573,7 +572,7 @@ signatureOf (Component _ _ sig) = sig
 widthOf
   :: Comp instr exp pred m sig
   -> Integer
-widthOf = go . signatureOf
+widthOf comp = go (signatureOf comp)
   where
     go :: Sig instr exp pred m b -> Integer
     go (Ret _)        = 0
@@ -672,4 +671,3 @@ chunk i | i >  8 = 8 : chunk (i - 8)
         | i <= 8 = [i]
 -}
 --------------------------------------------------------------------------------
-
