@@ -681,10 +681,10 @@ compileVHDL (CopyBits (as@(SignalC a), oa) (bs@(SignalC b), ob) l) =
      len <- compER l
      ta  <- compTC (Proxy :: Proxy ct) (proxyS as)
      tb  <- compTC (Proxy :: Proxy ct) (proxyS bs)
-     let lower_a = V.add [unpackTerm len, unpackTerm oa']
-         lower_b = V.add [unpackTerm len, unpackTerm ob']
-         dest    = slice  a $ range oa' V.downto $ lift $ lower_a
-         src     = slice' b $ range ob' V.downto $ lift $ lower_b
+     let upper_oa' = V.add [unpackTerm len, unpackTerm oa']
+         upper_ob' = V.add [unpackTerm len, unpackTerm ob']
+     let dest = slice  a $ range (lift upper_oa') V.downto oa'
+         src  = slice' b $ range (lift upper_ob') V.downto ob'
      V.assignSignal dest (V.uCoerce src tb ta)
 compileVHDL (CopyVBits (av@(VariableC a), oa) (bs@(SignalC b), ob) l) =
   do oa' <- compER oa
