@@ -592,13 +592,10 @@ applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
   -> Argument ct a
   -> [String]
   -> VHDLGen [V.InterfaceDeclaration]
-applySig (Ret _) (Nil) [c, r] =
-  do clk <- readClock
-     rst <- readReset
-     return [decl clk, decl rst]
+applySig (Ret _) (Nil) [c, r] = return [decl c, decl r]
   where
-    decl :: V.Identifier -> V.InterfaceDeclaration
-    decl x = V.InterfaceSignalDeclaration [x] (Just V.In) V.std_logic False Nothing
+    decl :: String -> V.InterfaceDeclaration
+    decl x = V.InterfaceSignalDeclaration [V.Ident x] (Just V.In) V.std_logic False Nothing
 applySig (SSig _ m sf) (ASig s@(SignalC _) v) (n:ns) =
   do t  <- compTF (Proxy :: Proxy ct) sf
      is <- applySig (sf s) v ns
