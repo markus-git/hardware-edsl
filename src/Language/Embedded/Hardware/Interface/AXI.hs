@@ -595,8 +595,8 @@ zeroes :: (Primary exp, Typeable n, KnownNat n) => exp (Bits n)
 zeroes = value 0
 
 ones :: forall exp n. (Primary exp, Typeable n, KnownNat n) => exp (Bits n)
-ones = value $ bitFromInteger (read (replicate size '1') :: Integer)
-  where size = fromIntegral (ni (Proxy::Proxy n)) - 1
+ones = value $ bitFromInteger (2 ^ size - 1)
+  where size = fromIntegral (ni (Proxy::Proxy n))
 
 --------------------------------------------------------------------------------
 -- Program stubs.
