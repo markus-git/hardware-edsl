@@ -1,5 +1,5 @@
 module Language.Embedded.VHDL.Monad.Util
-  ( uType, uCast, uResize, uResizeBits
+  ( uType, uCast, uCoerce, uResize, uResizeBits
   -- utility.
   , maybePrimary, maybeLit, maybeVar, maybeFun, maybeExp
   , printPrimary
@@ -66,9 +66,30 @@ uCast exp from to | isBits from = go
        | otherwise     = exp
 uCast exp from to | isBit from, isBit to = exp
 uCast exp from to =
-  error $ "hardware-edsl.todo: missing type cast from ("
+  error $ "hardware-edsl.uCast: missing type cast from ("
             ++ show (typeName from) ++ ") to ("
             ++ show (typeName to)   ++ ")."
+
+uCoerce :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
+uCoerce exp from to | isUnsigned from = go
+  where
+    go | isUnsigned to = exp
+       | isSigned   to = expr $ asSigned exp
+       | isBits     to = expr $ asBits exp
+uCoerce exp from to | isSigned from = go
+  where
+    go | isUnsigned to = expr $ asUnsigned exp
+       | isSigned   to = exp
+       | isBits     to = expr $ asBits exp
+uCoerce exp from to | isBits from = go
+  where
+    go | isUnsigned to = expr $ asUnsigned exp
+       | isSigned   to = expr $ asSigned exp
+       | isBits     to = exp
+uCoerce exp from to =
+  error $ "hardware-edsl.uCoerce: missing coercion from ("
+            ++ show (typeName from) ++ ") to ("
+            ++ show (typeName to) ++ ")."
 
 uResize :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
 uResize exp from to

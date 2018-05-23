@@ -59,13 +59,12 @@ ex_sig :: HSig (
   -> Signal Word32
   -> ())
 ex_sig =
-  namedInput  "a"   $ \a ->
-  namedInput  "b"   $ \b ->
-  namedOutput "c"   $ \c ->
+  namedInput  "a" $ \a ->
+  namedInput  "b" $ \b ->
+  namedOutput "c" $ \c ->
   ret $ ex a b c
 
---------------------------------------------------------------------------------
-
-test2 = icompileAXILite ex_sig
+-- Connect the adder's signature to an AXI-lite interface and compile.
+test = icompileAXILite ex_sig
 
 --------------------------------------------------------------------------------

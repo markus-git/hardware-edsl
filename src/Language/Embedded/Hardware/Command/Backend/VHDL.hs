@@ -167,6 +167,12 @@ compEM e = maybe (return Nothing) (>>= return . Just) (fmap compER e)
 proxyE :: exp a -> Proxy a
 proxyE _ = Proxy
 
+proxyS :: Signal a -> Proxy a
+proxyS _ = Proxy
+
+proxyV :: Variable a -> Proxy a
+proxyV _ = Proxy
+
 proxyM :: Maybe (exp a) -> Proxy a
 proxyM _ = Proxy
 
@@ -672,24 +678,28 @@ compileVHDL (DeclarePort base exp mode) =
      t <- compTM (Proxy::Proxy ct) exp
      V.port (ident' i) mode t v
      return (SignalC i)
-compileVHDL (CopyBits ((SignalC a), oa) ((SignalC b), ob) l) =
+compileVHDL (CopyBits (as@(SignalC a), oa) (bs@(SignalC b), ob) l) =
   do oa' <- compER oa
      ob' <- compER ob
      len <- compER l
+     ta  <- compTC (Proxy :: Proxy ct) (proxyS as)
+     tb  <- compTC (Proxy :: Proxy ct) (proxyS bs)
      let lower_a = V.add [unpackTerm len, unpackTerm oa']
          lower_b = V.add [unpackTerm len, unpackTerm ob']
          dest    = slice  a $ range oa' V.downto $ lift $ lower_a
          src     = slice' b $ range ob' V.downto $ lift $ lower_b
-     V.assignSignal dest src
-compileVHDL (CopyVBits ((VariableC a), oa) ((SignalC b), ob) l) =
+     V.assignSignal dest (V.uCoerce src tb ta)
+compileVHDL (CopyVBits (av@(VariableC a), oa) (bs@(SignalC b), ob) l) =
   do oa' <- compER oa
      ob' <- compER ob
      len <- compER l
+     ta  <- compTC (Proxy :: Proxy ct) (proxyV av)
+     tb  <- compTC (Proxy :: Proxy ct) (proxyS bs)
      let lower_a = V.add [unpackTerm len, unpackTerm oa']
          lower_b = V.add [unpackTerm len, unpackTerm ob']
          dest    = slice  a $ range oa' V.downto $ lift $ lower_a
          src     = slice' b $ range ob' V.downto $ lift $ lower_b
-     V.assignVariable dest src
+     V.assignVariable dest (V.uCoerce src tb ta)
 compileVHDL (GetBit (SignalC bits) ix) =
   do i   <- freshVar (Proxy :: Proxy ct) (Base "b")
      ix' <- compER ix
