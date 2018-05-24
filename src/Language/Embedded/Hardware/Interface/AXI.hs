@@ -225,6 +225,8 @@ axi_light_impl comp
        let mReload = reloadInputs (signatureOf comp) registers
        -- > fetch the names of all input registers.
        let mInputs = identInputs  (signatureOf comp) registers
+       -- > fetch the names of all output registers.
+       let mOutputs = identOutputs (signatureOf comp) registers
        -- > write to output.
        let mWrite :: Prog instr exp pred ()
            mWrite = loadOutputs araddr reg_out
@@ -301,7 +303,7 @@ axi_light_impl comp
          (do rdy <- unsafeFreezeSignal awready
              awv <- unsafeFreezeSignal s_axi_awvalid
              wv  <- unsafeFreezeSignal s_axi_wvalid
-             iff (isLow  rdy `and` isHigh awv `and` isHigh wv)
+             iff (isLow  rdy `and` isHigh wv `and` isHigh awv)
                (do wready <== high)
                (do wready <== low))
 
@@ -366,7 +368,7 @@ axi_light_impl comp
        -- Memory mapped rigister select and
        -- read logic generaiton.
        --
-       processR (araddr .: mInputs) (return ()) (mWrite)
+       processR (araddr .: mOutputs) (return ()) (mWrite)
 
        ----------------------------------------
        -- Output register of memory read data.
@@ -472,7 +474,7 @@ loadInputs :: forall instr (exp :: * -> *) pred a . AXIPred instr exp pred
   -> Prog instr exp pred ()
 loadInputs waddr rwren wdata wren addr_lsb addr_bits sig arg =
   do loc   <- getBits waddr (lit addr_lsb) (lit addr_bits)
-     ready <- getSignal rwren
+     ready <- unsafeFreezeSignal rwren
      when (isHigh ready) $
        switched loc
          (cases 0 sig arg)
@@ -532,8 +534,8 @@ loadOutputs araddr rout addr_lsb addr_bits sig arg =
           -> [When Integer (Prog instr exp pred)]
     cases ix (Ret _) (Nil) = []
     cases ix (SArr _ _ l af) (AArr a arg) = error "axi-todo: loading arrays."
-    cases ix (SSig _ Out sf) (ASig s arg) = cases (ix+1) (sf s) arg
-    cases ix (SSig _ In  sf) (ASig s arg) =
+    cases ix (SSig _ In  sf) (ASig s arg) = cases (ix+1) (sf s) arg
+    cases ix (SSig _ Out sf) (ASig s arg) =
       is (ix) (loadOutputSignal rout s) : cases (ix+1) (sf s) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
@@ -556,11 +558,21 @@ identInputs :: forall instr (exp :: * -> *) pred m a .
      Sig instr exp pred m a
   -> Argument pred a
   -> [Ident]
-identInputs (Ret _) (Nil) = []
+identInputs (Ret _)          (Nil)        = []
 identInputs (SSig _ In sf)   (ASig s arg) = toIdent s : identInputs (sf s) arg
 identInputs (SSig _ _  sf)   (ASig s arg) = identInputs (sf s) arg
 identInputs (SArr _ In _ af) (AArr a arg) = toIdent a : identInputs (af a) arg
 identInputs (SArr _ _  _ af) (AArr a arg) = identInputs (af a) arg
+
+identOutputs :: forall instr (exp :: * -> *) pred m a .
+     Sig instr exp pred m a
+  -> Argument pred a
+  -> [Ident]
+identOutputs (Ret _) (Nil) = []
+identOutputs (SSig _ Out sf)   (ASig s arg) = toIdent s : identOutputs (sf s) arg
+identOutputs (SSig _ _   sf)   (ASig s arg) = identOutputs (sf s) arg
+identOutputs (SArr _ Out _ af) (AArr a arg) = toIdent a : identOutputs (af a) arg
+identOutputs (SArr _ _   _ af) (AArr a arg) = identOutputs (af a) arg
 
 --------------------------------------------------------------------------------
 
