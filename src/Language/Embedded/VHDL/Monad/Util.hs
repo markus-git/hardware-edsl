@@ -70,6 +70,13 @@ uCast exp from to =
             ++ show (typeName from) ++ ") to ("
             ++ show (typeName to)   ++ ")."
 
+-- | Type coercion, assumes both types have equal size.
+--
+-- todo: using `asUnsigned` in the coercion from bits to integer, rather than
+--       `asSigned`, is a bit arbitary, as bits doesn't imply either signed or
+--       unsigned. The AXI interface sort of relies on unsigned being used, but
+--       that could be addressed by making use of the whole address range
+--       instead of just the "necessary" bits.
 uCoerce :: Expression -> SubtypeIndication -> SubtypeIndication -> Expression
 uCoerce exp from to | isUnsigned from = go
   where
@@ -88,7 +95,7 @@ uCoerce exp from to | isBits from = go
     go | isUnsigned to = expr $ asUnsigned exp
        | isSigned   to = expr $ asSigned exp
        | isBits     to = exp
-       | isInteger  to = expr $ toInteger $ expr $ asSigned exp
+       | isInteger  to = expr $ toInteger $ expr $ asUnsigned exp
 uCoerce exp from to =
   error $ "hardware-edsl.uCoerce: missing coercion from ("
             ++ show (typeName from) ++ ") to ("
