@@ -492,7 +492,7 @@ loadInputs waddr rwren wdata wren addr_lsb addr_bits sig arg =
        in new : cases (ix + 1) (sf s) arg
     cases ix (SArr _ In  l af) (AArr a arg) =
       let len = P.toInteger l
-          new = map (\ix -> is (ix) (loadInputArray wdata wren a ix)) [ix..ix+len]
+          new = map (\i -> is i (loadInputArray wdata wren a i)) [ix..ix+len-1]
        in new ++ cases (ix + len) (af a) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
@@ -564,7 +564,7 @@ loadOutputs araddr rout addr_lsb addr_bits sig arg =
        in new : cases (ix + 1) (sf s) arg
     cases ix (SArr _ Out l af) (AArr a arg) =
       let len = P.toInteger l
-          new = map (\ix -> is (ix) (loadOutputArray rout a ix)) [ix..ix+len]
+          new = map (\i -> is i (loadOutputArray rout a i)) [ix..ix+len-1]
        in new ++ cases (ix + len) (af a) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
