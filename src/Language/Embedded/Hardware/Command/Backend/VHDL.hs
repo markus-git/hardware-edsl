@@ -63,8 +63,8 @@ data SignalEnv = SignalEnv
 -- todo: 'wrapMain' will add these ports.
 emptyEnv :: SignalEnv
 emptyEnv  = SignalEnv {
-    _clock = SignalC "clock"
-  , _reset = SignalC "reset" }
+    _clock = SignalC "clk"
+  , _reset = SignalC "rst" }
 
 type MonadGen m = (Functor m, Applicative m, Monad m, MonadReader SignalEnv m)
 
@@ -133,7 +133,7 @@ compTA ct range a =
      V.addLibrary "WORK"
      V.addImport  "WORK.types"
      let arr = V.constrainedArray (ident' i) t range
-     b <- V.lookupArray arr
+     b <- V.lookupArrayType arr
      case b of
        Just t' ->
          do return (named t')
@@ -533,6 +533,37 @@ runConditional (Case e cs d) =
 runConditional (Null) = return ()
 
 --------------------------------------------------------------------------------
+-- ** Processes.
+--------------------------------------------------------------------------------
+
+instance (CompileExp exp, CompileType ct)
+    => Interp ProcessCMD VHDLGen (Param2 exp ct)
+  where
+    interp = compileProcess
+
+instance InterpBi ProcessCMD IO (Param1 pred)
+  where
+    interpBi = runProcess
+
+compileProcess :: forall ct exp a. (CompileExp exp, CompileType ct)
+  => ProcessCMD (Param3 VHDLGen exp ct) a
+  -> VHDLGen a
+compileProcess (Process is prog rst) =
+  do clock <- readClock
+     reset <- readReset
+     label <- V.newLabel
+     let is'  = identifiers is
+     let rst' = fmap ((,) reset) rst
+     V.inSingleProcess label clock rst' (identifiers is) prog
+  where
+    identifiers :: Signals -> [V.Identifier]
+    identifiers = fmap (\(Ident i) -> V.Ident i)
+
+runProcess :: ProcessCMD (Param3 IO IO pred) a -> IO a
+runProcess _ =
+  do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
+
+--------------------------------------------------------------------------------
 -- ** Components.
 --------------------------------------------------------------------------------
 
@@ -562,8 +593,7 @@ compileComponent (PortMap (Component name args sig) as) =
      l  <- V.newLabel
      vs <- applySig sig as args
      ac <- assocSig sig as args
---   V.inheritContext i
-     V.declareComponent i vs
+     V.importComponent i vs
      V.portMap l i ac
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
@@ -601,7 +631,8 @@ applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
   -> Argument ct a
   -> [String]
   -> VHDLGen [V.InterfaceDeclaration]
-applySig (Ret _) (Nil) [c, r] = return [decl c, decl r]
+applySig (Ret _) (Nil) [c, r] =
+  do return [decl c, decl r]
   where
     decl :: String -> V.InterfaceDeclaration
     decl x = V.InterfaceSignalDeclaration [V.Ident x] (Just V.In) V.std_logic False Nothing
@@ -630,37 +661,6 @@ assocSig (SSig _ _ sf) (ASig s@(SignalC i) v) (n:ns) =
   ((Just (ident' n), ident' i) :) <$> assocSig (sf s) v ns
 assocSig (SArr _ _ _ af) (AArr a@(ArrayC i) v) (n:ns) =
   ((Just (ident' n), ident' i) :) <$> assocSig (af a) v ns
-
---------------------------------------------------------------------------------
--- ** Structural.
---------------------------------------------------------------------------------
-
-instance (CompileExp exp, CompileType ct)
-    => Interp ProcessCMD VHDLGen (Param2 exp ct)
-  where
-    interp = compileProcess
-
-instance InterpBi ProcessCMD IO (Param1 pred)
-  where
-    interpBi = runProcess
-
-compileProcess :: forall ct exp a. (CompileExp exp, CompileType ct)
-  => ProcessCMD (Param3 VHDLGen exp ct) a
-  -> VHDLGen a
-compileProcess (Process is prog rst) =
-  do clock <- readClock
-     reset <- readReset
-     label <- V.newLabel
-     let is'  = identifiers is
-     let rst' = fmap ((,) reset) rst
-     V.inSingleProcess label clock rst' (identifiers is) prog
-  where
-    identifiers :: Signals -> [V.Identifier]
-    identifiers = fmap (\(Ident i) -> V.Ident i)
-
-runProcess :: ProcessCMD (Param3 IO IO pred) a -> IO a
-runProcess _ =
-  do error "hardware-edsl-todo: figure out how to simulate processes in Haskell."
 
 --------------------------------------------------------------------------------
 -- ** VHDL.
