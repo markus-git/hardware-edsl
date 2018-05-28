@@ -630,13 +630,17 @@ prettyVEnv = Text.vcat . map pp . map reorderDesign . _designs
 --------------------------------------------------------------------------------
 
 reorderDesign :: DesignFile -> DesignFile
-reorderDesign (DesignFile units) = DesignFile $ map reorderUnit $ reverse units
+reorderDesign (DesignFile units) = DesignFile $ map reorderUnit units
 
 reorderUnit :: DesignUnit -> DesignUnit
 reorderUnit (DesignUnit ctxt lib) = DesignUnit (reorderContext ctxt) lib
 
 reorderContext :: ContextClause -> ContextClause
-reorderContext (ContextClause items) = ContextClause $ concatMap reorder $ groupBy prefix $ reverse items
+reorderContext (ContextClause items) =
+      ContextClause
+    $ concatMap reorder
+    $ groupBy prefix
+    $ reverse items
   where
     prefix :: ContextItem -> ContextItem -> Bool
     prefix a b = prefixOf a == prefixOf b
@@ -661,9 +665,10 @@ wrapMain :: MonadV m => m a -> m ()
 wrapMain prog = do
   let eName = Ident "main"
   let aName = Ident "behav"
-  CMS.void $ component $ entity eName $ do
-    port (Ident "clk") (In) (std_logic) (Nothing)
-    port (Ident "rst") (In) (std_logic) (Nothing)
+  CMS.void $ component $ do
+    entity eName $ do
+      port (Ident "clk") (In) (std_logic) (Nothing)
+      port (Ident "rst") (In) (std_logic) (Nothing)
     architecture eName aName prog
 -- todo: take clock and reset names as parameters?
 
