@@ -381,6 +381,8 @@ infixr +:
 ret :: ProgramT instr (Param2 exp pred) m () -> Sig instr exp pred m ()
 ret = Ret
 
+--------------------------------------------------------------------------------
+
 exactInput :: (pred a, Integral a, PrimType a)
   => String
   -> (Signal a -> Sig instr exp pred m b)
@@ -398,6 +400,36 @@ input :: (pred a, Integral a, PrimType a)
   -> Sig instr exp pred m (Signal a -> b)
 input = namedInput "in"
 
+--------------------------------------------------------------------------------
+
+exactInputArray ::
+     ( pred a, Integral a, PrimType a
+     , pred i, Integral i, PrimType i, Ix i)
+  => String
+  -> i
+  -> (Array i a -> Sig instr exp pred m b)
+  -> Sig instr exp pred m (Array i a -> b)
+exactInputArray  n i = SArr (Exact n) In i
+
+namedInputArray ::
+     ( pred a, Integral a, PrimType a
+     , pred i, Integral i, PrimType i, Ix i)
+  => String
+  -> i
+  -> (Array i a -> Sig instr exp pred m b)
+  -> Sig instr exp pred m (Array i a -> b)
+namedInputArray n = SArr (Base n) In
+
+inputArray ::
+     ( pred a, Integral a, PrimType a
+     , pred i, Integral i, PrimType i, Ix i)
+  => i
+  -> (Array i a -> Sig instr exp pred m b)
+  -> Sig instr exp pred m (Array i a -> b)
+inputArray = namedInputArray "in"
+
+--------------------------------------------------------------------------------
+
 exactOutput :: (pred a, Integral a, PrimType a)
   => String
   -> (Signal a -> Sig instr exp pred m b)
@@ -414,6 +446,34 @@ output :: (pred a, Integral a, PrimType a)
   => (Signal a -> Sig instr exp pred m b)
   -> Sig instr exp pred m (Signal a -> b)
 output = namedOutput "out"
+
+--------------------------------------------------------------------------------
+
+exactOutputArray ::
+     ( pred a, Integral a, PrimType a
+     , pred i, Integral i, PrimType i, Ix i)
+  => String
+  -> i
+  -> (Array i a -> Sig instr exp pred m b)
+  -> Sig instr exp pred m (Array i a -> b)
+exactOutputArray  n = SArr (Exact n) Out
+
+namedOutputArray ::
+     ( pred a, Integral a, PrimType a
+     , pred i, Integral i, PrimType i, Ix i)
+  => String
+  -> i
+  -> (Array i a -> Sig instr exp pred m b)
+  -> Sig instr exp pred m (Array i a -> b)
+namedOutputArray n = SArr (Base n) Out
+
+outputArray ::
+     ( pred a, Integral a, PrimType a
+     , pred i, Integral i, PrimType i, Ix i)
+  => i
+  -> (Array i a -> Sig instr exp pred m b)
+  -> Sig instr exp pred m (Array i a -> b)
+outputArray = namedOutputArray "out"
 
 --------------------------------------------------------------------------------
 -- ** Structural entities.
@@ -479,6 +539,13 @@ copyVBits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
   -> exp i
   -> ProgramT instr (Param2 exp pred) m ()
 copyVBits a b l = singleInj (CopyVBits a b l)
+
+copyABits :: (VHDLCMD :<: instr, pred a, pred b, Integral i, Ix i)
+  => (Array j a, exp i, exp i)
+  -> (Signal  b, exp i)
+  -> exp i
+  -> ProgramT instr (Param2 exp pred) m ()
+copyABits a b l = singleInj (CopyABits a b l)
 
 getBit :: (VHDLCMD :<: instr, pred a, Integral i, Ix i, pred Bit, PredicateExp exp Bit, FreeExp exp, Monad m)
   => Signal a -> exp i -> ProgramT instr (Param2 exp pred) m (exp Bit)

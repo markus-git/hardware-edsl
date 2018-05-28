@@ -536,6 +536,11 @@ data VHDLCMD fs a
       -> (Signal   b, exp i)
       -> exp i
       -> VHDLCMD (Param3 prog exp pred) ()
+    CopyABits :: (pred a, pred b, Integral i, Ix i)
+      => (Array j a, exp i, exp i) -- todo: change j into i, problems with Integral.
+      -> (Signal  b, exp i)
+      -> exp i
+      -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: These two should be expressions instead.
     GetBit :: (pred a, pred Bit, Integral i, Ix i)
       => Signal a
@@ -559,18 +564,20 @@ instance HFunctor VHDLCMD
     hfmap _ (DeclarePort n e m) = DeclarePort n e m
     hfmap _ (CopyBits a b l)    = CopyBits a b l
     hfmap _ (CopyVBits a b l)   = CopyVBits a b l
+    hfmap _ (CopyABits a b l)   = CopyABits a b l
     hfmap _ (GetBit s i)        = GetBit s i
     hfmap _ (SetBit s i b)      = SetBit s i b
     hfmap _ (GetBits s l u)     = GetBits s l u
 
 instance HBifunctor VHDLCMD
   where
-    hbimap _ f (DeclarePort n e m)           = DeclarePort n (fmap f e) m
-    hbimap _ f (CopyBits (a, oa) (b, ob) l)  = CopyBits (a, f oa) (b, f ob) (f l)
-    hbimap _ f (CopyVBits (a, oa) (b, ob) l) = CopyVBits (a, f oa) (b, f ob) (f l)
-    hbimap _ f (GetBit s i)                  = GetBit s (f i)
-    hbimap _ f (SetBit s i b)                = SetBit s (f i) (f b)
-    hbimap _ f (GetBits s l u)               = GetBits s (f l) (f u)
+    hbimap _ f (DeclarePort n e m)               = DeclarePort n (fmap f e) m
+    hbimap _ f (CopyBits (a, oa) (b, ob) l)      = CopyBits (a, f oa) (b, f ob) (f l)
+    hbimap _ f (CopyVBits (a, oa) (b, ob) l)     = CopyVBits (a, f oa) (b, f ob) (f l)
+    hbimap _ f (CopyABits (a, oa, ia) (b, ob) l) = CopyABits (a, f oa, f ia) (b, f ob) (f l)
+    hbimap _ f (GetBit s i)                      = GetBit s (f i)
+    hbimap _ f (SetBit s i b)                    = SetBit s (f i) (f b)
+    hbimap _ f (GetBits s l u)                   = GetBits s (f l) (f u)
 
 instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
   where
@@ -583,6 +590,9 @@ instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
     reexpressInstrEnv reexp (CopyVBits (a, oa) (b, ob) l)
       = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
            lift $ singleInj $ CopyVBits (a, oa') (b, ob') l'
+    reexpressInstrEnv reexp (CopyABits (a, oa, ia) (b, ob) l)
+      = do oa' <- reexp oa; ia' <- reexp ia; ob' <- reexp ob; l' <- reexp l
+           lift $ singleInj $ CopyABits (a, oa', ia') (b, ob') l'
     reexpressInstrEnv reexp (GetBit s i)
       = do i' <- reexp i
            lift $ singleInj $ GetBit s i'

@@ -43,9 +43,9 @@ type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
 
--- Simple adder.
-ex :: Signal Word32 -> Signal Word32 -> Signal Word32 -> HProg ()
-ex a b c =
+-- Adder.
+add_impl :: Signal Word32 -> Signal Word32 -> Signal Word32 -> HProg ()
+add_impl a b c =
   processR []
     (do setSignal c 0)
     (do va <- getSignal a
@@ -53,18 +53,40 @@ ex a b c =
         setSignal c (va + vb))
 
 -- Adder's signature.
-ex_sig :: HSig (
+add_sig :: HSig (
      Signal Word32
   -> Signal Word32
   -> Signal Word32
   -> ())
-ex_sig =
+add_sig =
   namedInput  "a" $ \a ->
   namedInput  "b" $ \b ->
   namedOutput "c" $ \c ->
-  ret $ ex a b c
+  ret $ add_impl a b c
 
 -- Connect the adder's signature to an AXI-lite interface and compile.
-test = icompileAXILite ex_sig
+test = icompileAXILite add_sig
+
+--------------------------------------------------------------------------------
+
+-- Reverse, assume 10 elements in each array.
+rev_impl :: Array Word32 Word32 -> Array Word32 Word32 -> HProg ()
+rev_impl a b =
+  processR []
+    (do resetArray b 0)
+    (do for 0 9 $ \ix ->
+          do va <- getArray a ix
+             setArray b (9 - ix) va)
+
+rev_sig :: HSig (
+     Array Word32 Word32
+  -> Array Word32 Word32
+  -> ())
+rev_sig =
+  namedInputArray  "a" 10 $ \a ->
+  namedOutputArray "b" 10 $ \b ->
+  ret $ rev_impl a b
+
+test2 = icompileAXILite rev_sig
 
 --------------------------------------------------------------------------------

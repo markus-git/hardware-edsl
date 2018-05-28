@@ -415,7 +415,7 @@ declareRegisters (SSig _ _ sf) =
      a <- declareRegisters (sf s)
      return (ASig s a)
 declareRegisters (SArr _ _ l af) =
-  do s <- newArray (litP (Proxy :: Proxy pred) l)
+  do s <- newArray (litP (Proxy :: Proxy pred) (l - 1))
      a <- declareRegisters (af s)
      return (AArr s a)
 
@@ -485,10 +485,15 @@ loadInputs waddr rwren wdata wren addr_lsb addr_bits sig arg =
           -> Argument pred b
           -> [When Integer (Prog instr exp pred)]
     cases ix (Ret _)         (Nil)        = []
-    cases ix (SArr _ _ l af) (AArr a arg) = error "axi-todo: loading arrays."
-    cases ix (SSig _ Out sf) (ASig s arg) = cases (ix+1) (sf s) arg
-    cases ix (SSig _ In  sf) (ASig s arg) =
-      is (ix) (loadInputSignal wdata wren s) : cases (ix+1) (sf s) arg
+    cases ix (SSig _ Out   sf) (ASig s arg) = cases (ix + 1)             (sf s) arg
+    cases ix (SArr _ Out l af) (AArr a arg) = cases (ix + P.toInteger l) (af a) arg
+    cases ix (SSig _ In    sf) (ASig s arg) =
+      let new = is (ix) (loadInputSignal wdata wren s)
+       in new : cases (ix + 1) (sf s) arg
+    cases ix (SArr _ In  l af) (AArr a arg) =
+      let len = P.toInteger l
+          new = map (\ix -> is (ix) (loadInputArray wdata wren a ix)) [ix..ix+len]
+       in new ++ cases (ix + len) (af a) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
     lit = litP (Proxy :: Proxy pred)
@@ -506,6 +511,25 @@ loadInputSignal wdata wren reg = for 0 size $ \byte_index ->
   where
     size :: exp Integer
     size = lit $ (P.div (bits reg) 8) - 1
+    -- todo: I assume that `a` has a type \width\ that is some multiple of eight.
+
+    lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
+    lit = litP (Proxy :: Proxy pred)
+
+loadInputArray :: forall instr (exp :: * -> * ) pred i a .
+     (AXIPred instr exp pred, pred a, Sized a)
+  => Signal (Bits 32)
+  -> Signal (Bits 4)
+  -> Array i a
+  -> Integer
+  -> Prog instr exp pred ()
+loadInputArray wdata wren arr ix = for 0 size $ \byte_index ->
+  do bit <- getBit wren byte_index
+     when (isHigh bit) $
+       copyABits (arr, byte_index*8, lit ix) (wdata, byte_index*8) (lit 7)
+  where
+    size :: exp Integer
+    size = lit $ (P.div (bits arr) 8) - 1
     -- todo: I assume that `a` has a type \width\ that is some multiple of eight.
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
@@ -533,10 +557,15 @@ loadOutputs araddr rout addr_lsb addr_bits sig arg =
           -> Argument pred b
           -> [When Integer (Prog instr exp pred)]
     cases ix (Ret _) (Nil) = []
-    cases ix (SArr _ _ l af) (AArr a arg) = error "axi-todo: loading arrays."
-    cases ix (SSig _ In  sf) (ASig s arg) = cases (ix+1) (sf s) arg
-    cases ix (SSig _ Out sf) (ASig s arg) =
-      is (ix) (loadOutputSignal rout s) : cases (ix+1) (sf s) arg
+    cases ix (SSig _ In    sf) (ASig s arg) = cases (ix + 1)             (sf s) arg
+    cases ix (SArr _ In  l af) (AArr a arg) = cases (ix + P.toInteger l) (af a) arg
+    cases ix (SSig _ Out   sf) (ASig s arg) =
+      let new = is (ix) (loadOutputSignal rout s)
+       in new : cases (ix + 1) (sf s) arg
+    cases ix (SArr _ Out l af) (AArr a arg) =
+      let len = P.toInteger l
+          new = map (\ix -> is (ix) (loadOutputArray rout a ix)) [ix..ix+len]
+       in new ++ cases (ix + len) (af a) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
     lit = litP (Proxy :: Proxy pred)
@@ -551,6 +580,22 @@ loadOutputSignal rout reg =
     Dict -> do
       r <- unsafeFreezeSignal reg
       setSignal rout (toBits r :: exp (Bits 32))
+
+loadOutputArray :: forall instr (exp :: * -> *) pred i a .
+     ( AXIPred instr exp pred, pred a, PrimType a, Integral a
+     , pred i, PrimType i, Integral i, Ix i, Num i)
+  => Signal (Bits 32)
+  -> Array i a
+  -> Integer
+  -> Prog instr exp pred ()
+loadOutputArray rout arr ix =
+  case witPred (Proxy :: Proxy exp) (Dict :: Dict (pred a)) of
+    Dict -> do
+      r <- getArray arr (lit $ P.fromInteger ix)
+      setSignal rout (toBits r :: exp (Bits 32))
+  where
+    lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
+    lit = litP (Proxy :: Proxy pred)
 
 --------------------------------------------------------------------------------
 
@@ -588,8 +633,8 @@ widthOf comp = go (signatureOf comp)
   where
     go :: Sig instr exp pred m b -> Integer
     go (Ret _)        = 0
-    go (SSig _ _ f)   = 1 + go (f dummy)
---  go (SArr _ _ l g) = l + go (g dummy)
+    go (SSig _ _ f)   = 1             + go (f dummy)
+    go (SArr _ _ l g) = P.toInteger l + go (g dummy)
 
 dummy :: a
 dummy = error "todo: evaluated dummy"

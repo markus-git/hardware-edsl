@@ -173,6 +173,9 @@ proxyS _ = Proxy
 proxyV :: Variable a -> Proxy a
 proxyV _ = Proxy
 
+proxyA :: Array i a -> Proxy a
+proxyA _ = Proxy
+
 proxyM :: Maybe (exp a) -> Proxy a
 proxyM _ = Proxy
 
@@ -694,9 +697,22 @@ compileVHDL (CopyVBits (av@(VariableC a), oa) (bs@(SignalC b), ob) l) =
      tb  <- compTC (Proxy :: Proxy ct) (proxyS bs)
      let upper_oa' = V.add [unpackTerm len, unpackTerm oa']
          upper_ob' = V.add [unpackTerm len, unpackTerm ob']
-     let dest = slice  a $ range (lift upper_oa') V.downto oa'
-         src  = slice' b $ range (lift upper_ob') V.downto ob'
+     let dest  = slice  a $ range (lift upper_oa') V.downto oa'
+         src   = slice' b $ range (lift upper_ob') V.downto ob'
      V.assignVariable dest (V.uCoerce src tb ta)
+compileVHDL (CopyABits (ar@(ArrayC a), oa, ia) (bs@(SignalC b), ob) l) =
+  do oa' <- compER oa
+     ia' <- compER ia
+     ob' <- compER ob
+     len <- compER l
+     ta  <- compTC (Proxy :: Proxy ct) (proxyA ar)
+     tb  <- compTC (Proxy :: Proxy ct) (proxyS bs)
+     let upper_oa' = V.add [unpackTerm len, unpackTerm oa']
+         upper_ob' = V.add [unpackTerm len, unpackTerm ob']
+     let index = indexed a ia'
+         dest  = V.slice index $ range (lift upper_oa') V.downto oa'
+         src   = slice'  b     $ range (lift upper_ob') V.downto ob'
+     V.assignSignal dest (V.uCoerce src tb ta)
 compileVHDL (GetBit (SignalC bits) ix) =
   do i   <- freshVar (Proxy :: Proxy ct) (Base "b")
      ix' <- compER ix
