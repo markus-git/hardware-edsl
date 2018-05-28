@@ -34,6 +34,10 @@ import Language.Embedded.Hardware.Command.CMD
 import Language.Embedded.VHDL (VHDLT, VHDL)
 import qualified Language.VHDL          as V
 import qualified Language.Embedded.VHDL as V
+--
+import qualified Language.Embedded.VHDL.Monad as V
+--
+
 
 import Control.Monad.Identity (Identity)
 import Control.Monad.Reader   (ReaderT, MonadReader)
@@ -595,6 +599,9 @@ compileComponent (PortMap (Component name args sig) as) =
      ac <- assocSig sig as args
      V.importComponent i vs
      V.portMap l i ac
+     --
+--     (V.VHDLEnv _ _ _ c _ _ _ _ _ _ _ _) <- CMS.get
+--     error $ show c
 
 runComponent :: ComponentCMD (Param3 IO IO pred) a -> IO a
 runComponent _ = error "hardware-edsl-todo: run components."
@@ -631,8 +638,7 @@ applySig :: forall ct exp a . (CompileExp exp, CompileType ct)
   -> Argument ct a
   -> [String]
   -> VHDLGen [V.InterfaceDeclaration]
-applySig (Ret _) (Nil) [c, r] =
-  do return [decl c, decl r]
+applySig (Ret _) (Nil) [c, r] = return [decl c, decl r]
   where
     decl :: String -> V.InterfaceDeclaration
     decl x = V.InterfaceSignalDeclaration [V.Ident x] (Just V.In) V.std_logic False Nothing

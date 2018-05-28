@@ -17,6 +17,10 @@ import Data.Int
 import Data.Word
 import Text.PrettyPrint
 
+--
+import qualified Language.Embedded.VHDL as VHDL (prettyVHDL)
+--
+
 import Prelude hiding (and, or, not, negate)
 
 --------------------------------------------------------------------------------
@@ -42,51 +46,45 @@ type HComp = Comp CMD HExp HType Identity
 type HSig  = Sig CMD HExp HType Identity
 
 --------------------------------------------------------------------------------
--- ** Addition of two 8-bit words.
 
--- Adder program.
-adder :: Signal Word8 -> Signal Word8 -> Signal Word8 -> HProg ()
-adder a b c =
+plus1_impl :: Signal Word8 -> Signal Word8 -> HProg ()
+plus1_impl a b =
   processR []
-    (do setSignal c 0)
-    (do va <- getSignal a
-        vb <- getSignal b
-        setSignal c (va + vb))
+    (do setSignal b 0)
+    (do va <- getSignal a; setSignal b (va + 1))
 
--- An encoding of the adder's signature.
-adder_sig :: HSig (
-     Signal Word8
-  -> Signal Word8
-  -> Signal Word8
-  -> ())
-adder_sig =
+plus1_sig :: HSig (Signal Word8 -> Signal Word8 -> ())
+plus1_sig =
   namedInput  "a" $ \a ->
-  namedInput  "b" $ \b ->
-  namedOutput "c" $ \c ->
-  ret (adder a b c)
+  namedOutput "b" $ \b ->
+  ret $ plus1_impl a b
+
+test = icompileSig plus1_sig
 
 --------------------------------------------------------------------------------
 
-test = icompileSig adder_sig
+ex1_sig :: HComp (Signal Word8 -> Signal Word8 -> ()) -> HSig ()
+ex1_sig comp = ret $
+  do a <- initSignal 0
+     portmap comp (a +: a +: nil)
+
+test1 =
+    putStrLn
+  $ show
+  $ VHDL.prettyVHDL
+  $ flip runVHDLGen emptyEnv
+  $ interpret
+  $ do comp <- component plus1_sig
+       component $ ex1_sig comp
 
 --------------------------------------------------------------------------------
 
--- An adder component given by its signature.
-mult4_sig :: HSig (Signal Word8 -> Signal Word8 -> Signal Word8 -> ())
-mult4_sig =
-  input  $ \a ->
-  input  $ \b ->
-  output $ \c ->
-  ret $ do
-    adder <- namedComponent "adder" adder_sig
-    tmp :: Signal Word8 <- initSignal 0
-    portmap adder (a   +: b   +: tmp +: nil)
-    portmap adder (tmp +: tmp +: tmp +: nil)
-    val <- unsafeFreezeSignal tmp
-    setSignal c val
+ex2_sig :: HSig ()
+ex2_sig = ret $
+  do comp <- component plus1_sig
+     a    <- initSignal 0
+     portmap comp (a +: a +: nil)
 
---------------------------------------------------------------------------------
-
-test2 = icompileSig mult4_sig
+test2 = icompileSig ex2_sig
 
 --------------------------------------------------------------------------------

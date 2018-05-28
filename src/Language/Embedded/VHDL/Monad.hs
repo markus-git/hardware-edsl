@@ -8,7 +8,7 @@
 module Language.Embedded.VHDL.Monad (
     VHDL
   , VHDLT
-  , VHDLEnv
+  , VHDLEnv(..)
   , MonadV
   , emptyVHDLEnv
     
@@ -179,37 +179,21 @@ newLabel :: MonadV m => m Label
 newLabel = do i <- freshUnique; return (Ident $ 'l' : show i)
 
 --------------------------------------------------------------------------------
-
--- | Adds an element to a list if there's no element matching the predicate.
-add :: (a -> Bool) -> a -> [a] -> [a]
-add p a as
-  | isJust $ find p as = as
-  | otherwise          = a : as
-
---------------------------------------------------------------------------------
 -- ** VHDL environment updates.
 
 -- | Adds a new library import to the context.
 addLibrary :: MonadV m => String -> m ()
-addLibrary l = CMS.modify $ \s -> s { _context = add (cmp l) lib (_context s) }
+addLibrary l = CMS.modify $ \s -> s { _context = add lib (_context s) }
   where
     lib :: ContextItem
     lib = ContextLibrary (LibraryClause (LogicalNameList [Ident l]))
 
-    cmp :: String -> ContextItem -> Bool
-    cmp s (ContextLibrary (LibraryClause (LogicalNameList [Ident l]))) = s == l
-    cmp _ _ = False
-
 -- | Adds a new library use clause to the context (with an .ALL suffix by default).
 addImport :: MonadV m => String -> m ()
-addImport i = CMS.modify $ \s -> s { _context = add (cmp i) imp (_context s) }
+addImport i = CMS.modify $ \s -> s { _context = add imp (_context s) }
   where
     imp :: ContextItem
     imp = ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) SAll])
-
-    cmp :: String -> ContextItem -> Bool
-    cmp s (ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) _])) = s == i
-    cmp _ _ = False
 
 -- | Adds a type declaration.
 addType :: MonadV m => TypeDeclaration -> m ()
@@ -475,7 +459,7 @@ architecture entity@(Ident n) name@(Ident e) m =
                           , _concurrent = oldConcurrent
                           , _sequential = oldSequential
                           , _components = oldComponents }
---   extendContext entity
+     extendContext entity
      return result
   where
     isSignal :: SequentialStatement -> Bool
@@ -589,7 +573,7 @@ importComponent name is = addComponent $ ComponentDeclaration name Nothing
     (Nothing)
 
 --------------------------------------------------------------------------------
--- ....
+-- Null statements.
 
 null :: MonadV m => m ()
 null = addSequential $ SNull $ NullStatement Nothing
@@ -616,10 +600,10 @@ prettyVHDLT m = prettyVEnv <$> execVHDLT (m >> package) emptyVHDLEnv
          addImport  "IEEE.numeric_std"
          types <- CMS.gets _types
          ctxt  <- CMS.gets _context
---       CMS.when (P.not $ P.null types) $ addUnit $
-         addDesign $ DesignFile $ (:[]) $ DesignUnit (ContextClause ctxt) $
-           LibraryPrimary $ PrimaryPackage $ PackageDeclaration
-             (Ident "types") (fmap PHDIType (reverse types))
+         CMS.when (P.not $ P.null types) $ addDesign $
+           DesignFile $ (:[]) $ DesignUnit (ContextClause ctxt) $
+             LibraryPrimary $ PrimaryPackage $ PackageDeclaration
+               (Ident "types") (fmap PHDIType (reverse types))
 
 --------------------------------------------------------------------------------
 
@@ -672,6 +656,12 @@ wrapMain prog = do
     architecture eName aName prog
 -- todo: take clock and reset names as parameters?
 
+-- | Adds an element to a list if there's no element matching the predicate.
+add :: Eq a => a -> [a] -> [a]
+add a as
+  | elem a as = as
+  | otherwise = a : as
+
 --------------------------------------------------------------------------------
 
 lookupArrayType :: MonadV m => TypeDeclaration -> m (Maybe Identifier)
@@ -694,6 +684,37 @@ lookupArrayType t =
       (ArrC (ConstrainedArrayDefinition (IndexConstraint [DRRange r2]) t2))
       = eqType t1 t2 && eqRange r1 r2
     compareType _ _ = False
+
+--------------------------------------------------------------------------------
+
+extendContext :: MonadV m => Identifier -> m ()
+extendContext i =
+  do es <- CMS.gets _units
+     case find (entity i) es of
+       Just e  -> extendEntity e
+       Nothing -> error "hardware-edsl: extending context failed."
+  where
+    entity :: Identifier -> DesignUnit -> Bool
+    entity i (DesignUnit _ (LibraryPrimary (PrimaryEntity (EntityDeclaration e _ _ _))))
+      | i == e = True
+    entity _ _ = False
+
+extendEntity :: MonadV m => DesignUnit -> m ()
+extendEntity old@(DesignUnit (ContextClause ctxt) lib) =
+  do cs <- CMS.gets _context
+     es <- CMS.gets _units
+     let new = DesignUnit (ContextClause $ foldr mergeUnit ctxt cs) lib
+     let es' = replaceUnit old new es
+     CMS.modify $ \s -> s { _units = es' }
+  where
+    mergeUnit :: ContextItem -> [ContextItem] -> [ContextItem]
+    mergeUnit item ds = add item ds
+
+    replaceUnit :: DesignUnit -> DesignUnit -> [DesignUnit] -> [DesignUnit]
+    replaceUnit o n [] = error "hardware-edsl: replacing unit failed."
+    replaceUnit o n (d:ds)
+      | o == d    = n : ds
+      | otherwise = d : replaceUnit o n ds
 
 --------------------------------------------------------------------------------
 -- I use BlockDeclarativeItem to represent all declarative items, which means we
