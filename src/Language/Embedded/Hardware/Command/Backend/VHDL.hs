@@ -129,12 +129,17 @@ compTA :: forall proxy ct arr i a . (CompileType ct, ct a) => Proxy ct -> V.Rang
 compTA ct range a =
   do i <- newSym (Base "array")
      t <- compTC ct (proxyE a)
-     let array = V.constrainedArray (ident' i) t range
-     s <- V.findType array
-     case s of
-       Just n  -> do return (named n)
-       Nothing -> do V.addType array
-                     return (typed array)
+     -- use work.types
+     V.addLibrary "WORK"
+     V.addImport  "WORK.types"
+     let arr = V.constrainedArray (ident' i) t range
+     b <- V.lookupArray arr
+     case b of
+       Just t' ->
+         do return (named t')
+       Nothing ->
+         do V.addType arr
+            return (typed arr)
   where
     typed :: V.TypeDeclaration -> V.SubtypeIndication
     typed (V.TDFull    (V.FullTypeDeclaration i _))     = named i
@@ -298,7 +303,8 @@ compileArray :: forall ct exp a. (CompileExp exp, CompileType ct)
 compileArray (NewArray base len) =
   do i <- newSym base
      l <- compER len
-     t <- compTA (Proxy :: Proxy ct) (rangeZero l) (undefined :: a)
+     let len = V.sub [unpackTerm l, lift $ V.literal $ V.number "1"]
+     t <- compTA (Proxy :: Proxy ct) (rangeZero (lift len)) (undefined :: a)
      V.array (ident' i) V.InOut t Nothing
      return (ArrayC i)
 compileArray (InitArray base is) =
@@ -353,15 +359,15 @@ compileVArray :: forall ct exp a. (CompileExp exp, CompileType ct)
   => VArrayCMD (Param3 VHDLGen exp ct) a
   -> VHDLGen a
 compileVArray (NewVArray base len) =
-  do l <- compER len
-     t <- compTA (Proxy :: Proxy ct) (rangeZero l) (undefined :: a)
-     i <- newSym base
+  do i <- newSym base
+     l <- compER len
+     let len = V.sub [unpackTerm l, lift $ V.literal $ V.number "1"]
+     t <- compTA (Proxy :: Proxy ct) (rangeZero (lift len)) (undefined :: a)
      V.variable (ident' i) t Nothing
      return (VArrayC i)
 compileVArray (InitVArray base is) =
-  do let r = rangePoint (length is - 1)
-     t <- compTA (Proxy :: Proxy ct) r (undefined :: a)
-     i <- newSym base
+  do i <- newSym base
+     t <- compTA (Proxy :: Proxy ct) (rangePoint (length is - 1)) (undefined :: a)
      x <- mapM (compBC (Proxy :: Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
      V.variable (ident' i) t (Just $ lift v)
@@ -556,7 +562,7 @@ compileComponent (PortMap (Component name args sig) as) =
      l  <- V.newLabel
      vs <- applySig sig as args
      ac <- assocSig sig as args
-     V.inheritContext i
+--   V.inheritContext i
      V.declareComponent i vs
      V.portMap l i ac
 

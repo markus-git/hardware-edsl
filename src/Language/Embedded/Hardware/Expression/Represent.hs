@@ -10,7 +10,7 @@ module Language.Embedded.Hardware.Expression.Represent where
 import Language.Embedded.Hardware.Expression.Represent.Bit
 
 import Language.Embedded.VHDL (VHDL, MonadV)
-import Language.Embedded.VHDL.Monad (newSym, newLibrary, newImport)
+import Language.Embedded.VHDL.Monad (newSym, addLibrary, addImport)
 import Language.Embedded.VHDL.Monad.Type
 import Language.Embedded.VHDL.Monad.Util (printBits)
 
@@ -207,20 +207,20 @@ declareType proxy = primTypeDeclare proxy >> return (primTypeRep proxy)
 -- | Declare the necessary libraries to support boolean operations.
 declareBoolean :: MonadV m => m ()
 declareBoolean =
-  do newLibrary "IEEE"
-     newImport  "IEEE.std_logic_1164"
+  do addLibrary "IEEE"
+     addImport  "IEEE.std_logic_1164"
 
 -- | Declare the necessary libraries to support numerical operations.
 declareNumeric :: MonadV m => m ()
 declareNumeric =
-  do newLibrary "IEEE"
-     newImport  "IEEE.std_logic_1164"
-     newImport  "IEEE.numeric_std"
+  do addLibrary "IEEE"
+     addImport  "IEEE.std_logic_1164"
+     addImport  "IEEE.numeric_std"
 
 -- | Declare the necessary libraries to support floating point operations.
 declareFloating :: MonadV m => m ()
 declareFloating =
-  do newLibrary "IEEE"
-     newImport  "IEEE.float_pkg"
+  do addLibrary "IEEE"
+     addImport  "IEEE.float_pkg"
 
 --------------------------------------------------------------------------------

@@ -415,7 +415,7 @@ declareRegisters (SSig _ _ sf) =
      a <- declareRegisters (sf s)
      return (ASig s a)
 declareRegisters (SArr _ _ l af) =
-  do s <- newArray (litP (Proxy :: Proxy pred) (l - 1))
+  do s <- newArray (litP (Proxy :: Proxy pred) l)
      a <- declareRegisters (af s)
      return (AArr s a)
 

@@ -9,6 +9,7 @@ module Language.Embedded.VHDL.Monad.Type
   , unconstrainedArray, constrainedArray
   -- utility.
   , typeName, typeRange, typeWidth
+  , eqType, eqRange
   , isBit, isBits, isSigned, isUnsigned, isInteger, isFloating
   ) where
 
@@ -123,14 +124,25 @@ typeRange :: Type -> Maybe Range
 typeRange (SubtypeIndication _ (TMType (NSlice (SliceName _ (DRRange r)))) _) = Just r
 typeRange _ = Nothing
 
+--------------------------------------------------------------------------------
+
+eqType :: Type -> Type -> Bool
+eqType t1 t2 = typeName t1 == typeName t2 && typeRange t1 == typeRange t2
+
+eqRange :: Range -> Range -> Bool
+eqRange (RSimple l1 To     u1) (RSimple l2 To     u2) =
+  unliteral u1 - unliteral l1 == unliteral u2 - unliteral l2
+eqRange (RSimple u1 DownTo l1) (RSimple u2 DownTo l2) =
+  unliteral u1 - unliteral l1 == unliteral u2 - unliteral l2
+eqRange _ _ = False
+  -- todo: skipped attribute names.
+
+--------------------------------------------------------------------------------
+
 -- todo: this assumes we only use numbers when specifying ranges and constraints.
 typeWidth :: Type -> Integer
 typeWidth (SubtypeIndication _ t c) = (unrange t) * (maybe 1 unconstraint c)
   where
-    unliteral :: SimpleExpression -> Integer
-    unliteral (SimpleExpression _ (Term (FacPrim (PrimLit (LitNum (NLitPhysical (PhysicalLiteral _ (NSimple (Ident i)))))) _) _) _) =
-      read i
-
     unrange :: TypeMark -> Integer
     unrange (TMType (NSlice (SliceName _ (DRRange (RSimple u DownTo l))))) =
       unliteral u - unliteral l + 1
@@ -162,5 +174,11 @@ isInteger t = "integer" == typeName t
 
 isFloating :: Type -> Bool
 isFloating t = "float" == typeName t
+
+--------------------------------------------------------------------------------
+-- Internal helper.
+
+unliteral :: SimpleExpression -> Integer
+unliteral (SimpleExpression _ (Term (FacPrim (PrimLit (LitNum (NLitPhysical (PhysicalLiteral _ (NSimple (Ident i)))))) _) _) _) = read i
 
 --------------------------------------------------------------------------------

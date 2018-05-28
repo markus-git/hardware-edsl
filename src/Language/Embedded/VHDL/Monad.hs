@@ -25,7 +25,7 @@ module Language.Embedded.VHDL.Monad (
   , freshUnique, newSym, newLabel
 
     -- ^ imports
-  , newLibrary, newImport
+  , addLibrary, addImport
 
     -- ^ ...
   , addPort
@@ -34,8 +34,7 @@ module Language.Embedded.VHDL.Monad (
   , addType,       addComponent
 
     -- ^ ...
-  , findType
-  , inheritContext
+  , lookupArray
 
     -- ^ declarations
   , declareComponent
@@ -62,7 +61,7 @@ import Language.VHDL
 import Language.Embedded.VHDL.Monad.Expression
   (eq, literal, number, simple, name, function)
 import Language.Embedded.VHDL.Monad.Type
-  (std_logic)
+  (std_logic, eqType, eqRange)
 import Language.Embedded.VHDL.Monad.Util
   (expr, primExpr, primShift, primSimple, primTerm, primFactor, maybePrimary)
 
@@ -72,11 +71,12 @@ import Control.Monad.State    (StateT, MonadState, MonadIO)
 import qualified Control.Monad.Identity as CMI
 import qualified Control.Monad.State    as CMS
 
+import Data.Char     (isLetter)
 import Data.Either   (partitionEithers)
-import Data.Maybe    (catMaybes)
+import Data.Maybe    (catMaybes, isJust)
 import Data.Foldable (toList)
 import Data.Functor  (fmap)
-import Data.List     (groupBy, isPrefixOf, stripPrefix, find)
+import Data.List     (groupBy, isPrefixOf, stripPrefix, find, partition)
 import Data.Set      (Set)
 import Data.Map      (Map)
 import qualified Data.Set as Set
@@ -99,9 +99,9 @@ data VHDLEnv = VHDLEnv
   { _unique        :: !Integer
   , _designs       :: [DesignFile]
   , _units         :: [DesignUnit]
-  , _context       :: Set ContextItem
-  , _types         :: Set TypeDeclaration
-  , _components    :: Set ComponentDeclaration
+  , _context       :: [ContextItem]
+  , _types         :: [TypeDeclaration]
+  , _components    :: [ComponentDeclaration]
   , _ports         :: [InterfaceDeclaration]
   , _constants     :: [InterfaceDeclaration]
   , _signals       :: [InterfaceDeclaration]
@@ -115,9 +115,9 @@ emptyVHDLEnv = VHDLEnv
   { _unique        = 0
   , _designs       = []
   , _units         = []
-  , _context       = Set.empty
-  , _types         = Set.empty
-  , _components    = Set.empty
+  , _context       = []
+  , _types         = []
+  , _components    = []
   , _ports         = []
   , _constants     = []
   , _signals       = []
@@ -179,60 +179,96 @@ newLabel :: MonadV m => m Label
 newLabel = do i <- freshUnique; return (Ident $ 'l' : show i)
 
 --------------------------------------------------------------------------------
+
+-- | Adds an element to a list if there's no element matching the predicate.
+add :: (a -> Bool) -> a -> [a] -> [a]
+add p a as
+  | isJust $ find p as = as
+  | otherwise          = a : as
+
+--------------------------------------------------------------------------------
 -- ** VHDL environment updates.
 
 -- | Adds a new library import to the context.
-newLibrary :: MonadV m => String -> m ()
-newLibrary l = CMS.modify $ \s -> s { _context = Set.insert item (_context s) }
+addLibrary :: MonadV m => String -> m ()
+addLibrary l = CMS.modify $ \s -> s { _context = add (cmp l) lib (_context s) }
   where
-    item :: ContextItem
-    item = ContextLibrary (LibraryClause (LogicalNameList [Ident l]))
+    lib :: ContextItem
+    lib = ContextLibrary (LibraryClause (LogicalNameList [Ident l]))
+
+    cmp :: String -> ContextItem -> Bool
+    cmp s (ContextLibrary (LibraryClause (LogicalNameList [Ident l]))) = s == l
+    cmp _ _ = False
 
 -- | Adds a new library use clause to the context (with an .ALL suffix by default).
-newImport :: MonadV m => String -> m ()
-newImport i = CMS.modify $ \s -> s { _context = Set.insert item (_context s) }
+addImport :: MonadV m => String -> m ()
+addImport i = CMS.modify $ \s -> s { _context = add (cmp i) imp (_context s) }
   where
-    item :: ContextItem
-    item = ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) (SAll)])
+    imp :: ContextItem
+    imp = ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) SAll])
+
+    cmp :: String -> ContextItem -> Bool
+    cmp s (ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) _])) = s == i
+    cmp _ _ = False
 
 -- | Adds a type declaration.
 addType :: MonadV m => TypeDeclaration -> m ()
-addType t = CMS.modify $ \s -> s { _types = Set.insert t (_types s) }
+addType t = CMS.modify $ \s -> s { _types = t : _types s }
 
 -- | Adds a component declaration.
 addComponent :: MonadV m => ComponentDeclaration -> m ()
-addComponent c = CMS.modify $ \s -> s { _components = Set.insert c (_components s) }
+addComponent c = CMS.modify $ \s -> s { _components = c : _components s }
 
 -- | Adds a port declaration.
 addPort :: MonadV m => InterfaceDeclaration -> m ()
-addPort p = CMS.modify $ \s -> s { _ports = p : (_ports s) }
+addPort p = CMS.modify $ \s -> s { _ports = p : _ports s }
 
 -- | ...
 addConstant :: MonadV m => InterfaceDeclaration -> m ()
-addConstant c = CMS.modify $ \s -> s { _constants = c : (_constants s) }
+addConstant c = CMS.modify $ \s -> s { _constants = c : _constants s }
 
 -- | Adds a global declaration.
 addSignal :: MonadV m => InterfaceDeclaration -> m ()
-addSignal v = CMS.modify $ \s -> s { _signals = v : (_signals s) }
+addSignal v = CMS.modify $ \s -> s { _signals = v : _signals s }
 
 -- | Adds a local declaration.
 --addVariable :: MonadV m => BlockDeclarativeItem -> m ()
 addVariable :: MonadV m => InterfaceDeclaration -> m ()
-addVariable v = CMS.modify $ \s -> s { _variables = v : (_variables s) }
+addVariable v = CMS.modify $ \s -> s { _variables = v : _variables s }
 
 -- | Adds a concurrent statement.
 addConcurrent :: MonadV m => ConcurrentStatement -> m ()
-addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : (_concurrent s) }
+addConcurrent con = CMS.modify $ \s -> s { _concurrent = con : _concurrent s }
 
 -- | Adds a sequential statement.
 addSequential :: MonadV m => SequentialStatement -> m ()
-addSequential seq = CMS.modify $ \s -> s { _sequential = seq : (_sequential s) }
+addSequential seq = CMS.modify $ \s -> s { _sequential = seq : _sequential s }
 
 --------------------------------------------------------------------------------
 -- ** ...
---
--- having units be indexed by their names would help.
 
+lookupArray :: MonadV m => TypeDeclaration -> m (Maybe Identifier)
+lookupArray t =
+  do types <- CMS.gets _types
+     return $ case find (compareTypeDecl t) types of
+       Just (TDFull (FullTypeDeclaration i _))  -> Just i
+       Nothing -> Nothing
+  where
+    compareTypeDecl :: TypeDeclaration -> TypeDeclaration -> Bool
+    compareTypeDecl
+        (TDFull (FullTypeDeclaration _ (TDComposite (CTDArray t1))))
+        (TDFull (FullTypeDeclaration _ (TDComposite (CTDArray t2))))
+      = compareType t1 t2
+    compareTypeDecl _ _ = False
+
+    compareType :: ArrayTypeDefinition -> ArrayTypeDefinition -> Bool
+    compareType
+      (ArrC (ConstrainedArrayDefinition (IndexConstraint [DRRange r1]) t1))
+      (ArrC (ConstrainedArrayDefinition (IndexConstraint [DRRange r2]) t2))
+      = eqType t1 t2 && eqRange r1 r2
+    compareType _ _ = False
+
+{-
 inheritContext :: MonadV m => Identifier -> m ()
 inheritContext e =
   do u <- findEntity e
@@ -287,9 +323,6 @@ extendContext e =
     extend :: ContextItem -> [ContextItem] -> [ContextItem]
     extend c cs = if (elem c cs) then (cs) else (cs ++ [c])
 
---------------------------------------------------------------------------------
--- ** ...
-
 findType :: MonadV m => TypeDeclaration -> m (Maybe Identifier)
 findType t =
   do set <- CMS.gets $ \s -> Set.filter (\t' -> compare t t' == EQ) (_types s)
@@ -310,7 +343,7 @@ findEntity e =
     safeHead :: [a] -> Maybe a
     safeHead []    = Nothing
     safeHead (x:_) = Just x
-                     
+-}                     
 --------------------------------------------------------------------------------
 
 getUnits :: DesignFile -> [DesignUnit]
@@ -522,11 +555,11 @@ addDesign d = CMS.modify $ \s -> s { _designs = d : (_designs s) }
 -- | Design unit with context.
 addUnit :: MonadV m => LibraryUnit -> m ()
 addUnit lib =
-  do ctxt <- CMS.gets _context
-     dsig <- CMS.gets _units
-     let item = DesignUnit (ContextClause (Set.toList ctxt)) lib
+  do dsig <- CMS.gets _units
+     ctxt <- CMS.gets _context
+     let item = DesignUnit (ContextClause ctxt) lib
      CMS.modify $ \s -> s { _units   = item : dsig
-                          , _context = Set.empty
+                          , _context = []
                           }
 
 -- | Design unit ignoring context.
@@ -545,27 +578,23 @@ architecture entity@(Ident n) name@(Ident e) m =
      oldGlobal     <- CMS.gets _signals
      oldConcurrent <- CMS.gets _concurrent
      oldSequential <- CMS.gets _sequential
-     oldTypes      <- CMS.gets _types
      oldComponents <- CMS.gets _components
      CMS.modify $ \e -> e { _constants  = []
                           , _signals    = []
                           , _concurrent = []
                           , _sequential = []
-                          , _types      = Set.empty
-                          , _components = Set.empty }
+                          , _components = [] }
      result        <- m
      newConstants  <- reverse <$> CMS.gets _constants
      newGlobal     <- reverse <$> CMS.gets _signals
      newConcurrent <- reverse <$> CMS.gets _concurrent
      newSequential <- reverse . filter isSignal <$> CMS.gets _sequential
-     newTypes      <- fmap BDIType . Set.toList <$> CMS.gets _types
-     newComponents <- fmap BDIComp . Set.toList <$> CMS.gets _components
+     newComponents <- fmap BDIComp <$> CMS.gets _components
      let signals   =  fmap translateSequential newSequential
      addUnit_ $ LibrarySecondary $ SecondaryArchitecture $
            ArchitectureBody (name)
              (NSimple entity)
-             (newTypes -- merge
-                ++ newComponents
+             (newComponents -- ++ newTypes
                 ++ fmap translateInterface newGlobal
                 ++ fmap translateInterface newConstants)
              (signals ++ newConcurrent)
@@ -573,9 +602,8 @@ architecture entity@(Ident n) name@(Ident e) m =
                           , _signals    = oldGlobal
                           , _concurrent = oldConcurrent
                           , _sequential = oldSequential
-                          , _types      = oldTypes
                           , _components = oldComponents }
-     extendContext entity
+--   extendContext entity
      return result
   where
     isSignal :: SequentialStatement -> Bool
@@ -589,35 +617,18 @@ architecture entity@(Ident n) name@(Ident e) m =
 --   declaraions and context items produced by running the monadic action.
 entity :: MonadV m => Identifier -> m a -> m a
 entity name@(Ident n) m =
-  do oldTypes    <- CMS.gets _types
-     oldPorts    <- CMS.gets _ports
-     CMS.modify $ \e -> e { _types = Set.empty
-                          , _ports = [] }
+  do oldPorts    <- CMS.gets _ports
+     CMS.modify $ \e -> e { _ports = [] }
      result      <- m
-     newTypes    <- CMS.gets _types
      newPorts    <- reverse <$> CMS.gets _ports
-     CMS.when (P.not $ Set.null newTypes) $
-       do let packageName = n ++ "_types"
-          ctxt <- CMS.gets _context
-          addUnit    $ packageTypes packageName newTypes
-          CMS.modify $ \s -> s { _context = ctxt }
-          newImport  $ "WORK." ++ packageName
-     addUnit $ LibraryPrimary $ PrimaryEntity $
-           EntityDeclaration name
-             (EntityHeader (Nothing) (PortClause <$> maybeNull newPorts))
-             ([])
-             (Nothing)
-     CMS.modify $ \e -> e { _types = oldTypes
-                          , _ports = oldPorts }
+     addUnit $ LibraryPrimary $ PrimaryEntity $ EntityDeclaration name
+       (EntityHeader (Nothing) (PortClause <$> maybeNull newPorts)) [] Nothing
+     CMS.modify $ \e -> e { _ports = oldPorts }
      return result
-
-maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
-maybeNull [] = Nothing
-maybeNull xs = Just $ InterfaceList $ xs --merge ...
-
-packageTypes :: String -> Set TypeDeclaration -> LibraryUnit
-packageTypes name types = LibraryPrimary $ PrimaryPackage $ PackageDeclaration
-  (Ident name) (fmap PHDIType (reverse $ Set.toList types))
+  where
+    maybeNull :: [InterfaceDeclaration] -> Maybe InterfaceList
+    maybeNull [] = Nothing
+    maybeNull xs = Just $ InterfaceList $ xs --merge ...
 
 --------------------------------------------------------------------------------
 -- ** Packages
@@ -627,12 +638,16 @@ packageTypes name types = LibraryPrimary $ PrimaryPackage $ PackageDeclaration
 package :: MonadV m => String -> m a -> m a
 package name m =
   do oldTypes <- CMS.gets _types
-     CMS.modify $ \e -> e { _types = Set.empty }
+     CMS.modify $ \e -> e { _types = [] }
      result   <- m
      newTypes <- CMS.gets _types
      addUnit $ packageTypes name newTypes
      CMS.modify $ \e -> e { _types = oldTypes }
      return result
+  where
+    packageTypes :: String -> [TypeDeclaration] -> LibraryUnit
+    packageTypes name types = LibraryPrimary $ PrimaryPackage $ PackageDeclaration
+      (Ident name) (fmap PHDIType (reverse types))
 
 --------------------------------------------------------------------------------
 -- ** Component.
@@ -660,7 +675,17 @@ prettyVHDL = CMI.runIdentity . prettyVHDLT
 
 -- | Runs the VHDL monad transformer and pretty prints its resulting VHDL program.
 prettyVHDLT :: Monad m => VHDLT m a -> m Doc
-prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
+prettyVHDLT m = prettyVEnv <$> execVHDLT (packageTypes m) emptyVHDLEnv
+  where
+    -- todo: importing like this is a bity "cheaty", as its assumets we know
+    --       what kind of types will be packages.
+    packageTypes :: Monad m => VHDLT m a -> VHDLT m a
+    packageTypes m = package "types" $ do
+      result <- m
+      addLibrary "IEEE"
+      addImport  "IEEE.std_logic_1164"
+      addImport  "IEEE.numeric_std"
+      return result
 
 --------------------------------------------------------------------------------
 
@@ -668,33 +693,33 @@ prettyVHDLT m = prettyVEnv <$> execVHDLT m emptyVHDLEnv
 prettyVEnv :: VHDLEnv -> Doc
 prettyVEnv env = Text.vcat (pp main : fmap pp files)
   where
-    main  = DesignFile units
-    units = _units env
+    main  = reorderDesign $ DesignFile $ _units env
     files = map reorderDesign $ _designs env
 
 --------------------------------------------------------------------------------
 
 reorderDesign :: DesignFile -> DesignFile
-reorderDesign (DesignFile units) = DesignFile (reverse units)
+reorderDesign (DesignFile units) = DesignFile $ map reorderUnit units
 
 reorderUnit :: DesignUnit -> DesignUnit
-reorderUnit (DesignUnit ctxt lib) = DesignUnit
-  (reorderContext ctxt)
-  (reorderLibrary lib)
+reorderUnit (DesignUnit ctxt lib) = DesignUnit (reorderContext ctxt) lib
 
--- todo : reverse at the level of design file instead.
-reorderLibrary :: LibraryUnit -> LibraryUnit
-reorderLibrary (LibraryPrimary prim)     = LibraryPrimary prim
-reorderLibrary (LibrarySecondary second) = LibrarySecondary second
-
--- todo : reverse instead?
 reorderContext :: ContextClause -> ContextClause
-reorderContext (ContextClause items) = ContextClause (reorder items [])
+reorderContext (ContextClause items) = ContextClause $ concatMap reorder $ groupBy prefix $ reverse items
   where
-    reorder :: [ContextItem] -> [ContextItem] -> [ContextItem]
-    reorder [] rs = rs
-    reorder (lib@(ContextLibrary _) : cs) rs = lib : (rs ++ cs)
-    reorder (use@(ContextUse _)     : cs) rs = reorder (use : rs) cs
+    prefix :: ContextItem -> ContextItem -> Bool
+    prefix a b = prefixOf a == prefixOf b
+      where
+        prefixOf :: ContextItem -> String
+        prefixOf (ContextLibrary (LibraryClause (LogicalNameList [Ident l])))          = l
+        prefixOf (ContextUse (UseClause [SelectedName (PName (NSimple (Ident i))) _])) = takeWhile isLetter i
+
+    reorder :: [ContextItem] -> [ContextItem]
+    reorder cs = let (l, u) = partition isLib cs in l ++ u
+      where
+        isLib :: ContextItem -> Bool
+        isLib (ContextLibrary _) = True
+        isLib _ = False
 
 --------------------------------------------------------------------------------
 -- * Common things
@@ -839,7 +864,7 @@ getBlockIds (BDIFile     f) = fd_identifier_list f
 --------------------------------------------------------------------------------
 --
 -- todo: don't rely on these too much.
-
+{-
 deriving instance Ord ContextItem
 deriving instance Ord LibraryClause
 deriving instance Ord LogicalNameList
@@ -1000,5 +1025,5 @@ deriving instance Ord BitStringLiteral
 
 deriving instance Ord Exponent
 deriving instance Ord BasedLiteral
-
+-}
 --------------------------------------------------------------------------------
