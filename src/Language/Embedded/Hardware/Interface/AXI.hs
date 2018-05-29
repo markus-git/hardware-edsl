@@ -492,7 +492,7 @@ loadInputs waddr rwren wdata wren addr_lsb addr_bits sig arg =
        in new : cases (ix + 1) (sf s) arg
     cases ix (SArr _ In  l af) (AArr a arg) =
       let len = P.toInteger l
-          new = map (\i -> is i (loadInputArray wdata wren a i)) [ix..ix+len-1]
+          new = map (\(i, j) -> is i (loadInputArray wdata wren a j)) $ zip [ix..ix+len-1] [0..]
        in new ++ cases (ix + len) (af a) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
@@ -564,7 +564,7 @@ loadOutputs araddr rout addr_lsb addr_bits sig arg =
        in new : cases (ix + 1) (sf s) arg
     cases ix (SArr _ Out l af) (AArr a arg) =
       let len = P.toInteger l
-          new = map (\i -> is i (loadOutputArray rout a i)) [ix..ix+len-1]
+          new = map (\(i, j) -> is i (loadOutputArray rout a j)) $ zip [ix..ix+len-1] [0..]
        in new ++ cases (ix + len) (af a) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
@@ -654,77 +654,4 @@ ones :: forall exp n. (Primary exp, Typeable n, KnownNat n) => exp (Bits n)
 ones = value $ bitFromInteger (2 ^ size - 1)
   where size = fromIntegral (ni (Proxy::Proxy n))
 
---------------------------------------------------------------------------------
--- Program stubs.
---------------------------------------------------------------------------------
-{-
-loadInputs wdata wren tmp i (SSig _ In sf) (ASig s arg) =
-    When (Is i) cases : loadInputs wdata wren tmp (i+1) (sf s) arg
-  where
-    size :: Integer
-    size = bits s
-
-    loadBit :: Prog instr exp pred ()
-    loadBit = do
-      wb <- getBit wren (0 :: exp Integer)
-      undefined
-      when (isHigh wb) $
-        do bit <- getBit wdata (0 :: exp Integer)
-           setBit s (0 :: exp Integer) bit
-
-    loadBits :: Integer -> Integer -> Prog instr exp pred ()
-    loadBits ix len = do
-      wb <- getBit wren (value ix)
-      undefined
-      when (isHigh wb) $
-        copyBits (s, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
-
-    cases :: Prog instr exp pred ()
-    cases | size == 1 = loadBit
-          | otherwise = sequence_ $ map (uncurry loadBits) $ zip [0..] $ chunk size
-loadInputs wdata wren tmp i (SArr _ Out l af) (AArr a arg) =
-    loadInputs wdata wren tmp (i+(Prelude.toInteger l)) (af a) arg
-loadInputs wdata wren tmp i (SArr _ In l af) (AArr (a :: Array i b) arg)
-    let cs = map (\ix -> When (Is $ i+ix) $ cases ix) [0..l'-1]
-     in cs ++ loadInputs wdata wren tmp (i+l') (af a) arg
-  where
-    l', size :: Integer
-    l'   = Prelude.toInteger l    
-    size = bits a
-
-    loadBit :: Integer -> Prog instr exp pred ()
-    loadBit ax = error "axi-todo: loadBit for array."
-
-    loadBits :: Integer -> Integer -> Integer -> Prog instr exp pred ()
-    loadBits ax ix len = do
-      wb <- getBit wren (value ix)
-      when (isHigh wb) $
-        copyVBits (tmp, value $ ix*8) (wdata, value $ ix*8) (value $ len-1)
-
-    cases :: Integer -> Prog instr exp pred ()
-    cases ax | size == 1 = loadBit ax
-             | otherwise = do
-      sequence_ $ map (uncurry $ loadBits ax) $ zip [0..] $ chunk size
-      val :: exp (Bits 32) <- unsafeFreezeVariable tmp
-      let ix = litE (fromInteger ax) :: exp i
-      let b  = fromBits val          :: exp b
-      undefined --setArray a ix b
--}
-{-
-loadOutputs o i (Ret _) (Nil) = []
-loadOutputs o i (SSig _ Out sf) (ASig s arg) =
-  let p = setSignal o . toBits =<< unsafeFreezeSignal s
-   in When (Is i) p : loadOutputs o (i+1) (sf s) arg
-loadOutputs o i (SSig _ _ sf) (ASig s arg) =
-  loadOutputs o (i+1) (sf s) arg
-loadOutputs o i (SArr _ Out l af) (AArr a arg) =
-  let f ix = When (Is ix) (setSignal o . toBits =<< getArray a (value ix))
-   in map f [i..i+l-1] ++ loadOutputs o (i+l) (af a) arg
-loadOutputs o i (SArr _ _ l af) (AArr a arg) =
-  loadOutputs o (i+l) (af a) arg
-
-chunk :: Integer -> [Integer]
-chunk i | i >  8 = 8 : chunk (i - 8)
-        | i <= 8 = [i]
--}
 --------------------------------------------------------------------------------
