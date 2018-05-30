@@ -406,7 +406,14 @@ nil = Nil
   -> Argument pred (Signal a -> b)
 (+:) x xs = ASig x xs
 
-infixr +:
+(++:) :: ( pred a, Integral a, PrimType a
+         , pred i, Integral i, PrimType i, Ix i)
+  => Array i a
+  -> Argument pred b
+  -> Argument pred (Array i a -> b)
+(++:) x xs = AArr x xs
+
+infixr +:, ++:
 
 --------------------------------------------------------------------------------
 
