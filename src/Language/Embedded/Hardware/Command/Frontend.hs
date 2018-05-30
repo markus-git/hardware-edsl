@@ -63,6 +63,11 @@ unsafeFreezeSignal :: (SignalCMD :<: instr, pred a, FreeExp exp, PredicateExp ex
   => Signal a -> ProgramT instr (Param2 exp pred) m (exp a)
 unsafeFreezeSignal = fmap valToExp . singleInj . UnsafeFreezeSignal
 
+-- | Read the value of a signal without the monad in a very unsafe fashion.
+veryUnsafeFreezeSignal :: (PredicateExp exp a, FreeExp exp) => Signal a -> exp a
+veryUnsafeFreezeSignal (SignalE r) = litE $! unsafePerformIO $! readIORef r
+veryUnsafeFreezeSignal (SignalC v) = varE v
+
 --------------------------------------------------------------------------------
 -- short-hands.
 
@@ -174,6 +179,33 @@ copyArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
   -> ProgramT instr (Param2 exp pred) m ()
 copyArray dest src = singleInj . CopyArray dest src
 
+-- | Freeze an array into an immutable one by copying.
+freezeArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i, Num (exp i), Monad m)
+  => Array i a -> exp i -> ProgramT instr (Param2 exp pred) m (IArray i a)
+freezeArray array len =
+  do copy <- newArray len
+     copyArray (copy,0) (array,0) len
+     unsafeFreezeArray copy
+
+-- | Thaw an immutable array into a mutable one by copying.
+thawArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i, Num (exp i), Monad m)
+  => IArray i a -> exp i -> ProgramT instr (Param2 exp pred) m (Array i a)
+thawArray iarray len =
+  do array <- unsafeThawArray iarray
+     copy  <- newArray len
+     copyArray (copy,0) (array,0) len
+     return copy
+
+-- | Freeze a mutable array to an immutable one wothout making a copy.
+unsafeFreezeArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => Array i a -> ProgramT instr (Param2 exp pred) m (IArray i a)
+unsafeFreezeArray = singleInj . UnsafeFreezeArray
+
+-- | Thaw an immutable array to a mutable array without making a copy.
+unsafeThawArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
+  => IArray i a -> ProgramT instr (Param2 exp pred) m (Array i a)
+unsafeThawArray = singleInj . UnsafeThawArray
+
 -- | ...
 resetArray :: (ArrayCMD :<: instr, pred a, Integral i, Ix i)
   => Array i a -> exp a -> ProgramT instr (Param2 exp pred) m ()
@@ -237,12 +269,12 @@ thawVArray iarray len =
      copyVArray (copy,0) (array,0) len
      return copy
 
--- | Freeze a mutable array to an immuatable one without making a copy.
+-- | Freeze a mutable variable array to an immuatable one without making a copy.
 unsafeFreezeVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
   => VArray i a -> ProgramT instr (Param2 exp pred) m (IArray i a)
 unsafeFreezeVArray = singleInj . UnsafeFreezeVArray
 
--- | Thaw an immutable array to a mutable one without making a copy.
+-- | Thaw an immutable array to a mutable variable array without making a copy.
 unsafeThawVArray :: (VArrayCMD :<: instr, pred a, Integral i, Ix i)
   => IArray i a -> ProgramT instr (Param2 exp pred) m (VArray i a)
 unsafeThawVArray = singleInj . UnsafeThawVArray
@@ -500,28 +532,6 @@ infixr .:
 --------------------------------------------------------------------------------
 -- ** VHDL specific instructions.
 --------------------------------------------------------------------------------
-
-{-
--- | Declare port signals of the given mode and assign it initial value.
-initNamedPort, initExactPort :: (VHDLCMD :<: instr, pred a)
-  => String -> exp a -> Mode  -> ProgramT instr (Param2 exp pred) m (Signal a)
-initNamedPort name e = singleInj . DeclarePort (Base  name) (Just e)
-initExactPort name e = singleInj . DeclarePort (Exact name) (Just e)
-
-initPort :: (VHDLCMD :<: instr, pred a)
-  => exp a -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
-initPort = initNamedPort "port"
-
--- | Declare port signals of the given mode.
-newNamedPort, newExactPort :: (VHDLCMD :<: instr, pred a)
-  => String -> Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
-newNamedPort name = singleInj . DeclarePort (Base  name) Nothing
-newExactPort name = singleInj . DeclarePort (Exact name) Nothing
-
-newPort :: (VHDLCMD :<: instr, pred a)
-  => Mode -> ProgramT instr (Param2 exp pred) m (Signal a)
-newPort = newNamedPort "port"
--}
 
 --------------------------------------------------------------------------------
 -- *** Bit operations.

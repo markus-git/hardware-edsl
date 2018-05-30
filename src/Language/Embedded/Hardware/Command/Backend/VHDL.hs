@@ -337,6 +337,8 @@ compileArray (CopyArray (ArrayC a, oa) (ArrayC b, ob) l) =
          dest    = slice  a $ range oa' V.downto $ lift $ lower_a
          src     = slice' b $ range ob' V.downto $ lift $ lower_b
      V.assignSignal dest src
+compileArray (UnsafeFreezeArray (ArrayC a)) = return $ IArrayC a
+compileArray (UnsafeThawArray (IArrayC a)) = return $ ArrayC a
 compileArray (ResetArray (ArrayC a) rst) =
   do rst' <- compER rst
      t    <- compTC (Proxy :: Proxy ct) (proxyE rst)

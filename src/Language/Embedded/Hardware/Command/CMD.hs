@@ -169,6 +169,10 @@ data ArrayCMD fs a
     SetArray :: (pred a, Integral i, Ix i) => Array i a -> exp i -> exp a -> ArrayCMD (Param3 prog exp pred) ()
     -- ^ Copies a slice from the second array into the first.
     CopyArray :: (pred a, Integral i, Ix i) => (Array i a, exp i) -> (Array i a, exp i) -> exp i -> ArrayCMD (Param3 prog exp pred) ()
+    -- ^ ...
+    UnsafeFreezeArray :: (pred a, Integral i, Ix i) => Array i a -> ArrayCMD (Param3 prog exp pred) (IArray i a)
+    -- ^ ...
+    UnsafeThawArray :: (pred a, Integral i, Ix i) => IArray i a -> ArrayCMD (Param3 prog exp pred) (Array i a)
     -- ^ Writes a value to all indicies of the array.
     ResetArray :: (pred a, Integral i, Ix i) => Array i a -> exp a -> ArrayCMD (Param3 prog exp pred) ()
 
@@ -179,6 +183,8 @@ instance HFunctor ArrayCMD
     hfmap _ (GetArray a i) = GetArray a i
     hfmap _ (SetArray a i e) = SetArray a i e
     hfmap _ (CopyArray a b l) = CopyArray a b l
+    hfmap _ (UnsafeFreezeArray a) = UnsafeFreezeArray a
+    hfmap _ (UnsafeThawArray a) = UnsafeThawArray a
     -- ...
     hfmap _ (ResetArray a r) = ResetArray a r
 
@@ -189,6 +195,8 @@ instance HBifunctor ArrayCMD
     hbimap _ f (GetArray a i) = GetArray a (f i)
     hbimap _ f (SetArray a i e) = SetArray a (f i) (f e)
     hbimap _ f (CopyArray (a, oa) (b, ob) l) = CopyArray (a, f oa) (b, f ob) (f l)
+    hbimap _ _ (UnsafeFreezeArray a) = UnsafeFreezeArray a
+    hbimap _ _ (UnsafeThawArray a) = UnsafeThawArray a
     -- ...
     hbimap _ f (ResetArray a r) = ResetArray a (f r)
 
@@ -205,6 +213,10 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
     reexpressInstrEnv reexp (CopyArray (a, oa) (b, ob) l)
       = do oa' <- reexp oa; ob' <- reexp ob; l' <- reexp l
            lift $ singleInj $ CopyArray (a, oa') (b, ob') l'
+    reexpressInstrEnv reexp (UnsafeFreezeArray a)
+      = lift $ singleInj $ UnsafeFreezeArray a
+    reexpressInstrEnv reexp (UnsafeThawArray a)
+      = lift $ singleInj $ UnsafeThawArray a
     -- ...
     reexpressInstrEnv reexp (ResetArray a r)
       = do r' <- reexp r; lift $ singleInj $ ResetArray a r'
