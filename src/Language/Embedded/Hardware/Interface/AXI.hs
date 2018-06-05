@@ -368,7 +368,7 @@ axi_light_impl comp
        -- Memory mapped rigister select and
        -- read logic generaiton.
        --
-       processR (araddr .: mOutputs) (return ()) (mWrite)
+       process (araddr .: mOutputs) (mWrite)
 
        ----------------------------------------
        -- Output register of memory read data.
@@ -393,7 +393,11 @@ axi_light_impl comp
     -- contains one element).
     addr_lsb, addr_bits :: Integer
     addr_lsb  = 2 -- always '2' for a 32-bit bus.
-    addr_bits = floor $ logBase 2.0 $ fromIntegral $ widthOf comp
+    addr_bits = bits $ widthOf comp
+      where
+        bits 0 = 0
+        bits 1 = 0
+        bits x = floor $ logBase 2.0 $ fromIntegral x
 
     -- AXI-lite constants.
     axi_data_width, axi_addr_width :: Integer
@@ -557,12 +561,15 @@ loadOutputs araddr rout addr_lsb addr_bits sig arg =
           -> Argument pred b
           -> [When Integer (Prog instr exp pred)]
     cases ix (Ret _) (Nil) = []
-    cases ix (SSig _ In    sf) (ASig s arg) = cases (ix + 1)             (sf s) arg
-    cases ix (SArr _ In  l af) (AArr a arg) = cases (ix + P.toInteger l) (af a) arg
-    cases ix (SSig _ Out   sf) (ASig s arg) =
+-- todo: due to a bug in the Xilinx tools I use (Vivado 2015.4), we cannot skip
+--       any cases. So even if a signal is tagged as an input singal, it must be
+--       part of the generated case statement to avoid holes.
+--    cases ix (SSig _ In    sf) (ASig s arg) = cases (ix + 1)             (sf s) arg
+--    cases ix (SArr _ In  l af) (AArr a arg) = cases (ix + P.toInteger l) (af a) arg
+    cases ix (SSig _ _   sf) (ASig s arg) =
       let new = is (ix) (loadOutputSignal rout s)
        in new : cases (ix + 1) (sf s) arg
-    cases ix (SArr _ Out l af) (AArr a arg) =
+    cases ix (SArr _ _ l af) (AArr a arg) =
       let len = P.toInteger l
           new = map (\(i, j) -> is i (loadOutputArray rout a j)) $ zip [ix..ix+len-1] [0..]
        in new ++ cases (ix + len) (af a) arg
