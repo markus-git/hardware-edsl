@@ -393,7 +393,12 @@ axi_light_impl comp
     -- contains one element).
     addr_lsb, addr_bits :: Integer
     addr_lsb  = 2 -- always '2' for a 32-bit bus.
-    addr_bits = floor $ (1+) $ logBase 2.0 $ fromIntegral $ widthOf comp
+    addr_bits = bits (widthOf comp) - 1
+      where
+        bits :: Integer -> Integer
+        bits 0 = 1
+        bits 1 = 1
+        bits x = floor $ (1+) $ logBase 2.0 $ fromIntegral x
 
     -- AXI-lite constants.
     axi_data_width, axi_addr_width :: Integer
@@ -562,8 +567,9 @@ loadOutputs araddr rout addr_lsb addr_bits sig arg =
 --    cases ix (Ret _) (Nil) = []
 --    cases ix (SSig _ In    sf) (ASig s arg) = cases (ix + 1)             (sf s) arg
 --    cases ix (SArr _ In  l af) (AArr a arg) = cases (ix + P.toInteger l) (af a) arg
-    cases ix (Ret _) (Nil) =
-      [to ix addr_max (resetOut)]
+    cases ix (Ret _) (Nil)
+      | ix < addr_max = to ix addr_max (resetOut) : []
+      | otherwise     = []
     cases ix (SSig _ In    sf) (ASig s arg) =
       is ix (resetOut) : cases (ix + 1) (sf s) arg
     cases ix (SArr _ In  l af) (AArr a arg) = let len = P.toInteger l in
