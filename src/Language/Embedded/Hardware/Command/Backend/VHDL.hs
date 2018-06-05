@@ -313,7 +313,8 @@ compileArray (NewArray base len) =
      return (ArrayC i)
 compileArray (InitArray base is) =
   do i <- newSym base
-     t <- compTA (Proxy :: Proxy ct) (rangePoint (length is - 1)) (undefined :: a)
+     let len = V.sub [lift $ V.literal $ V.number $ show $ length is, lift $ V.literal $ V.number "1"]
+     t <- compTA (Proxy :: Proxy ct) (rangeZero (lift len)) (undefined :: a)
      x <- mapM (compBC (Proxy::Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
      V.array (ident' i) V.InOut t (Just $ lift v)
@@ -332,10 +333,10 @@ compileArray (CopyArray (ArrayC a, oa) (ArrayC b, ob) l) =
   do oa' <- compER oa
      ob' <- compER ob
      len <- compER l
-     let lower_a = V.add [unpackTerm len, unpackTerm oa']
-         lower_b = V.add [unpackTerm len, unpackTerm ob']
-         dest    = slice  a $ range oa' V.downto $ lift $ lower_a
-         src     = slice' b $ range ob' V.downto $ lift $ lower_b
+     let upper_a = V.add [unpackTerm len, unpackTerm oa']
+         upper_b = V.add [unpackTerm len, unpackTerm ob']
+         dest    = slice  a $ range (lift upper_a) V.downto oa'
+         src     = slice' b $ range (lift upper_b) V.downto ob'
      V.assignSignal dest src
 compileArray (UnsafeFreezeArray (ArrayC a)) = return $ IArrayC a
 compileArray (UnsafeThawArray (IArrayC a)) = return $ ArrayC a
@@ -373,7 +374,8 @@ compileVArray (NewVArray base len) =
      return (VArrayC i)
 compileVArray (InitVArray base is) =
   do i <- newSym base
-     t <- compTA (Proxy :: Proxy ct) (rangePoint (length is - 1)) (undefined :: a)
+     let len = V.sub [lift $ V.literal $ V.number $ show $ length is, lift $ V.literal $ V.number "1"]
+     t <- compTA (Proxy :: Proxy ct) (rangeZero (lift len)) (undefined :: a)
      x <- mapM (compBC (Proxy :: Proxy ct)) is
      let v = V.aggregate $ V.aggregated x
      V.variable (ident' i) t (Just $ lift v)
@@ -631,7 +633,8 @@ traverseSig clk rst is (SSig n m sf) =
      traverseSig clk rst (i : is) (sf (SignalC i))
 traverseSig clk rst is (SArr n m l af) =
   do i <- newSym n
-     t <- compTA (Proxy :: Proxy ct) (rangePoint l) (proxyF af)
+     let len = V.sub [lift $ V.literal $ V.number $ show l, lift $ V.literal $ V.number "1"]
+     t <- compTA (Proxy :: Proxy ct) (rangeZero (lift len)) (proxyF af)
      V.port (ident' i) m t Nothing
      traverseSig clk rst (i : is) (af (ArrayC i))
 
@@ -650,7 +653,8 @@ applySig (SSig _ m sf) (ASig s@(SignalC _) v) (n:ns) =
      let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
      return (i : is)
 applySig (SArr _ m l af) (AArr a@(ArrayC _) v) (n:ns) =
-  do t  <- compTA (Proxy :: Proxy ct) (rangePoint l) (proxyF af)
+  do let len = V.sub [lift $ V.literal $ V.number $ show l, lift $ V.literal $ V.number "1"]
+     t  <- compTA (Proxy :: Proxy ct) (rangeZero (lift len)) (proxyF af)
      is <- applySig (af a) v ns
      let i = V.InterfaceSignalDeclaration [ident' n] (Just m) t False Nothing
      return (i : is)

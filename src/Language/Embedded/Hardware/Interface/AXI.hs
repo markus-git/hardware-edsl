@@ -393,11 +393,7 @@ axi_light_impl comp
     -- contains one element).
     addr_lsb, addr_bits :: Integer
     addr_lsb  = 2 -- always '2' for a 32-bit bus.
-    addr_bits = bits $ widthOf comp
-      where
-        bits 0 = 0
-        bits 1 = 0
-        bits x = floor $ logBase 2.0 $ fromIntegral x
+    addr_bits = floor $ (1+) $ logBase 2.0 $ fromIntegral $ widthOf comp
 
     -- AXI-lite constants.
     axi_data_width, axi_addr_width :: Integer
@@ -457,7 +453,7 @@ reloadInputs (SSig _ In    sf) (ASig (s :: Signal b) arg) =
       setSignal s sv
       reloadInputs (sf s) arg
 reloadInputs (SArr _ In  l af) (AArr a arg) =
-  do copyArray (a, lit 0) (a, lit 0) (lit l)
+  do copyArray (a, lit 0) (a, lit 0) (lit $ l - 1)
      reloadInputs (af a) arg
   where
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
@@ -477,7 +473,7 @@ loadInputs :: forall instr (exp :: * -> *) pred a . AXIPred instr exp pred
   -> Argument pred a
   -> Prog instr exp pred ()
 loadInputs waddr rwren wdata wren addr_lsb addr_bits sig arg =
-  do loc   <- getBits waddr (lit addr_lsb) (lit addr_bits)
+  do loc   <- getBits waddr (lit addr_lsb) (lit $ addr_bits - 1)
      ready <- unsafeFreezeSignal rwren
      when (isHigh ready) $
        switched loc
@@ -551,31 +547,43 @@ loadOutputs :: forall instr (exp :: * -> *) pred a . AXIPred instr exp pred
   -> Argument pred a
   -> Prog instr exp pred ()
 loadOutputs araddr rout addr_lsb addr_bits sig arg =
-  do loc <- getBits araddr (lit addr_lsb) (lit addr_bits)
+  do loc <- getBits araddr (lit addr_lsb) (lit $ addr_bits - 1)
      switched loc
        (cases 0 sig arg)
-       (setSignal rout (litP (Proxy :: Proxy pred) reset))
+       (resetOut)
   where
     cases :: Integer
           -> Sig instr exp pred Identity b
           -> Argument pred b
           -> [When Integer (Prog instr exp pred)]
-    cases ix (Ret _) (Nil) = []
 -- todo: due to a bug in the Xilinx tools I use (Vivado 2015.4), we cannot skip
---       any cases. So even if a signal is tagged as an input singal, it must be
---       part of the generated case statement to avoid holes.
+-- any cases. So even if a signal is tagged as an input singal, it must be
+-- part of the generated case statement to avoid holes. That is, we can't have:
+--    cases ix (Ret _) (Nil) = []
 --    cases ix (SSig _ In    sf) (ASig s arg) = cases (ix + 1)             (sf s) arg
 --    cases ix (SArr _ In  l af) (AArr a arg) = cases (ix + P.toInteger l) (af a) arg
-    cases ix (SSig _ _   sf) (ASig s arg) =
-      let new = is (ix) (loadOutputSignal rout s)
+    cases ix (Ret _) (Nil) =
+      [to ix addr_max (resetOut)]
+    cases ix (SSig _ In    sf) (ASig s arg) =
+      is ix (resetOut) : cases (ix + 1) (sf s) arg
+    cases ix (SArr _ In  l af) (AArr a arg) = let len = P.toInteger l in
+      to ix (ix + len - 1) (resetOut) : cases (ix + len) (af a) arg
+    cases ix (SSig _ Out   sf) (ASig s arg) =
+      let new = is ix (loadOutputSignal rout s)
        in new : cases (ix + 1) (sf s) arg
-    cases ix (SArr _ _ l af) (AArr a arg) =
+    cases ix (SArr _ Out l af) (AArr a arg) =
       let len = P.toInteger l
           new = map (\(i, j) -> is i (loadOutputArray rout a j)) $ zip [ix..ix+len-1] [0..]
        in new ++ cases (ix + len) (af a) arg
 
     lit :: (FreePrim exp pred, PrimType b, pred b) => b -> exp b
     lit = litP (Proxy :: Proxy pred)
+
+    addr_max :: Integer
+    addr_max = addr_bits ^ 2 - 1
+
+    resetOut :: Prog instr exp pred ()
+    resetOut = setSignal rout (lit reset)
 
 loadOutputSignal :: forall instr (exp :: * -> *) pred a .
      (AXIPred instr exp pred, pred a, PrimType a, Integral a)

@@ -74,17 +74,17 @@ rev_impl :: Array Word32 Word32 -> Array Word32 Word32 -> HProg ()
 rev_impl a b =
   processR []
     (do resetArray b 0)
-    (do for 0 9 $ \ix ->
+    (do for 0 1 $ \ix ->
           do va <- getArray a ix
-             setArray b (9 - ix) va)
+             setArray b (1 - ix) va)
 
 rev_sig :: HSig (
      Array Word32 Word32
   -> Array Word32 Word32
   -> ())
 rev_sig =
-  namedInputArray  "a" 10 $ \a ->
-  namedOutputArray "b" 10 $ \b ->
+  namedInputArray  "a" 2 $ \a ->
+  namedOutputArray "b" 2 $ \b ->
   ret $ rev_impl a b
 
 test2 = icompileAXILite rev_sig
