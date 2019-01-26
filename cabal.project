@@ -1,0 +1,2 @@
+packages: hardware-edsl.cabal, ../language-vhdl
+optional-packages: ../syntactic
