@@ -2,20 +2,25 @@
 {-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE TypeFamilies      #-}
+
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Language.Embedded.Hardware.Expression.Frontend where
 
 import qualified Language.VHDL as V
 
 import Language.Embedded.Hardware.Expression.Syntax (HExp, HType, sugarT)
+import Language.Embedded.Hardware.Expression.Represent (TypeRep(..), PrimType(..), isSigned, isUnsigned, isInteger)
 import Language.Embedded.Hardware.Expression.Represent.Bit (Bits, bitFromInteger, bitToInteger)
 import qualified Language.Embedded.Hardware.Expression.Syntax as H
 import qualified Language.Embedded.VHDL.Monad.Expression as V
 
+import Data.Proxy
 import Data.Typeable (Typeable)
 import qualified Data.Bits as B (Bits)
 
-import Prelude hiding (not, and, or, abs, rem, div, mod, exp)
+import Prelude hiding (not, and, or, abs, rem, div, mod, exp, toInteger)
 import qualified Prelude as P
 
 import GHC.TypeLits
@@ -179,6 +184,20 @@ toBits = cast (bitFromInteger . fromIntegral)
 fromBits :: (Primary exp, HType b, Num b, KnownNat a)
   => exp (Bits a) -> exp b
 fromBits = cast (fromIntegral . bitToInteger)
+
+-- hmm...
+cast' :: forall exp a b . (Primary exp, PrimType a, PrimType b, Integral b, Num a)
+  => Proxy a -> exp b -> exp a
+cast' _ = case typeRep :: TypeRep a of
+  Int8T    -> toSigned
+  Int16T   -> toSigned
+  Int32T   -> toSigned
+  Int64T   -> toSigned
+  Word8T   -> toUnsigned
+  Word16T  -> toUnsigned
+  Word32T  -> toUnsigned
+  Word64T  -> toUnsigned
+  IntegerT -> toInteger
 
 --------------------------------------------------------------------------------
 -- I should probably not support most of these, as they can't implement the

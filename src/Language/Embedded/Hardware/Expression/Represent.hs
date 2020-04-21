@@ -110,6 +110,33 @@ deriving instance Eq       (TypeRep a)
 deriving instance Show     (TypeRep a)
 deriving instance Typeable (TypeRep a)
 
+isBool :: TypeRep a -> Bool
+isBool BoolT = True
+isBool _     = False
+
+isSigned :: TypeRep a -> Bool
+isSigned Int8T  = True
+isSigned Int16T = True
+isSigned Int32T = True
+isSigned Int64T = True
+isSigned _      = False
+
+isUnsigned :: TypeRep a -> Bool
+isUnsigned Word8T  = True
+isUnsigned Word16T = True
+isUnsigned Word32T = True
+isUnsigned Word64T = True
+
+isInteger :: TypeRep a -> Bool
+isInteger IntT     = True
+isInteger IntegerT = True
+isInteger _        = False
+
+isFloat :: TypeRep a -> Bool
+isFloat FloatT  = True
+isFloat DoubleT = True
+isFloat _       = False
+
 --------------------------------------------------------------------------------
 
 -- | Primitive hardware types.

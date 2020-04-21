@@ -165,9 +165,9 @@ data ArrayCMD fs a
     -- ^ Creates an array from the given list of elements.
     InitArray :: (pred a, Integral i, Ix i) => Name -> [a] -> ArrayCMD (Param3 prog exp pred) (Array i a)
     -- ^ Fetches the array's value at the specified index.
-    GetArray :: (pred a, Integral i, Ix i) => Array i a -> exp i -> ArrayCMD (Param3 prog exp pred) (Val a)
+    GetArray :: (pred a, Integral i, Ix i) => Array i a -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetArray :: (pred a, Integral i, Ix i) => Array i a -> exp i -> exp a -> ArrayCMD (Param3 prog exp pred) ()
+    SetArray :: (pred a, Integral i, Ix i) => Array i a -> exp Integer -> exp a -> ArrayCMD (Param3 prog exp pred) ()
     -- ^ Copies a slice from the second array into the first.
     CopyArray :: (pred a, Integral i, Ix i) => (Array i a, exp i) -> (Array i a, exp i) -> exp i -> ArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
@@ -242,9 +242,9 @@ data VArrayCMD fs a
     -- ^ Creates an array from the given list of elements.
     InitVArray :: (pred a, Integral i, Ix i) => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray i a)
     -- ^ Fetches the array's value at a specified index.
-    GetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp i -> VArrayCMD (Param3 prog exp pred) (Val a)
+    GetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp Integer -> VArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp i -> exp a -> VArrayCMD (Param3 prog exp pred) ()
+    SetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp Integer -> exp a -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
     CopyVArray:: (pred a, Integral i, Ix i) => (VArray i a, exp i) -> (VArray i a, exp i) -> exp i -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
@@ -298,7 +298,7 @@ instance (VArrayCMD :<: instr) => Reexpressible VArrayCMD instr env
 data LoopCMD fs a
   where
     -- ^ Creates a new for loop.
-    For   :: (pred i, Integral i) => exp i -> exp i -> (Val i -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
+    For   :: pred Integer => exp Integer -> exp Integer -> (Val Integer -> prog ()) -> LoopCMD (Param3 prog exp pred) ()
     -- ^ Creates a new while loop.
     While :: prog (exp Bool) -> prog () -> LoopCMD (Param3 prog exp pred) ()
 

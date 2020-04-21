@@ -403,6 +403,9 @@ compileVArray (UnsafeFreezeVArray (VArrayC arr)) = return $ IArrayC arr
 compileVArray (UnsafeThawVArray (IArrayC arr)) = return $ VArrayC arr
 
 runVArray :: VArrayCMD (Param3 IO IO pred) a -> IO a
+runVArray = error "hardware-edsl.todo: run arrays"
+
+{-
 runVArray (NewVArray _ len) =
   do len' <- len
      arr  <- IA.newArray_ (0, len')
@@ -411,12 +414,13 @@ runVArray (InitVArray _ is) =
   do arr  <- IA.newListArray (0, fromIntegral $ length is - 1) is
      return (VArrayE arr)
 runVArray (GetVArray (VArrayE arr) i) =
-  do (l, h) <- IA.getBounds arr
-     ix  <- i
+  do ix  <- i
+     (l, h) <- IA.getBounds arr
      if (ix < l || ix > h)
-        then error "getArr out of bounds"
-        else do v <- IA.readArray arr ix
-                return (ValE v)
+       then error "getArr out of bounds"
+       else do
+         v <- IA.readArray arr ix
+         return (ValE v)
 runVArray (SetVArray (VArrayE arr) i e) =
   do (l, h) <- IA.getBounds arr
      ix <- i
@@ -436,7 +440,7 @@ runVArray (CopyVArray (VArrayE arr, oa) (VArrayE brr, ob) l) =
                        | i <- genericTake l' [0..] ]
 runVArray (UnsafeFreezeVArray (VArrayE arr)) = IA.freeze arr >>= return . IArrayE
 runVArray (UnsafeThawVArray   (IArrayE arr)) = IA.thaw   arr >>= return . VArrayE
-
+-}
 --------------------------------------------------------------------------------
 -- ** Loops.
 --------------------------------------------------------------------------------
@@ -460,11 +464,11 @@ compileLoop (For l u step) =
   do i    <- newSym (Base "l")
      l'   <- compER l
      u'   <- compER u
-     lt   <- compTC (Proxy :: Proxy ct) (proxyE l)
-     ut   <- compTC (Proxy :: Proxy ct) (proxyE u)
-     let int v t = V.uCast v t (V.integer Nothing)
+     t    <- compTC (Proxy :: Proxy ct) (proxyE l)
+     let int v = V.uCast v t (V.integer Nothing)
+         typ i = undefined
      loop <- V.inFor (ident' i)
-       (range (int l' lt) V.to (int u' ut))
+       (range (int l') V.to (int u'))
        (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
