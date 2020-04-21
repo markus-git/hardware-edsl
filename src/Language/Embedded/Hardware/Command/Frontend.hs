@@ -11,6 +11,7 @@ import Language.Embedded.VHDL (Mode(..))
 import Language.Embedded.Hardware.Interface
 import Language.Embedded.Hardware.Command.CMD
 
+import Language.Embedded.Hardware.Expression.Frontend (Primary(..))
 import Language.Embedded.Hardware.Expression.Represent
 import Language.Embedded.Hardware.Expression.Represent.Bit
 
@@ -281,6 +282,10 @@ unsafeThawVArray = singleInj . UnsafeThawVArray
 
 --------------------------------------------------------------------------------
 -- ** Looping.
+
+iterate :: (LoopCMD :<: instr, pred i, Integral i, PredicateExp exp i, PrimType i, FreeExp exp, Primary exp, Monad m)
+  => i -> i -> (exp i -> ProgramT instr (Param2 exp pred) m ()) -> ProgramT instr (Param2 exp pred) m ()
+iterate lower upper = for (value lower) (value upper)
 
 -- | For loop.
 for :: (LoopCMD :<: instr, pred i, Integral i, PredicateExp exp i, FreeExp exp, Monad m)

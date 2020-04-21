@@ -10,6 +10,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Language.Embedded.Hardware.Command.CMD where
 
@@ -398,11 +399,14 @@ data Signature fs a
   where
     Ret  :: prog () -> Signature (Param3 prog exp pred) ()
     SSig :: (pred a, Integral a, PrimType a)
-      => Name -> Mode
+      => Name
+      -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
     SArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i, PrimType i)
-      => Name -> Mode -> i
+      => Name
+      -> Mode
+      -> i
       -> (Array i a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Array i a -> b)
 
@@ -415,7 +419,7 @@ instance HFunctor Signature
 instance HBifunctor Signature
   where
     hbimap g f (Ret m)          = Ret (g m)
-    hbimap g f (SSig n m sig)   = SSig n m (hbimap g f . sig)
+    hbimap g f (SSig n m sig)   = SSig n m   (hbimap g f . sig)
     hbimap g f (SArr n m l sig) = SArr n m l (hbimap g f . sig)
 
 reexpressSignature :: env
@@ -614,5 +618,36 @@ instance (VHDLCMD :<: instr) => Reexpressible VHDLCMD instr env
     reexpressInstrEnv reexp (GetBits s l u)
       = do l' <- reexp l; u' <- reexp u
            lift $ singleInj $ GetBits s l' u'
+
+--------------------------------------------------------------------------------
+-- **
+--------------------------------------------------------------------------------
+
+newtype a :-> sig = Partial (a -> sig)
+  deriving (Typeable, Functor)
+
+newtype Full a = Full { result :: a }
+  deriving (Eq, Show, Typeable)
+
+instance Functor Full
+  where
+    fmap f (Full a) = Full (f a)
+
+data Foreign fs sig
+  where
+    Sym :: prog sig -> Foreign (Param3 prog exp pred) sig
+    App :: Foreign (Param3 prog exp pred) (a :-> sig) ->
+           Foreign (Param3 prog exp pred) (Full a) ->
+           Foreign (Param3 prog exp pred) sig
+
+instance HFunctor Foreign
+  where
+    hfmap f (Sym m)   = Sym (f m)
+    hfmap f (App s a) = App (hfmap f s) (hfmap f a)
+
+instance HBifunctor Foreign
+  where
+    hbimap g f (Sym m)   = Sym (g m)
+    hbimap g f (App s a) = App (hbimap g f s) (hbimap g f a)
 
 --------------------------------------------------------------------------------

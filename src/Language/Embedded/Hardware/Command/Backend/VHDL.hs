@@ -450,15 +450,22 @@ instance InterpBi LoopCMD IO (Param1 pred)
   where
     interpBi = runLoop
 
+-- todo: loops, as expressed here, aren't synthesizable in general for the
+-- range is given as expressions, which could be any variable. To ensure the
+-- for-loops are synthesizable we should limit its range to a constant.
 compileLoop :: forall ct exp a. (CompileExp exp, CompileType ct)
   => LoopCMD (Param3 VHDLGen exp ct) a
   -> VHDLGen a
 compileLoop (For l u step) =
-  do -- *** todo: temp solution, should check if signed and size.
-     i    <- newSym (Base "l")
+  do i    <- newSym (Base "l")
      l'   <- compER l
      u'   <- compER u
-     loop <- V.inFor (ident' i) (range l' V.to u') (step (ValC i))
+     lt   <- compTC (Proxy :: Proxy ct) (proxyE l)
+     ut   <- compTC (Proxy :: Proxy ct) (proxyE u)
+     let int v t = V.uCast v t (V.integer Nothing)
+     loop <- V.inFor (ident' i)
+       (range (int l' lt) V.to (int u' ut))
+       (step (ValC i))
      V.addSequential $ V.SLoop $ loop
 compileLoop (While cont step) =
   do l    <- V.newLabel
