@@ -41,8 +41,8 @@ type HSig  = Sig CMD HExp HType Identity
 
 arrays :: HProg ()
 arrays =
-  do a :: Array  Word32 Word8 <- newArray  20
-     b :: VArray Word32 Word8 <- newVArray 10
+  do a :: Array  Word8 <- newArray  20
+     b :: VArray Word8 <- newVArray 10
 
      setArray  a 0 0
      setVArray b 1 1

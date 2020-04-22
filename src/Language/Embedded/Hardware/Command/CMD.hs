@@ -151,31 +151,31 @@ instance (VariableCMD :<: instr) => Reexpressible VariableCMD instr env
 class CompArrayIx exp
   where
     -- | Generate code for an array indexing operation
-    compArrayIx :: (PredicateExp exp a, Integral i, Ix i) => exp i -> Array i a -> Maybe (exp a)
+    compArrayIx :: (PredicateExp exp a) => exp Integer -> Array a -> Maybe (exp a)
     compArrayIx _ _ = Nothing
 
 -- | Array reprensentation.
-data Array i a = ArrayC VarId | ArrayE (IOArray i a)
+data Array a = ArrayC VarId | ArrayE (IOArray Integer a)
 
 -- | Commands for signal arrays.
 data ArrayCMD fs a
   where
     -- ^ Creates an array of given length.
-    NewArray :: (pred a, Integral i, Ix i) => Name -> exp i -> ArrayCMD (Param3 prog exp pred) (Array i a)
+    NewArray :: (pred a) => Name -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Array a)
     -- ^ Creates an array from the given list of elements.
-    InitArray :: (pred a, Integral i, Ix i) => Name -> [a] -> ArrayCMD (Param3 prog exp pred) (Array i a)
+    InitArray :: (pred a) => Name -> [a] -> ArrayCMD (Param3 prog exp pred) (Array a)
     -- ^ Fetches the array's value at the specified index.
-    GetArray :: (pred a, Integral i, Ix i) => Array i a -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Val a)
+    GetArray :: (pred a) => Array a -> exp Integer -> ArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetArray :: (pred a, Integral i, Ix i) => Array i a -> exp Integer -> exp a -> ArrayCMD (Param3 prog exp pred) ()
+    SetArray :: (pred a) => Array a -> exp Integer -> exp a -> ArrayCMD (Param3 prog exp pred) ()
     -- ^ Copies a slice from the second array into the first.
-    CopyArray :: (pred a, Integral i, Ix i) => (Array i a, exp i) -> (Array i a, exp i) -> exp i -> ArrayCMD (Param3 prog exp pred) ()
+    CopyArray :: (pred a) => (Array a, exp Integer) -> (Array a, exp Integer) -> exp Integer -> ArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
-    UnsafeFreezeArray :: (pred a, Integral i, Ix i) => Array i a -> ArrayCMD (Param3 prog exp pred) (IArray i a)
+    UnsafeFreezeArray :: (pred a) => Array a -> ArrayCMD (Param3 prog exp pred) (IArray a)
     -- ^ ...
-    UnsafeThawArray :: (pred a, Integral i, Ix i) => IArray i a -> ArrayCMD (Param3 prog exp pred) (Array i a)
+    UnsafeThawArray :: (pred a) => IArray a -> ArrayCMD (Param3 prog exp pred) (Array a)
     -- ^ Writes a value to all indicies of the array.
-    ResetArray :: (pred a, Integral i, Ix i) => Array i a -> exp a -> ArrayCMD (Param3 prog exp pred) ()
+    ResetArray :: (pred a) => Array a -> exp a -> ArrayCMD (Param3 prog exp pred) ()
 
 instance HFunctor ArrayCMD
   where
@@ -227,30 +227,30 @@ instance (ArrayCMD :<: instr) => Reexpressible ArrayCMD instr env
 --------------------------------------------------------------------------------
 
 -- | Virtual array reprensentation.
-data VArray i a = VArrayC VarId | VArrayE (IOArray i a)
+data VArray a = VArrayC VarId | VArrayE (IOArray Integer a)
   deriving (Eq, Typeable)
 
 -- | Immutable arrays.
-data IArray i a = IArrayC VarId | IArrayE (Arr.Array i a)
+data IArray a = IArrayC VarId | IArrayE (Arr.Array Integer a)
   deriving (Show, Typeable)
 
 -- | Commands for variable arrays.
 data VArrayCMD fs a
   where
     -- ^ Creates an array of given length.
-    NewVArray :: (pred a, Integral i, Ix i) => Name -> exp i -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    NewVArray :: (pred a) => Name -> exp Integer -> VArrayCMD (Param3 prog exp pred) (VArray a)
     -- ^ Creates an array from the given list of elements.
-    InitVArray :: (pred a, Integral i, Ix i) => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    InitVArray :: (pred a) => Name -> [a] -> VArrayCMD (Param3 prog exp pred) (VArray a)
     -- ^ Fetches the array's value at a specified index.
-    GetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp Integer -> VArrayCMD (Param3 prog exp pred) (Val a)
+    GetVArray :: (pred a) => VArray a -> exp Integer -> VArrayCMD (Param3 prog exp pred) (Val a)
     -- ^ Writes a value to an array at some specified index.
-    SetVArray :: (pred a, Integral i, Ix i) => VArray i a -> exp Integer -> exp a -> VArrayCMD (Param3 prog exp pred) ()
+    SetVArray :: (pred a) => VArray a -> exp Integer -> exp a -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
-    CopyVArray:: (pred a, Integral i, Ix i) => (VArray i a, exp i) -> (VArray i a, exp i) -> exp i -> VArrayCMD (Param3 prog exp pred) ()
+    CopyVArray:: (pred a) => (VArray a, exp Integer) -> (VArray a, exp Integer) -> exp Integer -> VArrayCMD (Param3 prog exp pred) ()
     -- ^ ...
-    UnsafeFreezeVArray :: (pred a, Integral i, Ix i) => VArray i a -> VArrayCMD (Param3 prog exp pred) (IArray i a)
+    UnsafeFreezeVArray :: (pred a) => VArray a -> VArrayCMD (Param3 prog exp pred) (IArray a)
     -- ^ ...
-    UnsafeThawVArray :: (pred a, Integral i, Ix i) => IArray i a -> VArrayCMD (Param3 prog exp pred) (VArray i a)
+    UnsafeThawVArray :: (pred a) => IArray a -> VArrayCMD (Param3 prog exp pred) (VArray a)
 
 instance HFunctor VArrayCMD
   where
@@ -403,12 +403,12 @@ data Signature fs a
       -> Mode
       -> (Signal a -> Signature (Param3 prog exp pred) b)
       -> Signature (Param3 prog exp pred) (Signal a -> b)
-    SArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i, PrimType i)
+    SArr :: (pred a, Integral a, PrimType a, pred Integer)
       => Name
       -> Mode
-      -> i
-      -> (Array i a -> Signature (Param3 prog exp pred) b)
-      -> Signature (Param3 prog exp pred) (Array i a -> b)
+      -> Integer
+      -> (Array a -> Signature (Param3 prog exp pred) b)
+      -> Signature (Param3 prog exp pred) (Array a -> b)
 
 instance HFunctor Signature
   where
@@ -437,10 +437,10 @@ data Argument pred a
       => Signal a
       -> Argument pred b
       -> Argument pred (Signal a -> b)
-    AArr :: (pred a, Integral a, PrimType a, pred i, Integral i, Ix i, PrimType i)
-      => Array i a
+    AArr :: (pred a, Integral a, PrimType a)
+      => Array a
       -> Argument pred b
-      -> Argument pred (Array i a -> b)
+      -> Argument pred (Array a -> b)
 
 -- | Named components.
 --
@@ -500,8 +500,8 @@ class    ToIdent a            where toIdent :: a -> Ident
 instance ToIdent (Val      a) where toIdent (ValC      i) = Ident i
 instance ToIdent (Signal   a) where toIdent (SignalC   i) = Ident i
 instance ToIdent (Variable a) where toIdent (VariableC i) = Ident i
-instance ToIdent (Array  i a) where toIdent (ArrayC    i) = Ident i
-instance ToIdent (VArray i a) where toIdent (VArrayC   i) = Ident i
+instance ToIdent (Array    a) where toIdent (ArrayC    i) = Ident i
+instance ToIdent (VArray   a) where toIdent (VArrayC   i) = Ident i
 
 -- | Commands for structural entities.
 data ProcessCMD fs (a :: *)
@@ -542,38 +542,38 @@ data VHDLCMD fs a
     -- todo: We should allow for base types to be treated as arrays of bits
     --       instead of having to explicitly convert them.
     -- todo: The second argument should be over a variable.
-    CopyBits :: (pred a, pred b, Integral i, Ix i)
+    CopyBits :: (pred a, pred b)
       => (Signal a, exp i)
       -> (Signal b, exp i)
-      -> exp i
+      -> exp Integer
       -> VHDLCMD (Param3 prog exp pred) ()
-    CopyVBits :: (pred a, pred b, Integral i, Ix i)
+    CopyVBits :: (pred a, pred b)
       => (Variable a, exp i)
       -> (Signal   b, exp i)
-      -> exp i
+      -> exp Integer
       -> VHDLCMD (Param3 prog exp pred) ()
-    CopyABits :: (pred a, pred b, Integral i, Ix i)
-      => (Array j a, exp i, exp i) -- todo: change j into i, problems with Integral.
-      -> (Signal  b, exp i)
-      -> exp i
+    CopyABits :: (pred a, pred b)
+      => (Array   a, exp Integer, exp Integer) -- todo: change j into i, problems with Integral.
+      -> (Signal  b, exp Integer)
+      -> exp Integer
       -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: These two should be expressions instead.
-    GetBit :: (pred a, pred Bit, Integral i, Ix i)
+    GetBit :: (pred a, pred Bit)
       => Signal a
-      -> exp i
+      -> exp Integer
       -> VHDLCMD (Param3 prog exp pred) (Val Bit)
-    SetBit :: (pred a, pred Bit, Integral i, Ix i)
+    SetBit :: (pred a, pred Bit)
       => Signal a
-      -> exp i
+      -> exp Integer
       -> exp Bit
       -> VHDLCMD (Param3 prog exp pred) ()
     -- todo: same as above two?...
     -- todo: result should be i?...
-    GetBits :: (pred i, pred (Bits n), Integral i, Ix i)
+    GetBits :: (pred Integer, pred (Bits n))
       => Signal (Bits n)
-      -> exp i
-      -> exp i
-      -> VHDLCMD (Param3 prog exp pred) (Val i)
+      -> exp Integer
+      -> exp Integer
+      -> VHDLCMD (Param3 prog exp pred) (Val Integer)
 
 instance HFunctor VHDLCMD
   where

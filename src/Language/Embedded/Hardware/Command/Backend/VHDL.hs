@@ -182,7 +182,7 @@ proxyS _ = Proxy
 proxyV :: Variable a -> Proxy a
 proxyV _ = Proxy
 
-proxyA :: Array i a -> Proxy a
+proxyA :: Array a -> Proxy a
 proxyA _ = Proxy
 
 proxyM :: Maybe (exp a) -> Proxy a

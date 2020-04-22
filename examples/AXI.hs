@@ -70,7 +70,7 @@ test = icompileAXILite add_sig
 --------------------------------------------------------------------------------
 
 -- Reverse, assume 10 elements in each array.
-rev_impl :: Array Word32 Word32 -> Array Word32 Word32 -> HProg ()
+rev_impl :: Array Word32 -> Array Word32 -> HProg ()
 rev_impl a b =
   processR []
     (do resetArray b 0)
@@ -79,8 +79,8 @@ rev_impl a b =
              setArray b (1 - ix) va)
 
 rev_sig :: HSig (
-     Array Word32 Word32
-  -> Array Word32 Word32
+     Array Word32
+  -> Array Word32
   -> ())
 rev_sig =
   namedInputArray  "a" 2 $ \a ->

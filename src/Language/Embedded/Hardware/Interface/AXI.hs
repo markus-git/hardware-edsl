@@ -525,7 +525,7 @@ loadInputArray :: forall instr (exp :: * -> * ) pred i a .
      (AXIPred instr exp pred, pred a, Sized a)
   => Signal (Bits 32)
   -> Signal (Bits 4)
-  -> Array i a
+  -> Array a
   -> Integer
   -> Prog instr exp pred ()
 loadInputArray wdata wren arr ix = for 0 size $ \byte_index ->
@@ -602,11 +602,10 @@ loadOutputSignal rout reg =
       r <- unsafeFreezeSignal reg
       setSignal rout (toBits r :: exp (Bits 32))
 
-loadOutputArray :: forall instr (exp :: * -> *) pred i a .
-     ( AXIPred instr exp pred, pred a, PrimType a, Integral a
-     , pred i, PrimType i, Integral i, Ix i, Num i)
+loadOutputArray :: forall instr (exp :: * -> *) pred a .
+     ( AXIPred instr exp pred, pred a, PrimType a, Integral a)
   => Signal (Bits 32)
-  -> Array i a
+  -> Array a
   -> Integer
   -> Prog instr exp pred ()
 loadOutputArray rout arr ix =
