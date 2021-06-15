@@ -55,7 +55,7 @@ import qualified Numeric as N
 import GHC.TypeLits
 
 --------------------------------------------------------------------------------
--- * Bit vectors of known lenght.
+-- * Bit vectors of known length.
 --------------------------------------------------------------------------------
 
 newtype Bits (n :: Nat) = B Integer
